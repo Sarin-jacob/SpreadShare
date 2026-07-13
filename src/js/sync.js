@@ -3,6 +3,9 @@ import { CONFIG } from './config.js';
 import { getAccessToken } from './auth.js';
 import { openDatabase } from './db.js';
 
+/**
+ * Standardized Google API helper that automatically injects the active OAuth token.
+ */
 async function googleFetch(url, options = {}) {
   const token = getAccessToken();
   if (!token) throw new Error("Sync engine stalled: Invalid context session.");
@@ -21,6 +24,9 @@ async function googleFetch(url, options = {}) {
   return response.json();
 }
 
+/**
+ * Locates or creates the root application folder in the user's Google Drive.
+ */
 export async function getOrCreateRootFolder() {
   const query = encodeURIComponent(`name='${CONFIG.APP_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const result = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`);
@@ -35,6 +41,9 @@ export async function getOrCreateRootFolder() {
   return newFolder.id;
 }
 
+/**
+ * Creates a new Group Spreadsheet inside the SpreadShare root folder.
+ */
 export async function createGroupSpreadsheet(groupName, parentFolderId) {
   const sheetMeta = {
     properties: { title: groupName },
@@ -57,18 +66,35 @@ export async function createGroupSpreadsheet(groupName, parentFolderId) {
 }
 
 /**
- * ─── ISOLATED USER CONFIG REGISTRY ENGINE ───
- * Manages the user's cross-device workspace tracking configuration database file.
+ * ─── RESTORED: INDEX-BOUNDED DELTA LOOKUP (READ OPTIMIZATION) ───
+ * Pulls only the transaction rows after the client's last known index.
+ */
+export async function fetchLedgerDelta(spreadsheetId, lastKnownRowIndex) {
+  // Target row offset accounting for header row 1
+  const targetStartRow = lastKnownRowIndex + 2; 
+  const range = `transaction_ledger!A${targetStartRow}:E`;
+  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+  
+  try {
+    const data = await googleFetch(readUrl);
+    return data.values || []; // Return an empty array if no new updates exist
+  } catch (error) {
+    // Gracefully handle boundary edge cases or empty sheet ends
+    console.warn("Delta fetch caught up or reached spreadsheet boundaries.", error);
+    return [];
+  }
+}
+
+/**
+ * Synchronizes isolated workspace directory index map to Drive.
  */
 export async function syncUserConfigRegistry(groupDirectoryArray) {
-  console.log("Synchronizing isolated workspace directory index map to Drive...");
   const configFileName = '.spreadshare_user_config';
   const query = encodeURIComponent(`name='${configFileName}' and mimeType='application/json' and trashed=false`);
   const searchResult = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
   
   const payloadBlob = new Blob([JSON.stringify(groupDirectoryArray)], { type: 'application/json' });
   
-  // Use simple upload metadata endpoints
   if (searchResult.files && searchResult.files.length > 0) {
     const fileId = searchResult.files[0].id;
     await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
@@ -77,7 +103,6 @@ export async function syncUserConfigRegistry(groupDirectoryArray) {
       body: payloadBlob
     });
   } else {
-    // Structural Initialization Sequence
     const meta = { name: configFileName, mimeType: 'application/json' };
     const initialFile = await googleFetch('https://www.googleapis.com/drive/v3/files', {
       method: 'POST',
@@ -93,7 +118,6 @@ export async function syncUserConfigRegistry(groupDirectoryArray) {
 }
 
 /**
- * ─── BACKGROUND WRITE WORKER QUEUE PROCESSOR ───
  * Iterates over local IndexedDB queues and flushes transactions out via atomic batch requests.
  */
 export async function processOfflineQueue(onSyncProgress) {
@@ -124,12 +148,11 @@ export async function processOfflineQueue(onSyncProgress) {
 
       try {
         await googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(payloadData) });
-        // Delete item from queue store processing task successfully
         const cleanupTx = db.transaction('offline_sync_queue', 'readwrite');
         cleanupTx.objectStore('offline_sync_queue').delete(queuedItem.id);
       } catch (err) {
         console.error(`Failed pushing row append task index token [${queuedItem.id}]:`, err);
-        break; // Stop loop sequence processing to prevent out-of-order execution if network dropped
+        break; 
       }
     }
   }
