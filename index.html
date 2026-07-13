@@ -3,113 +3,278 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SpreadShare</title>
+  <title>SpreadShare Studio</title>
   <link rel="stylesheet" href="/src/css/style.css">
 </head>
-<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200">
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200 antialiased font-sans">
 
-  <div id="app" class="max-w-md mx-auto p-4 min-h-screen flex flex-col justify-between">
+  <!-- MASTER WORKSPACE WRAPPER (Responsive Sidebar Layout on Desktop) -->
+  <div class="md:flex md:min-h-screen max-w-7xl mx-auto">
     
-    <!-- Top Bar Navigation Panel -->
-  <header class="w-full border-b border-slate-200 dark:border-slate-800 pb-4 mb-6 space-y-3">
-    <div class="flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-black bg-gradient-to-r from-accent-600 to-accent-400 bg-clip-text text-transparent transition-all">SpreadShare</h1>
-        <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Serverless Replication</p>
-      </div>
-      
-      <div class="flex items-center space-x-2">
-        <!-- Added explicit sign-out control button, kept hidden until active stage verification loads -->
-        <button id="sign-out-btn" class="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-lg text-xs font-bold cursor-pointer transition-colors">
-          🚪 Sign Out
-        </button>
-
-        <button id="theme-toggle" class="p-2 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg cursor-pointer">
-          <span class="block dark:hidden text-xs font-bold text-slate-700">🌙 Dark</span>
-          <span class="hidden dark:block text-xs font-bold text-accent-400">☀️ Light</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="flex items-center space-x-2 pt-1">
-      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider pr-2 mr-1">Palette:</span>
-      <button data-select-accent="indigo" class="w-5 h-5 rounded-full bg-indigo-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Indigo"></button>
-      <button data-select-accent="emerald" class="w-5 h-5 rounded-full bg-emerald-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Emerald"></button>
-      <button data-select-accent="violet" class="w-5 h-5 rounded-full bg-violet-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Violet"></button>
-      <button data-select-accent="amber" class="w-5 h-5 rounded-full bg-amber-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Amber"></button>
-      <button data-select-accent="rose" class="w-5 h-5 rounded-full bg-rose-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Rose"></button>
-      <button data-select-accent="slate" class="w-5 h-5 rounded-full bg-slate-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-900" title="Slate"></button>
-    </div>
-  </header>
-
-    <!-- Connect OAuth Panel Gate -->
-    <div id="auth-gate" class="flex-grow flex flex-col items-center justify-center text-center space-y-6">
-      <div class="p-8 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-xl w-full">
-        <div class="h-12 w-12 bg-accent-100 dark:bg-accent-950/50 rounded-xl flex items-center justify-center mx-auto mb-4 transition-colors">
-          <span class="text-xl">📊</span>
-        </div>
-        <h2 class="text-lg font-bold mb-2">Workspace Verification Required</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">SpreadShare uses your personal Google Sheets environment as a secure, decentralized financial database.</p>
-        <button id="auth-btn" class="w-full bg-accent-600 hover:bg-accent-700 text-white dark:bg-accent-500 dark:hover:bg-accent-600 dark:text-slate-950 font-bold py-3 px-6 rounded-xl shadow-lg shadow-accent-500/20 cursor-pointer transition-all">
-          Sign In With Google Workspace
-        </button>
-      </div>
-    </div>
-
-    <!-- Main Workspace Application Engine Stage View -->
-    <main id="main-stage" class="w-full flex-grow hidden space-y-4 animate-fade-in">
-      
-      <!-- Group Info Display Header -->
-      <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white border border-slate-800 rounded-xl p-4 shadow-md flex justify-between items-center dark:from-accent-950 dark:to-slate-900 dark:border-accent-900/40">
+    <!-- LEFT NAVIGATION DECK (Persistent Sidebar visible on desktop monitors) -->
+    <aside class="hidden md:flex md:w-64 bg-slate-100 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex-col justify-between p-6">
+      <div class="space-y-6">
         <div>
-          <h2 id="active-group-title" class="text-base font-bold tracking-tight">Active Group</h2>
-          <span class="text-[10px] text-accent-300 font-mono" id="active-sheet-id">No Mirror File</span>
+          <h1 class="text-2xl font-black bg-gradient-to-r from-accent-600 to-accent-400 bg-clip-text text-transparent">SpreadShare</h1>
+          <p class="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Local-First Architecture</p>
         </div>
-        <span id="sync-status" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded border border-slate-700 font-bold text-slate-300 dark:bg-slate-900">Synced</span>
-      </div>
-
-      <!-- Action Panel: Create New Collaborative Sheet -->
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 shadow-sm">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Workspace Controls</h3>
-        <button id="create-group-btn" class="w-full bg-accent-600 hover:bg-accent-700 text-white dark:bg-accent-500 dark:hover:bg-accent-600 dark:text-slate-950 text-xs font-bold py-2.5 px-4 rounded-lg cursor-pointer transition-colors">
-          ✨ Spawn Remote Group Spreadsheet
-        </button>
-      </div>
-
-      <!-- Balance Sheet Summary Display Module -->
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 shadow-sm">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Calculated Balance Matrix</h3>
-        <div id="balance-summary-grid" class="grid grid-cols-2 gap-2"></div>
-      </div>
-
-      <!-- Transaction Submission Input Module Form -->
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 shadow-sm">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Log Transaction Entry</h3>
-        <form id="expense-form" class="space-y-3">
-          <input type="text" id="exp-title" required placeholder="Transaction description..." class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs focus:outline-none focus:border-accent-500">
-          <div class="grid grid-cols-2 gap-2">
-            <input type="text" id="exp-amount" required placeholder="Cost (e.g., 4200 + 350)" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs focus:outline-none focus:border-accent-500 font-mono">
-            <select id="exp-strategy" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs font-medium">
-              <option value="EQUALLY">Split Equally (1/2)</option>
-            </select>
-          </div>
-          <button type="submit" class="w-full bg-accent-600 hover:bg-accent-700 dark:bg-accent-500 dark:hover:bg-accent-600 dark:text-slate-950 text-white font-bold py-2 rounded-lg text-xs tracking-wide shadow-md cursor-pointer transition-all">
-            Commit Dynamic Entry Log
+        <nav class="space-y-1">
+          <button data-route="dashboard" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-accent-500/10 text-accent-500 dark:text-accent-400 font-bold text-sm text-left cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z"/></svg>
+            <span>Groups Directory</span>
           </button>
-        </form>
+          <button data-route="transfer" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 font-semibold text-sm text-left cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <span>Fund Transfers</span>
+          </button>
+          <button data-route="settings" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/40 font-semibold text-sm text-left cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>Settings Console</span>
+          </button>
+        </nav>
+      </div>
+      <div class="text-[10px] text-slate-400 font-mono">Session Ref: Active</div>
+    </aside>
+
+    <!-- CONTENT DISPLAY CONTAINER -->
+    <div class="flex-grow flex flex-col justify-between min-h-screen md:min-h-0 pb-20 md:pb-0">
+      
+      <!-- TOP BANNER SYSTEM BAR -->
+      <header class="w-full flex justify-between items-center px-4 py-4 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+        <div class="md:hidden">
+          <h2 class="text-lg font-black bg-gradient-to-r from-accent-600 to-accent-400 bg-clip-text text-transparent">SpreadShare</h2>
+        </div>
+        <div class="hidden md:block">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Workspace Console</span>
+        </div>
+        
+        <!-- Live Sync Status Signal -->
+        <div class="flex items-center space-x-2">
+          <div id="sync-indicator" class="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="text-slate-500 dark:text-slate-400">Cloud Mirror Live</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- VIEWPORT PANEL MATRIX -->
+      <div id="viewport-stage" class="p-4 flex-grow max-w-2xl mx-full w-full mx-auto space-y-4">
+        
+        <!-- ─── VIEW 1: MULTI-GROUPS DIRECTORY DASHBOARD ─── -->
+        <section id="view-dashboard" class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Your Shared Workspaces</h3>
+            <button id="btn-spawn-group" class="bg-accent-600 dark:bg-accent-500 text-white dark:text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1 hover:opacity-95 cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span>New Group</span>
+            </button>
+          </div>
+
+          <!-- Dynamic Multi-Group Row Directory -->
+          <div id="groups-directory-list" class="grid gap-3">
+            <!-- Group Item 1 (Simulated Data) -->
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex justify-between items-center shadow-xs group hover:border-accent-500/40 transition-all cursor-pointer">
+              <div>
+                <h4 class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-accent-500 transition-colors">Shared Flat Expenses</h4>
+                <p class="text-[10px] text-slate-400 mt-0.5">3 Members &bull; 14 Logged Transactions</p>
+              </div>
+              <svg class="w-5 h-5 text-slate-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── VIEW 2: ACTIVE GROUP AREA PANEL ─── -->
+        <section id="view-group-detail" class="hidden space-y-4">
+          <!-- Balance Summary Matrix -->
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-xs">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Computed Net Metrics</h3>
+              <button data-route="add-expense" class="bg-accent-500/10 hover:bg-accent-500/20 text-accent-600 dark:text-accent-400 text-xs font-bold py-1 px-3 rounded-lg flex items-center space-x-1 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                <span>Add Cost</span>
+              </button>
+            </div>
+            <div class="grid grid-cols-2 gap-2" id="group-balance-grid">
+              <!-- Reconstructed state columns output here -->
+            </div>
+          </div>
+
+          <!-- Ledger History Timeline -->
+          <div class="space-y-2">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Ledger Entry Logs</h3>
+            <div class="space-y-2" id="group-ledger-feed">
+              <!-- Item Row Sample (With Category Indicator Badge) -->
+              <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3 rounded-xl flex justify-between items-center text-xs">
+                <div class="space-y-1">
+                  <div class="font-bold text-slate-700 dark:text-slate-200">Laboratory Chemical Refills</div>
+                  <div class="flex items-center space-x-2 text-[10px] text-slate-400">
+                    <span>Payer: You</span>
+                    <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                    <span class="px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded font-semibold">Utilities</span>
+                  </div>
+                </div>
+                <div class="font-mono font-black text-slate-800 dark:text-slate-200">INR 4,500.00</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─── VIEW 3: FULL SCREEN EXPENSE CAPTURE & CALCULATOR ─── -->
+        <section id="view-add-expense" class="hidden space-y-4">
+          <div class="flex items-center space-x-2">
+            <button data-route="group-detail" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            </button>
+            <h3 class="text-base font-bold">Record Group Transaction</h3>
+          </div>
+
+          <form id="calc-expense-form" class="space-y-4" onsubmit="return false;">
+            <!-- Primary Cost Readout Frame -->
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-right space-y-1 shadow-inner">
+              <label class="block text-left text-[10px] text-slate-500 uppercase font-black tracking-wider">Formula Input Panel</label>
+              <div id="calc-display-expression" class="font-mono text-xs text-slate-400 min-h-4 truncate">0</div>
+              <div id="calc-display-value" class="font-mono text-3xl font-black text-emerald-400 truncate">0</div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-400 font-bold mb-1">Description</label>
+                <input type="text" id="form-exp-title" placeholder="Groceries, dinner, rent..." class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 font-bold mb-1">Category Allocation</label>
+                <select id="form-exp-category" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500 font-medium">
+                  <option value="Food">🍔 Food & Dining</option>
+                  <option value="Utilities">💡 Utilities & Bills</option>
+                  <option value="Travel">🚗 Transportation</option>
+                  <option value="Entertainment">🎬 Entertainment</option>
+                  <option value="Others">📦 Miscellaneous</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- CUSTOM CALCULATOR DIAL PAD MATRIX -->
+            <div class="grid grid-cols-4 gap-1.5 p-2 bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800/60 font-mono">
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="C">C</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="(">(</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val=")">)</button>
+              <button type="button" class="calc-btn p-3 bg-accent-500/20 text-accent-600 dark:text-accent-400 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="/">/</button>
+
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="7">7</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="8">8</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="9">9</button>
+              <button type="button" class="calc-btn p-3 bg-accent-500/20 text-accent-600 dark:text-accent-400 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="*">*</button>
+
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="4">4</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="5">5</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="6">6</button>
+              <button type="button" class="calc-btn p-3 bg-accent-500/20 text-accent-600 dark:text-accent-400 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="-">-</button>
+
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="1">1</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="2">2</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="3">3</button>
+              <button type="button" class="calc-btn p-3 bg-accent-500/20 text-accent-600 dark:text-accent-400 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="+">+</button>
+
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="0">0</button>
+              <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val=".">.</button>
+              <button type="button" class="calc-btn p-3 bg-rose-500/20 text-rose-600 dark:text-rose-400 hover:opacity-90 rounded-xl text-sm font-bold shadow-xs cursor-pointer active:scale-95 transition-transform" data-val="DEL">⌫</button>
+              <button type="submit" id="btn-submit-expense" class="bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 font-black rounded-xl text-sm shadow-md cursor-pointer active:scale-95 transition-all">OK</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- ─── VIEW 4: DIRECT FUND TRANSFERS / SETTLEMENTS ─── -->
+        <section id="view-transfer" class="hidden space-y-4">
+          <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Execute Peer Settlement</h3>
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-400 font-bold mb-1">Recipient Peer</label>
+                <select class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500 font-medium">
+                  <option>partner.testing@niser.ac.in</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 font-bold mb-1">Settlement Amount</label>
+                <input type="number" placeholder="0.00" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500 font-mono">
+              </div>
+            </div>
+            <button class="w-full bg-accent-600 hover:bg-accent-700 text-white font-bold py-2.5 rounded-xl text-xs tracking-wide shadow-md transition-all cursor-pointer">
+              Log Cash Transfer Event
+            </button>
+          </div>
+        </section>
+
+        <!-- ─── VIEW 5: CONFIGURATION & DEVICE SETTINGS CONSOLE ─── -->
+        <section id="view-settings" class="hidden space-y-4">
+          <!-- Thematic Customization Blocks -->
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-4">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">Visual & Display Presets</h4>
+            
+            <!-- Dynamic Accent Buttons Row -->
+            <div class="space-y-2">
+              <label class="block text-xs text-slate-400 font-semibold">Active Design Palette Accent</label>
+              <div class="flex space-x-2">
+                <button data-select-accent="indigo" class="w-6 h-6 rounded-full bg-indigo-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+                <button data-select-accent="emerald" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+                <button data-select-accent="violet" class="w-6 h-6 rounded-full bg-violet-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+                <button data-select-accent="amber" class="w-6 h-6 rounded-full bg-amber-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+                <button data-select-accent="rose" class="w-6 h-6 rounded-full bg-rose-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+                <button data-select-accent="slate" class="w-6 h-6 rounded-full bg-slate-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
+              </div>
+            </div>
+
+            <!-- Dark / Light Mode Switches -->
+            <div class="flex items-center justify-between pt-2">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200">System Night Theme</label>
+                <span class="text-[10px] text-slate-400">Toggle dark mode interface properties</span>
+              </div>
+              <button id="cfg-dark-toggle" class="bg-slate-200 dark:bg-slate-700 p-1.5 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors">Toggle</button>
+            </div>
+
+            <!-- OLED Black Mode Switch -->
+            <div class="flex items-center justify-between pt-2">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-200">Pure OLED Contrast</label>
+                <span class="text-[10px] text-slate-400">Forces complete background pitch-blacks (#000000)</span>
+              </div>
+              <button id="cfg-oled-toggle" class="bg-slate-200 dark:bg-slate-700 p-1.5 px-3 rounded-lg text-xs font-bold cursor-pointer transition-colors">Enable</button>
+            </div>
+          </div>
+
+          <!-- Account Meta Blocks -->
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-3">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">User Profile & Node Data</h4>
+            <div class="text-xs space-y-1">
+              <div class="text-slate-400">Authenticated Identity Email:</div>
+              <div class="font-mono font-bold text-slate-700 dark:text-slate-200" id="cfg-user-email">Not Synced</div>
+            </div>
+            <button id="sign-out-btn" class="mt-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 w-full text-xs font-bold py-2 rounded-xl transition-colors cursor-pointer">
+              Disconnect Workspace Tokens
+            </button>
+          </div>
+        </section>
+
       </div>
 
-      <!-- Historical Open Ledger Activity Streams Feed -->
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 shadow-sm">
-        <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Ledger Stream Pipeline</h3>
-        <div id="transaction-feed" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
-      </div>
-    </main>
+      <!-- MOBILE FOOTER RIBBON NAV (Visible strictly on phone viewports) -->
+      <footer class="md:hidden fixed bottom-0 left-0 right-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-6 py-2.5 flex justify-between items-center z-40 shadow-xl">
+        <button data-route="dashboard" class="flex flex-col items-center space-y-0.5 text-accent-500 dark:text-accent-400 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m0 0l-7 7-7-7M21 12v7a2 2 0 01-2 2h-3"/></svg>
+          <span class="text-[9px] font-bold">Groups</span>
+        </button>
+        <button data-route="transfer" class="flex flex-col items-center space-y-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+          <span class="text-[9px] font-medium">Transfer</span>
+        </button>
+        <button data-route="settings" class="flex flex-col items-center space-y-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+          <span class="text-[9px] font-medium">Settings</span>
+        </button>
+      </footer>
 
-    <!-- Structural App Status Footer Information Panel -->
-    <footer class="w-full text-center py-4 text-[9px] text-slate-400 dark:text-slate-500 tracking-tight">
-      SpreadShare Engine Platform Architecture &bull; Local-First Synchronization Architecture
-    </footer>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
