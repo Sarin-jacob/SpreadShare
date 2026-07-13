@@ -1,13 +1,11 @@
-// js/sync.js
+// src/js/sync.js
 import { CONFIG } from './config.js';
 import { getAccessToken } from './auth.js';
+import { openDatabase } from './db.js';
 
-/**
- * Standardized Google API helper that automatically injects the active OAuth token.
- */
 async function googleFetch(url, options = {}) {
   const token = getAccessToken();
-  if (!token) throw new Error("Synchronization halted: Missing Google OAuth Access Token.");
+  if (!token) throw new Error("Sync engine stalled: Invalid context session.");
 
   options.headers = {
     ...options.headers,
@@ -17,101 +15,123 @@ async function googleFetch(url, options = {}) {
 
   const response = await fetch(url, options);
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Google API Error [${response.status}]: ${errorBody}`);
+    const error = await response.text();
+    throw new Error(`Cloud Core Exception [${response.status}]: ${error}`);
   }
   return response.json();
 }
 
-/**
- * Step 1: Locates or creates the root application folder in the user's Google Drive.
- */
 export async function getOrCreateRootFolder() {
-  console.log("Scanning Drive for workspace folder...");
   const query = encodeURIComponent(`name='${CONFIG.APP_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`;
+  const result = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`);
   
-  const searchResult = await googleFetch(searchUrl);
-  
-  if (searchResult.files && searchResult.files.length > 0) {
-    console.log(`Workspace folder found. ID: ${searchResult.files[0].id}`);
-    return searchResult.files[0].id;
-  }
+  if (result.files && result.files.length > 0) return result.files[0].id;
 
-  // Create it if it doesn't exist
-  console.log("Root directory absent. Provisioning new Drive folder instance...");
-  const createUrl = 'https://www.googleapis.com/drive/v3/files';
-  const folderMeta = {
-    name: CONFIG.APP_DRIVE_FOLDER,
-    mimeType: 'application/vnd.google-apps.folder'
-  };
-  
-  const newFolder = await googleFetch(createUrl, {
+  const folderMeta = { name: CONFIG.APP_DRIVE_FOLDER, mimeType: 'application/vnd.google-apps.folder' };
+  const newFolder = await googleFetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     body: JSON.stringify(folderMeta)
   });
-  
   return newFolder.id;
 }
 
-/**
- * Step 2: Creates a new Group Spreadsheet inside the SpreadShare root folder
- * and initializes the transactional append ledger sheets headers.
- */
 export async function createGroupSpreadsheet(groupName, parentFolderId) {
-  console.log(`Provisioning Spreadsheet for group: "${groupName}"...`);
-  
-  // 1. Setup the spreadsheet shell
-  const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
   const sheetMeta = {
     properties: { title: groupName },
     sheets: [{ properties: { title: 'transaction_ledger' } }]
   };
   
-  const spreadsheet = await googleFetch(createUrl, {
+  const spreadsheet = await googleFetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     body: JSON.stringify(sheetMeta)
   });
   
   const spreadsheetId = spreadsheet.spreadsheetId;
+  await googleFetch(`https://www.googleapis.com/drive/v3/files/${spreadsheetId}?addParents=${parentFolderId}`, { method: 'PATCH' });
   
-  // 2. Move the spreadsheet into our specific App Drive Folder
-  const moveUrl = `https://www.googleapis.com/drive/v3/files/${spreadsheetId}?addParents=${parentFolderId}`;
-  await googleFetch(moveUrl, { method: 'PATCH' });
-  
-  // 3. Populate baseline transactional DB structural headers (Row 1)
-  console.log("Initializing ledger database structures...");
   const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/transaction_ledger!A1:E1:append?valueInputOption=USER_ENTERED`;
-  const headerPayload = {
-    values: [['timestamp', 'event_id', 'event_type', 'actor_identity', 'payload_json']]
-  };
-  
-  await googleFetch(appendUrl, {
-    method: 'POST',
-    body: JSON.stringify(headerPayload)
-  });
+  const headerPayload = { values: [['timestamp', 'event_id', 'event_type', 'actor_identity', 'payload_json']] };
+  await googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(headerPayload) });
   
   return spreadsheetId;
 }
 
 /**
- * Step 3: Read Optimization — Index-Bounded Delta Lookup.
- * Pulls only the transaction rows after the client's last known index.
+ * ─── ISOLATED USER CONFIG REGISTRY ENGINE ───
+ * Manages the user's cross-device workspace tracking configuration database file.
  */
-export async function fetchLedgerDelta(spreadsheetId, lastKnownRowIndex) {
-  // If lastKnownRowIndex is 0 (uninitialized), we want to read everything from row 2 downwards
-  const targetStartRow = lastKnownRowIndex + 2; 
-  const range = `transaction_ledger!A${targetStartRow}:E`;
-  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+export async function syncUserConfigRegistry(groupDirectoryArray) {
+  console.log("Synchronizing isolated workspace directory index map to Drive...");
+  const configFileName = '.spreadshare_user_config';
+  const query = encodeURIComponent(`name='${configFileName}' and mimeType='application/json' and trashed=false`);
+  const searchResult = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
   
-  console.log(`Executing Delta Request. Scope: ${range}`);
+  const payloadBlob = new Blob([JSON.stringify(groupDirectoryArray)], { type: 'application/json' });
   
-  try {
-    const data = await googleFetch(readUrl);
-    return data.values || []; // Returns empty array if no new rows are present
-  } catch (error) {
-    // Gracefully check if error is due to an out-of-bounds target range (empty sheet tail)
-    console.warn("Delta fetch caught up or reached spreadsheet boundaries.", error);
-    return [];
+  // Use simple upload metadata endpoints
+  if (searchResult.files && searchResult.files.length > 0) {
+    const fileId = searchResult.files[0].id;
+    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${getAccessToken()}` },
+      body: payloadBlob
+    });
+  } else {
+    // Structural Initialization Sequence
+    const meta = { name: configFileName, mimeType: 'application/json' };
+    const initialFile = await googleFetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      body: JSON.stringify(meta)
+    });
+    
+    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${initialFile.id}?uploadType=media`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${getAccessToken()}` },
+      body: payloadBlob
+    });
   }
+}
+
+/**
+ * ─── BACKGROUND WRITE WORKER QUEUE PROCESSOR ───
+ * Iterates over local IndexedDB queues and flushes transactions out via atomic batch requests.
+ */
+export async function processOfflineQueue(onSyncProgress) {
+  const db = await openDatabase();
+  const tx = db.transaction('offline_sync_queue', 'readwrite');
+  const store = tx.objectStore('offline_sync_queue');
+  const allQueuedRequests = await new Promise((resolve) => {
+    store.getAll().onsuccess = (e) => resolve(e.target.result);
+  });
+
+  if (allQueuedRequests.length === 0) return;
+  if (onSyncProgress) onSyncProgress(true);
+
+  for (const queuedItem of allQueuedRequests) {
+    if (queuedItem.action === 'APPEND_ROW') {
+      const record = queuedItem.payload;
+      const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${queuedItem.spreadsheetId}/values/transaction_ledger!A:E:append?valueInputOption=USER_ENTERED`;
+      
+      const payloadData = {
+        values: [[
+          record.timestamp,
+          record.eventId,
+          record.event_type,
+          record.actor_identity,
+          JSON.stringify(record.payload_json)
+        ]]
+      };
+
+      try {
+        await googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(payloadData) });
+        // Delete item from queue store processing task successfully
+        const cleanupTx = db.transaction('offline_sync_queue', 'readwrite');
+        cleanupTx.objectStore('offline_sync_queue').delete(queuedItem.id);
+      } catch (err) {
+        console.error(`Failed pushing row append task index token [${queuedItem.id}]:`, err);
+        break; // Stop loop sequence processing to prevent out-of-order execution if network dropped
+      }
+    }
+  }
+  if (onSyncProgress) onSyncProgress(false);
 }
