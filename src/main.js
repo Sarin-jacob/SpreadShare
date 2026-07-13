@@ -11,7 +11,7 @@ let currentGroupEvents = [];
 let userEmailAddress = "";
 let currentCalcString = "0";
 
-// DOM View Component Selectors
+// DOM View Component Mappings
 const views = {
   'dashboard': document.getElementById('view-dashboard'),
   'group-detail': document.getElementById('view-group-detail'),
@@ -21,16 +21,16 @@ const views = {
 };
 
 /**
- * ─── CLASSIC SPA NAVIGATION ROUTER ───
+ * ─── SINGLE PAGE APPLICATION ROUTER ───
  */
 function navigateToView(targetViewKey) {
   if (!views[targetViewKey]) return;
   
-  // Hide all segments, reveal target window
+  // Hide all sections, reveal the target view
   Object.keys(views).forEach(key => views[key].classList.add('hidden'));
   views[targetViewKey].classList.remove('hidden');
   
-  // Repaint navigation buttons active color weights
+  // Update active navigation button styles across mobile and desktop menus
   document.querySelectorAll('[data-route]').forEach(btn => {
     if (btn.getAttribute('data-route') === targetViewKey) {
       btn.classList.add('text-accent-600', 'dark:text-accent-400', 'font-bold');
@@ -42,17 +42,8 @@ function navigateToView(targetViewKey) {
   });
 }
 
-// Bind routing triggers to dataset navigation elements
-document.querySelectorAll('[data-route]').forEach(trigger => {
-  trigger.addEventListener('click', (e) => {
-    const route = e.currentTarget.getAttribute('data-route');
-    navigateToView(route);
-  });
-});
-
 /**
- * ─── ACTIVE GROUP LOADER & READ SYNCHRONIZER ───
- * Triggered when a user selects a workspace group from their directory list.
+ * ─── ACTIVE GROUP LOADER & DELTA REPLICATION ENGINE ───
  */
 async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
   activeSpreadsheetId = spreadsheetId;
@@ -61,23 +52,20 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
   document.getElementById('active-group-title').innerText = groupName;
   document.getElementById('active-sheet-id').innerText = `ID: ${spreadsheetId}`;
   
-  // 1. Load localized records from browser IndexedDB first for instant access
+  // 1. Pull from local IndexedDB cache for instant render
   const db = await openDatabase();
   const tx = db.transaction('group_events_cache', 'readonly');
   const store = tx.objectStore('group_events_cache');
   
-  // Grab all events cached under this specific spreadsheet token
   const request = store.getAll();
   request.onsuccess = async (e) => {
     const allEvents = e.target.result || [];
     currentGroupEvents = allEvents.filter(evt => evt.spreadsheetId === spreadsheetId);
     
-    // Initial UI render from fast local cache
     repaintDOMState();
     navigateToView('group-detail');
     
-    // 2. ─── LIVE DELTA SYNC FETCH STEP ───
-    // Calculate row offset: row index counts exclude header row 1
+    // 2. Fetch remote modifications using the delta sync worker
     const lastKnownRowIndex = currentGroupEvents.length;
     
     try {
@@ -101,8 +89,6 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
           currentGroupEvents.push(parsedEvent);
           await writeStore.put(parsedEvent);
         }
-        
-        // Refresh values on display layout elements with fresh cloud mutations
         repaintDOMState();
       }
     } catch (err) {
@@ -114,12 +100,12 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
 }
 
 /**
- * ─── STATE ENGINE REPLAY & DOM REPAINT CHASSIS ───
+ * ─── LEDGER STATE REPLAY & REPAINT CHASSIS ───
  */
 function repaintDOMState() {
   const state = reconstructState(currentGroupEvents);
   
-  // Render calculated net matrices
+  // 1. Render Balances Matrix
   const summaryGrid = document.getElementById('balance-summary-grid');
   summaryGrid.innerHTML = '';
   
@@ -136,7 +122,7 @@ function repaintDOMState() {
     `;
   });
 
-  // Render Activity Feeds
+  // 2. Render Transaction Feed
   const feed = document.getElementById('group-ledger-feed');
   feed.innerHTML = '';
   
@@ -171,135 +157,173 @@ function repaintDOMState() {
 }
 
 /**
- * ─── INTERACTIVE DIGITAL SCREEN KEYPAD LOGIC ───
+ * ─── DYNAMIC CORE EVENT LISTENERS SYSTEM ───
  */
-document.querySelectorAll('.calc-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    const val = e.currentTarget.getAttribute('data-val');
-    const exprDisplay = document.getElementById('calc-display-expression');
-    const valDisplay = document.getElementById('calc-display-value');
+function bindApplicationInteractionTriggers() {
+  
+  // 1. Google Identity Connection Hooks
+  document.getElementById('auth-btn').addEventListener('click', requestAuthenticationData);
+  
+  // 2. Navigation Dataset Router Links
+  document.querySelectorAll('[data-route]').forEach(trigger => {
+    trigger.addEventListener('click', (e) => {
+      navigateToView(e.currentTarget.getAttribute('data-route'));
+    });
+  });
 
-    if (val === 'C') {
-      currentCalcString = "0";
-      valDisplay.innerText = "0.00";
-    } else if (val === 'DEL') {
-      currentCalcString = currentCalcString.slice(0, -1);
-      if (currentCalcString === "" || currentCalcString === "-") currentCalcString = "0";
-    } else {
-      if (currentCalcString === "0" && !['+', '-', '*', '/'].includes(val)) {
-        currentCalcString = val;
+  // 3. Calculator Input Buttons Matrix
+  document.querySelectorAll('.calc-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const val = e.currentTarget.getAttribute('data-val');
+      const exprDisplay = document.getElementById('calc-display-expression');
+      const valDisplay = document.getElementById('calc-display-value');
+
+      if (val === 'C') {
+        currentCalcString = "0";
+        valDisplay.innerText = "0.00";
+      } else if (val === 'DEL') {
+        currentCalcString = currentCalcString.slice(0, -1);
+        if (currentCalcString === "" || currentCalcString === "-") currentCalcString = "0";
       } else {
-        currentCalcString += val;
+        if (currentCalcString === "0" && !['+', '-', '*', '/'].includes(val)) {
+          currentCalcString = val;
+        } else {
+          currentCalcString += val;
+        }
       }
-    }
 
-    exprDisplay.innerText = currentCalcString;
+      exprDisplay.innerText = currentCalcString;
+
+      try {
+        const sanitized = currentCalcString.replace(/[^0-9+\-*/().\s]/g, '');
+        const evaluator = new Function(`return (${sanitized || '0'})`);
+        const result = evaluator();
+        valDisplay.innerText = Number.isFinite(result) ? result.toFixed(2) : "0.00";
+      } catch (err) { /* Allow math expressions to evaluate mid-composition */ }
+    });
+  });
+
+  // 4. Transaction Entry Submission Form Hook
+  document.getElementById('expense-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeSpreadsheetId) return alert("Halted: No workspace assigned.");
+
+    const title = document.getElementById('exp-title').value;
+    const category = document.getElementById('exp-category').value;
+    const valDisplay = document.getElementById('calc-display-value').innerText;
+    
+    const computedTotal = parseFloat(valDisplay) || 0;
+    if (computedTotal <= 0) return alert("Value must evaluate above 0.00");
 
     try {
-      const sanitized = currentCalcString.replace(/[^0-9+\-*/().\s]/g, '');
-      const evaluator = new Function(`return (${sanitized || '0'})`);
-      const result = evaluator();
-      valDisplay.innerText = Number.isFinite(result) ? result.toFixed(2) : "0.00";
+      const uuid = crypto.randomUUID();
+      const isoString = new Date().toISOString();
+      const groupMembers = [userEmailAddress, 'partner.testing@niser.ac.in'];
+      const proportionalShare = computedTotal / groupMembers.length;
+
+      const eventPayload = {
+        title: title,
+        category: category,
+        raw_amount_string: currentCalcString,
+        evaluated_amount: computedTotal,
+        currency: 'INR',
+        split_strategy: 'EQUALLY',
+        allocations: groupMembers.map(email => ({ user: email, share_type: 'EXACT', value: proportionalShare }))
+      };
+
+      const transactionRecord = {
+        spreadsheetId: activeSpreadsheetId,
+        eventId: uuid,
+        timestamp: isoString,
+        event_type: 'EXPENSE_ADD',
+        actor_identity: userEmailAddress,
+        payload_json: eventPayload
+      };
+
+      // Optimistic cache update
+      currentGroupEvents.push(transactionRecord);
+      await writeToStore('group_events_cache', transactionRecord);
+      await writeToStore('offline_sync_queue', {
+        action: 'APPEND_ROW',
+        spreadsheetId: activeSpreadsheetId,
+        payload: transactionRecord
+      });
+
+      repaintDOMState();
+      document.getElementById('expense-form').reset();
+      currentCalcString = "0";
+      document.getElementById('calc-display-expression').innerText = "0";
+      document.getElementById('calc-display-value').innerText = "0.00";
+      
+      navigateToView('group-detail');
+      triggerBackgroundSyncLoop();
     } catch (err) {
-      // Allow numerical formulas to continue composition structural entries smoothly
+      alert(`Entry execution error: ${err.message}`);
     }
   });
-});
 
-/**
- * ─── OPTIMISTIC COMMIT & WRITE RESPONSE PIPELINE ───
- */
-const expenseForm = document.getElementById('expense-form');
-expenseForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!activeSpreadsheetId) return alert("Halted: No workspace assigned.");
+  // 5. Workspace Registry Generation Handler
+  document.getElementById('create-group-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('create-group-btn');
+    try {
+      btn.disabled = true;
+      btn.innerText = "Configuring Cloud Ledger...";
+      
+      const folderId = await getOrCreateRootFolder();
+      const groupName = `Production Room (${new Date().toLocaleDateString()})`;
+      const sheetId = await createGroupSpreadsheet(groupName, folderId);
+      
+      await loadGroupWorkspaceContext(sheetId, groupName);
+      alert("Success! Spreadsheet spawned inside your Drive.");
+    } catch (err) {
+      alert(`Google API Provision Failure: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "New Group";
+    }
+  });
 
-  const title = document.getElementById('exp-title').value;
-  const category = document.getElementById('exp-category').value;
-  const valDisplay = document.getElementById('calc-display-value').innerText;
-  
-  const computedTotal = parseFloat(valDisplay) || 0;
-  if (computedTotal <= 0) return alert("Halted: Value must evaluate above 0.00");
-
-  try {
-    const uuid = crypto.randomUUID();
-    const isoString = new Date().toISOString();
-
-    // Default mock distribution setup until dynamic member inputs are attached
-    const groupMembers = [userEmailAddress, 'partner.testing@niser.ac.in'];
-    const proportionalShare = computedTotal / groupMembers.length;
-
-    const eventPayload = {
-      title: title,
-      category: category,
-      raw_amount_string: currentCalcString,
-      evaluated_amount: computedTotal,
-      currency: 'INR',
-      split_strategy: 'EQUALLY',
-      allocations: groupMembers.map(email => ({ user: email, share_type: 'EXACT', value: proportionalShare }))
-    };
-
-    const transactionRecord = {
-      spreadsheetId: activeSpreadsheetId,
-      eventId: uuid,
-      timestamp: isoString,
-      event_type: 'EXPENSE_ADD',
-      actor_identity: userEmailAddress,
-      payload_json: eventPayload
-    };
-
-    // ─── OPTIMISTIC WRITE LAYER ENGAGEMENT ───
-    currentGroupEvents.push(transactionRecord);
-    await writeToStore('group_events_cache', transactionRecord);
-    await writeToStore('offline_sync_queue', {
-      action: 'APPEND_ROW',
-      spreadsheetId: activeSpreadsheetId,
-      payload: transactionRecord
+  // 6. Dynamic Design Accent Selectors
+  document.querySelectorAll('[data-select-accent]').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const accent = e.target.getAttribute('data-select-accent');
+      document.documentElement.setAttribute('data-accent', accent);
+      localStorage.setItem('ss_active_accent', accent);
+      document.querySelectorAll('[data-select-accent]').forEach(btn => btn.classList.remove('ring-2', 'ring-slate-400', 'dark:ring-slate-200'));
+      e.target.classList.add('ring-2', 'ring-slate-400', 'dark:ring-slate-200');
     });
+  });
 
-    // Reset input states and screens immediately
-    repaintDOMState();
-    expenseForm.reset();
-    currentCalcString = "0";
-    document.getElementById('calc-display-expression').innerText = "0";
-    document.getElementById('calc-display-value').innerText = "0.00";
-    
-    navigateToView('group-detail');
-    
-    // Fire off network flush immediately
-    triggerBackgroundSyncLoop();
+  // 7. Theme Framework Configuration Selectors
+  const toggleDarkMode = () => document.documentElement.classList.toggle('dark');
+  document.getElementById('cfg-dark-toggle').addEventListener('click', toggleDarkMode);
 
-  } catch (err) {
-    alert(`Entry execution error: ${err.message}`);
+  document.getElementById('cfg-oled-toggle').addEventListener('click', (e) => {
+    const isOled = document.documentElement.classList.toggle('oled');
+    e.target.innerText = isOled ? "Disable" : "Enable";
+    localStorage.setItem('ss_cfg_oled', isOled ? 'true' : 'false');
+  });
+
+  document.getElementById('sign-out-btn').addEventListener('click', () => {
+    clearSessionContext();
+    window.location.reload();
+  });
+
+  // 8. Open Group Action Route Link
+  document.getElementById('groups-directory-list').addEventListener('click', () => {
+    const mockSheetId = localStorage.getItem('ss_active_sheet_id') || "sandbox_fallback_token_id";
+    loadGroupWorkspaceContext(mockSheetId, "Production Room Sandbox");
+  });
+
+  // 9. Interactive Receipt Attachment Box Click Trigger Stub
+  const receiptArea = document.querySelector('#view-add-expense border-dashed');
+  if (receiptArea) {
+    receiptArea.addEventListener('click', () => document.getElementById('receipt-file-input').click());
   }
-});
+}
 
 /**
- * ─── WORKSPACE GENERATION PROCESSOR ───
- */
-const createGroupBtn = document.getElementById('create-group-btn')
-createGroupBtn.addEventListener('click', async () => {
-  try {
-    createGroupBtn.disabled = true;
-    createGroupBtn.innerText = "Configuring Cloud Ledger...";
-    
-    const folderId = await getOrCreateRootFolder();
-    const groupName = `Production Room (${new Date().toLocaleDateString()})`;
-    const sheetId = await createGroupSpreadsheet(groupName, folderId);
-    
-    // Load up the fresh group sheet context immediately
-    await loadGroupWorkspaceContext(sheetId, groupName);
-    alert("Success! SpreadSheet provisioned and mounted into local tracking engine safely.");
-  } catch (err) {
-    alert(`Google API Provision Failure: ${err.message}`);
-  } finally {
-    createGroupBtn.disabled = false;
-    createGroupBtn.innerText = "New Group";
-  }
-});
-
-/**
- * ─── THEME & HARDWARE SYNC STATUS DIALS ───
+ * ─── HARDWARE BAR SYNC INDICATORS ───
  */
 function syncStatusIndicatorState(status) {
   const indicator = document.getElementById('sync-indicator');
@@ -316,34 +340,6 @@ function triggerBackgroundSyncLoop() {
     syncStatusIndicatorState(isSyncing ? 'syncing' : 'synced');
   });
 }
-
-// Global System Configuration Toggles
-document.getElementById('cfg-dark-toggle').addEventListener('click', () => document.documentElement.classList.toggle('dark'));
-document.getElementById('cfg-oled-toggle').addEventListener('click', (e) => {
-  const isOled = document.documentElement.classList.toggle('oled');
-  e.target.innerText = isOled ? "Disable" : "Enable";
-  localStorage.setItem('ss_cfg_oled', isOled ? 'true' : 'false');
-});
-document.getElementById('sign-out-btn').addEventListener('click', () => {
-  clearSessionContext();
-  window.location.reload();
-});
-
-document.querySelectorAll('[data-select-accent]').forEach(button => {
-  button.addEventListener('click', (e) => {
-    const accent = e.target.getAttribute('data-select-accent');
-    document.documentElement.setAttribute('data-accent', accent);
-    localStorage.setItem('ss_active_accent', accent);
-    document.querySelectorAll('[data-select-accent]').forEach(btn => btn.classList.remove('ring-2', 'ring-slate-400', 'dark:ring-slate-200'));
-    e.target.classList.add('ring-2', 'ring-slate-400', 'dark:ring-slate-200');
-  });
-});
-
-// Setup group item list navigation trigger mapping hooks securely
-document.getElementById('groups-directory-list').addEventListener('click', () => {
-  const mockSheetId = localStorage.getItem('ss_active_sheet_id') || "sandbox_fallback_token_id";
-  loadGroupWorkspaceContext(mockSheetId, "Production Room Sandbox");
-});
 
 function handleAppLaunchSequence(token, profile) {
   userEmailAddress = profile.email;
@@ -362,8 +358,14 @@ function handleAppLaunchSequence(token, profile) {
   setInterval(triggerBackgroundSyncLoop, 10000);
 }
 
+/**
+ * ─── LIFECYCLE INITIALIZATION DECK ───
+ */
 window.addEventListener('DOMContentLoaded', async () => {
   await openDatabase();
+  
+  // Wire up every interaction listener across views securely
+  bindApplicationInteractionTriggers();
   
   const savedAccent = localStorage.getItem('ss_active_accent') || 'indigo';
   document.documentElement.setAttribute('data-accent', savedAccent);
