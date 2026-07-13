@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Bind Tailwind v4 utilities directly to runtime dynamic CSS variables */
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  
+  /* Retain static slate color mapping for foundational neutral layouts */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+}
+
+/* ─── PRESETS MATRIX LAYER ─── */
+
+/* Preset 1: Indigo (Default Fallback Configuration) */
+:root, html[data-accent="indigo"] {
+  --accent-50: #eef2ff; --accent-100: #e0e7ff; --accent-200: #c7d2fe; --accent-300: #a5b4fc;
+  --accent-400: #818cf8; --accent-500: #6366f1; --accent-600: #4f46e5; --accent-700: #4338ca;
+  --accent-800: #3730a3; --accent-900: #312e81;
+}
+
+/* Preset 2: Emerald (Green Ecosystem Accent) */
+html[data-accent="emerald"] {
+  --accent-50: #ecfdf5; --accent-100: #d1fae5; --accent-200: #a7f3d0; --accent-300: #6ee7b7;
+  --accent-400: #34d399; --accent-500: #10b981; --accent-600: #059669; --accent-700: #047857;
+  --accent-800: #065f46; --accent-900: #064e3b;
+}
+
+/* Preset 3: Violet (Deep Creative Purple) */
+html[data-accent="violet"] {
+  --accent-50: #f5f3ff; --accent-100: #ede9fe; --accent-200: #ddd6fe; --accent-300: #c084fc;
+  --accent-400: #a78bfa; --accent-500: #8b5cf6; --accent-600: #7c3aed; --accent-700: #6d28d9;
+  --accent-800: #5b21b6; --accent-900: #4c1d95;
+}
+
+/* Preset 4: Amber (Warn / Warm Gold) */
+html[data-accent="amber"] {
+  --accent-50: #fffbeb; --accent-100: #fef3c7; --accent-200: #fde68a; --accent-300: #fcd34d;
+  --accent-400: #fbbf24; --accent-500: #f59e0b; --accent-600: #d97706; --accent-700: #b45309;
+  --accent-800: #92400e; --accent-900: #78350f;
+}
+
+/* Preset 5: Rose (Vibrant Red Crimson) */
+html[data-accent="rose"] {
+  --accent-50: #fff1f2; --accent-100: #ffe4e6; --accent-200: #fecdd3; --accent-300: #fda4af;
+  --accent-400: #fb7185; --accent-500: #f43f5e; --accent-600: #e11d48; --accent-700: #be123c;
+  --accent-800: #9f1239; --accent-900: #881337;
+}
+
+/* Preset 6: Slate (Monochrome Tech Minimalist) */
+html[data-accent="slate"] {
+  --accent-50: #f8fafc; --accent-100: #f1f5f9; --accent-200: #e2e8f0; --accent-300: #cbd5e1;
+  --accent-400: #94a3b8; --accent-500: #64748b; --accent-600: #475569; --accent-700: #334155;
+  --accent-800: #1e293b; --accent-900: #0f172a;
+}

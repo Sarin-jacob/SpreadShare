@@ -1,0 +1,26 @@
+{
+  "name": "spreadshare",
+  "version": "0.1.0",
+  "description": "A Serverless, Local-First, Zero-Cost Expense Splitting PWA Powered by Google Workspace",
+  "keywords": [
+    "split",
+    "expense",
+    "google",
+    "spreadsheet_db"
+  ],
+  "license": "MIT",
+  "author": "Sarin C Jacob",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && git add dist -f && git commit -m \"Deploy to GitHub Pages\" && git subtree push --prefix dist origin gh-pages && git reset HEAD~1 --soft"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "tailwindcss": "^4.3.2",
+    "vite": "^8.1.4"
+  }
+}
