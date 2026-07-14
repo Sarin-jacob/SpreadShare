@@ -2,9 +2,8 @@
 import { CONFIG } from './js/config.js';
 import { initGoogleAuth, requestAuthenticationData, checkExistingSession, clearSessionContext } from './js/auth.js';
 import { openDatabase, writeToStore } from './js/db.js';
-import { getOrCreateRootFolder, createGroupSpreadsheet, processOfflineQueue, fetchLedgerDelta, syncUserConfigRegistry } from './js/sync.js';
+import { getOrCreateRootFolder, createGroupSpreadsheet, processOfflineQueue, fetchLedgerDelta, syncUserConfigRegistry, fetchUserConfigRegistry } from './js/sync.js';
 
-// Application State Variables
 let activeSpreadsheetId = null;
 let currentGroupEvents = [];
 let userEmailAddress = "";
@@ -35,16 +34,13 @@ function navigateToView(targetViewKey) {
 }
 
 /**
- * ─── ADVANCED EXTENDED BALANCES STATE COMPUTATION ENGINE ───
+ * ─── ADVANCED INTERACTION RECONSTRUCTION LOGIC ENGINE ───
  */
 function evaluateAdvancedLedgerState(events) {
   const state = { totalSpent: 0, members: {}, expenses: [] };
 
-  // Track distinct dynamic members active across all ledger activities dynamically
   const discoverMember = (email) => {
-    if (!state.members[email]) {
-      state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
-    }
+    if (!state.members[email]) state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
   };
 
   events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -71,18 +67,19 @@ function evaluateAdvancedLedgerState(events) {
         break;
 
       case 'TRANSFER':
-        // Direct cash settlement settlement flow:
-        // Actor gave money directly to targetPeer -> Actor receives credit (+), targetPeer receives debit (-)
         state.members[actor].paid += amount;
         state.members[targetPeer].owes += amount;
         break;
 
-      case 'LOAN_INTEREST':
-        // Loan event with compound calculation rules:
-        // Actor loaned money out to targetPeer at a fixed rate parameter context
-        const compoundPrincipal = amount * 1.05; 
-        state.members[actor].paid += compoundPrincipal;
-        state.members[targetPeer].owes += compoundPrincipal;
+      case 'LOAN':
+        // Dynamic Interest Loan Event Parsing Architecture[cite: 3]
+        const rate = parseFloat(payload.interest_rate) || 0;
+        const type = payload.interest_type || 'NONE';
+        const weightedMultiplier = (type === 'NONE') ? 1.0 : (1 + (rate / 100));
+        const finalCompoundValue = amount * weightedMultiplier;
+
+        state.members[actor].paid += finalCompoundValue;
+        state.members[targetPeer].owes += finalCompoundValue;
         break;
     }
 
@@ -101,13 +98,9 @@ function evaluateAdvancedLedgerState(events) {
   Object.keys(state.members).forEach(m => {
     state.members[m].netBalance = state.members[m].paid - state.members[m].owes;
   });
-
   return state;
 }
 
-/**
- * ─── RENDER DIRECTORY GROUP MATRIX PANELS ───
- */
 function repaintGroupDirectoryUI() {
   const container = document.getElementById('groups-directory-list');
   container.innerHTML = '';
@@ -115,7 +108,7 @@ function repaintGroupDirectoryUI() {
   if (groupDirectoryIndex.length === 0) {
     container.innerHTML = `
       <div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-        <p class="text-xs text-slate-400">No active groups mapped. Supply a name above to provision a ledger workspace.</p>
+        <p class="text-xs text-slate-400">No active rooms found. Provide a title above to spawn a ledger workspace.</p>
       </div>`;
     return;
   }
@@ -126,7 +119,7 @@ function repaintGroupDirectoryUI() {
     el.innerHTML = `
       <div>
         <h4 class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-accent-500 transition-colors">${group.name}</h4>
-        <p class="text-[9px] font-mono text-slate-400 mt-0.5 truncate max-w-[280px]">Ref: ${group.id}</p>
+        <p class="text-[9px] font-mono text-slate-400 mt-0.5 truncate max-w-[240px]">Ref Token: ${group.id}</p>
       </div>
       <svg class="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
     `;
@@ -135,9 +128,6 @@ function repaintGroupDirectoryUI() {
   });
 }
 
-/**
- * ─── ACTIVE GROUP ACCOUNTING LOAD FACTOR ───
- */
 async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
   activeSpreadsheetId = spreadsheetId;
   localStorage.setItem('ss_active_sheet_id', spreadsheetId);
@@ -152,13 +142,10 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
     tx.objectStore('group_events_cache').getAll().onsuccess = (e) => res(e.target.result || []);
   });
 
-  // Pull historical array blocks seamlessly across sessions instead of transient memory logs
   currentGroupEvents = allEvents.filter(evt => evt.spreadsheetId === spreadsheetId);
-  
   repaintDOMState();
   navigateToView('group-detail');
   
-  // Asynchronously execute delta tracking catches
   const lastKnownRowIndex = currentGroupEvents.length;
   try {
     syncStatusIndicatorState('syncing');
@@ -183,7 +170,7 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
       repaintDOMState();
     }
   } catch (err) {
-    console.warn("Delta fetching paused offline:", err);
+    console.warn("Delta update loop deferred offline:", err);
   } finally {
     syncStatusIndicatorState('synced');
   }
@@ -191,9 +178,9 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
 
 function repaintDOMState() {
   const state = evaluateAdvancedLedgerState(currentGroupEvents);
-  
   const summaryGrid = document.getElementById('balance-summary-grid');
   summaryGrid.innerHTML = '';
+  
   Object.keys(state.members).forEach(member => {
     const data = state.members[member];
     const isPositive = data.netBalance >= 0;
@@ -211,27 +198,27 @@ function repaintDOMState() {
   if (state.expenses.length === 0) {
     feed.innerHTML = `
       <div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full">
-        <p class="text-xs text-slate-400">No stream data transactions recorded yet.</p>
+        <p class="text-xs text-slate-400">No recorded stream activities mapped inside ledger.</p>
       </div>`;
     return;
   }
 
   [...state.expenses].reverse().forEach(exp => {
     let badgColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
-    let actionDescriptor = exp.title;
+    let desc = exp.title;
     
     if (exp.type === 'TRANSFER') {
       badgColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
-      actionDescriptor = `Settlement sent to: ${exp.target}`;
-    } else if (exp.type === 'LOAN_INTEREST') {
+      desc = `Settlement transfer sent to: ${exp.target}`;
+    } else if (exp.type === 'LOAN') {
       badgColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
-      actionDescriptor = `5% Loan extended to: ${exp.target}`;
+      desc = `Issued dynamic Loan to: ${exp.target}`;
     }
 
     feed.innerHTML += `
       <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex justify-between items-center text-xs shadow-2xs">
         <div class="space-y-1 max-w-[65%]">
-          <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${actionDescriptor}</div>
+          <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${desc}</div>
           <div class="flex items-center space-x-2 text-[10px] text-slate-400 font-medium">
             <span class="truncate">Actor: ${exp.payer === userEmailAddress ? 'You' : exp.payer}</span>
             <span class="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700"></span>
@@ -246,9 +233,6 @@ function repaintDOMState() {
   });
 }
 
-/**
- * ─── BIND CORE RUNTIME ATTACHMENT LISTENERS ───
- */
 function bindApplicationInteractionTriggers() {
   document.getElementById('auth-btn').addEventListener('click', requestAuthenticationData);
 
@@ -256,7 +240,13 @@ function bindApplicationInteractionTriggers() {
     trigger.addEventListener('click', (e) => navigateToView(e.currentTarget.getAttribute('data-route')));
   });
 
-  // Calculator Engine logic handles custom pad loops
+  // Watch input type select fields to conditionally unhide loan blocks[cite: 3]
+  document.getElementById('exp-type').addEventListener('change', (e) => {
+    const loanPanel = document.getElementById('loan-options-container');
+    if (e.target.value === 'LOAN') loanPanel.classList.remove('hidden');
+    else loanPanel.classList.add('hidden');
+  });
+
   document.querySelectorAll('.calc-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const val = e.currentTarget.getAttribute('data-val');
@@ -280,7 +270,6 @@ function bindApplicationInteractionTriggers() {
     });
   });
 
-  // Dynamic Multi-Type Submission Form Handler
   document.getElementById('expense-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!activeSpreadsheetId) return alert("Halted: Map a group room entry first.");
@@ -297,7 +286,7 @@ function bindApplicationInteractionTriggers() {
       const iso = new Date().toISOString();
 
       const payload = {
-        title: type === 'EXPENSE_ADD' ? titleOrPeer : `${type} Event`,
+        title: type === 'EXPENSE_ADD' ? titleOrPeer : `${type} Log Entry`,
         category: category,
         raw_amount_string: currentCalcString,
         evaluated_amount: totalVal,
@@ -305,11 +294,14 @@ function bindApplicationInteractionTriggers() {
         split_strategy: 'EQUALLY'
       };
 
-      // If logging settlements/loans, capture input directly as destination user profile targets
-      if (type === 'TRANSFER' || type === 'LOAN_INTEREST') {
+      if (type === 'TRANSFER' || type === 'LOAN') {
         payload.target_peer_identity = titleOrPeer;
+        if (type === 'LOAN') {
+          payload.interest_type = document.getElementById('loan-interest-type').value;
+          payload.interest_rate = document.getElementById('loan-interest-rate').value;
+        }
       } else {
-        // Standard split calculation pool logic
+        // Fallback split logic
         const splitPool = [userEmailAddress, 'partner.testing@niser.ac.in']; 
         payload.allocations = splitPool.map(m => ({ user: m, value: totalVal / splitPool.length }));
       }
@@ -329,6 +321,7 @@ function bindApplicationInteractionTriggers() {
 
       repaintDOMState();
       document.getElementById('expense-form').reset();
+      document.getElementById('loan-options-container').classList.add('hidden');
       currentCalcString = "0";
       document.getElementById('calc-display-expression').innerText = "0";
       document.getElementById('calc-display-value').innerText = "0.00";
@@ -338,7 +331,7 @@ function bindApplicationInteractionTriggers() {
     } catch (err) { alert(`Execution exception: ${err.message}`); }
   });
 
-  // Named Group Provision Handler
+  // FIXED CORRECTION MATRIX MAP LOOP TRAP CAUGHT: Changed } end { to standard catch blocks
   document.getElementById('create-group-btn').addEventListener('click', async () => {
     const inputField = document.getElementById('new-group-name-input');
     const groupName = inputField.value.trim();
@@ -352,11 +345,10 @@ function bindApplicationInteractionTriggers() {
       const folderId = await getOrCreateRootFolder();
       const sheetId = await createGroupSpreadsheet(groupName, folderId);
       
-      // Update config array directories dynamically
       groupDirectoryIndex.push({ id: sheetId, name: groupName });
       localStorage.setItem('ss_groups_directory', JSON.stringify(groupDirectoryIndex));
       
-      try { await syncUserConfigRegistry(groupDirectoryIndex); } catch(e) { console.warn("Registry file sync deferred offline."); }
+      try { await syncUserConfigRegistry(groupDirectoryIndex); } catch(e) { console.warn("Index log write deferred offline."); }
 
       inputField.value = '';
       repaintGroupDirectoryUI();
@@ -369,10 +361,7 @@ function bindApplicationInteractionTriggers() {
     }
   });
 
-  // Interactive File Upload Element trigger
-  document.getElementById('receipt-upload-zone').addEventListener('click', () => {
-    document.getElementById('receipt-file-input').click();
-  });
+  document.getElementById('receipt-upload-zone').addEventListener('click', () => document.getElementById('receipt-file-input').click());
   document.getElementById('receipt-file-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if(file) {
@@ -381,9 +370,7 @@ function bindApplicationInteractionTriggers() {
     }
   });
 
-  // Base configurations toggle attachments
   const toggleDark = () => document.documentElement.classList.toggle('dark');
-//   document.getElementById('theme-toggle').addEventListener('click', toggleDark);
   document.getElementById('cfg-dark-toggle').addEventListener('click', toggleDark);
 
   document.getElementById('cfg-oled-toggle').addEventListener('click', (e) => {
@@ -421,12 +408,24 @@ function triggerBackgroundSyncLoop() {
   processOfflineQueue((isSyncing) => syncStatusIndicatorState(isSyncing ? 'syncing' : 'synced'));
 }
 
-function handleAppLaunchSequence(token, profile) {
+async function handleAppLaunchSequence(token, profile) {
   userEmailAddress = profile.email;
   document.getElementById('cfg-user-email').innerText = userEmailAddress;
   
-  // Restore local group registries indices safely from localStorage fallback matrix maps
-  groupDirectoryIndex = JSON.parse(localStorage.getItem('ss_groups_directory') || '[]');
+  // ─── CRITICAL CLOUD RESTORE ATTEMPT DETECTED ───
+  try {
+    // Read directly from the cloud configuration index registry upon loading secondary devices
+    const remoteIndex = await fetchUserConfigRegistry();
+    if (remoteIndex && remoteIndex.length > 0) {
+      groupDirectoryIndex = remoteIndex;
+      localStorage.setItem('ss_groups_directory', JSON.stringify(groupDirectoryIndex));
+    } else {
+      groupDirectoryIndex = JSON.parse(localStorage.getItem('ss_groups_directory') || '[]');
+    }
+  } catch(e) {
+    groupDirectoryIndex = JSON.parse(localStorage.getItem('ss_groups_directory') || '[]');
+  }
+
   repaintGroupDirectoryUI();
 
   document.getElementById('auth-gate').classList.add('hidden');

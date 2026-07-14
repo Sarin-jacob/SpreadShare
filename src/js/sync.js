@@ -3,9 +3,6 @@ import { CONFIG } from './config.js';
 import { getAccessToken } from './auth.js';
 import { openDatabase } from './db.js';
 
-/**
- * Standardized Google API helper that automatically injects the active OAuth token.
- */
 async function googleFetch(url, options = {}) {
   const token = getAccessToken();
   if (!token) throw new Error("Sync engine stalled: Invalid context session.");
@@ -24,13 +21,9 @@ async function googleFetch(url, options = {}) {
   return response.json();
 }
 
-/**
- * Locates or creates the root application folder in the user's Google Drive.
- */
 export async function getOrCreateRootFolder() {
   const query = encodeURIComponent(`name='${CONFIG.APP_DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
   const result = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`);
-  
   if (result.files && result.files.length > 0) return result.files[0].id;
 
   const folderMeta = { name: CONFIG.APP_DRIVE_FOLDER, mimeType: 'application/vnd.google-apps.folder' };
@@ -41,15 +34,11 @@ export async function getOrCreateRootFolder() {
   return newFolder.id;
 }
 
-/**
- * Creates a new Group Spreadsheet inside the SpreadShare root folder.
- */
 export async function createGroupSpreadsheet(groupName, parentFolderId) {
   const sheetMeta = {
     properties: { title: groupName },
     sheets: [{ properties: { title: 'transaction_ledger' } }]
   };
-  
   const spreadsheet = await googleFetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     body: JSON.stringify(sheetMeta)
@@ -65,34 +54,23 @@ export async function createGroupSpreadsheet(groupName, parentFolderId) {
   return spreadsheetId;
 }
 
-/**
- * ─── RESTORED: INDEX-BOUNDED DELTA LOOKUP (READ OPTIMIZATION) ───
- * Pulls only the transaction rows after the client's last known index.
- */
 export async function fetchLedgerDelta(spreadsheetId, lastKnownRowIndex) {
-  // Target row offset accounting for header row 1
   const targetStartRow = lastKnownRowIndex + 2; 
   const range = `transaction_ledger!A${targetStartRow}:E`;
   const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
-  
   try {
     const data = await googleFetch(readUrl);
-    return data.values || []; // Return an empty array if no new updates exist
+    return data.values || [];
   } catch (error) {
-    // Gracefully handle boundary edge cases or empty sheet ends
-    console.warn("Delta fetch caught up or reached spreadsheet boundaries.", error);
+    console.warn("Delta fetch caught up or reached boundaries.", error);
     return [];
   }
 }
 
-/**
- * Synchronizes isolated workspace directory index map to Drive.
- */
 export async function syncUserConfigRegistry(groupDirectoryArray) {
   const configFileName = '.spreadshare_user_config';
-  const query = encodeURIComponent(`name='${configFileName}' and mimeType='application/json' and trashed=false`);
+  const query = encodeURIComponent(`name='${configFileName}' and trashed=false`);
   const searchResult = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
-  
   const payloadBlob = new Blob([JSON.stringify(groupDirectoryArray)], { type: 'application/json' });
   
   if (searchResult.files && searchResult.files.length > 0) {
@@ -104,11 +82,7 @@ export async function syncUserConfigRegistry(groupDirectoryArray) {
     });
   } else {
     const meta = { name: configFileName, mimeType: 'application/json' };
-    const initialFile = await googleFetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      body: JSON.stringify(meta)
-    });
-    
+    const initialFile = await googleFetch('https://www.googleapis.com/drive/v3/files', { method: 'POST', body: JSON.stringify(meta) });
     await fetch(`https://www.googleapis.com/upload/drive/v3/files/${initialFile.id}?uploadType=media`, {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${getAccessToken()}` },
@@ -118,8 +92,24 @@ export async function syncUserConfigRegistry(groupDirectoryArray) {
 }
 
 /**
- * Iterates over local IndexedDB queues and flushes transactions out via atomic batch requests.
+ * ─── NEW CRITICAL CROSS-DEVICE SYNC READ ENGINE ───
+ * Reads the hidden global group directory database from Drive on refresh.
  */
+export async function fetchUserConfigRegistry() {
+  const configFileName = '.spreadshare_user_config';
+  const query = encodeURIComponent(`name='${configFileName}' and trashed=false`);
+  const searchResult = await googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
+  
+  if (searchResult.files && searchResult.files.length > 0) {
+    const fileId = searchResult.files[0].id;
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: { 'Authorization': `Bearer ${getAccessToken()}` }
+    });
+    if (res.ok) return await res.json();
+  }
+  return [];
+}
+
 export async function processOfflineQueue(onSyncProgress) {
   const db = await openDatabase();
   const tx = db.transaction('offline_sync_queue', 'readwrite');
@@ -135,23 +125,15 @@ export async function processOfflineQueue(onSyncProgress) {
     if (queuedItem.action === 'APPEND_ROW') {
       const record = queuedItem.payload;
       const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${queuedItem.spreadsheetId}/values/transaction_ledger!A:E:append?valueInputOption=USER_ENTERED`;
-      
       const payloadData = {
-        values: [[
-          record.timestamp,
-          record.eventId,
-          record.event_type,
-          record.actor_identity,
-          JSON.stringify(record.payload_json)
-        ]]
+        values: [[record.timestamp, record.eventId, record.event_type, record.actor_identity, JSON.stringify(record.payload_json)]]
       };
-
       try {
         await googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(payloadData) });
         const cleanupTx = db.transaction('offline_sync_queue', 'readwrite');
         cleanupTx.objectStore('offline_sync_queue').delete(queuedItem.id);
       } catch (err) {
-        console.error(`Failed pushing row append task index token [${queuedItem.id}]:`, err);
+        console.error(`Failed pushing row append task [${queuedItem.id}]:`, err);
         break; 
       }
     }
