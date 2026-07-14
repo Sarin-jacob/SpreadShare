@@ -32,10 +32,13 @@ export function navigateToView(targetViewKey) {
 }
 
 export function initRouter() {
-  document.querySelectorAll('[data-route]').forEach(trigger => {
-    trigger.addEventListener('click', (e) => {
-      const route = e.currentTarget.getAttribute('data-route');
+  document.addEventListener('click', (e) => {
+    // Looks for the closest matching element up the DOM tree (handles inner SVG/span click targets)
+    const trigger = e.target.closest('[data-route]');
+    
+    if (trigger) {
+      const route = trigger.getAttribute('data-route');
       navigateToView(route);
-    });
+    }
   });
 }
