@@ -6,13 +6,13 @@
   <title>SpreadShare Studio</title>
   <link rel="stylesheet" href="/src/css/style.css">
 </head>
-<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200 antialiased font-sans pb-20 md:pb-0">
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200 antialiased font-sans pb-24 md:pb-0">
 
   <!-- MASTER WORKSPACE SHELL -->
   <div class="md:flex md:min-h-screen max-w-7xl mx-auto">
     
-    <!-- LEFT SIDEBAR PLATFORM DECK (Desktop viewports) -->
-    <aside class="hidden md:flex md:w-64 bg-slate-100 dark:bg-slate-950  border-r border-slate-200 dark:border-slate-800 flex-col justify-between p-6">
+    <!-- LEFT SIDEBAR PLATFORM DECK (Desktop Viewports) -->
+    <aside class="hidden md:flex md:w-64 bg-slate-100 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 flex-col justify-between p-6">
       <div class="space-y-6">
         <div>
           <h1 class="text-2xl font-black bg-gradient-to-r from-accent-600 to-accent-400 bg-clip-text text-transparent">SpreadShare</h1>
@@ -22,10 +22,6 @@
           <button data-route="dashboard" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z"/></svg>
             <span>Groups Directory</span>
-          </button>
-          <button data-route="transfer" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-            <span>Fund Transfers</span>
           </button>
           <button data-route="settings" class="nav-link w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -47,7 +43,7 @@
         
         <div id="sync-indicator" class="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">
           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span class="text-slate-500 dark:text-slate-400">Cloud Mirror Live</span>
+          <span class="text-slate-500 dark:text-slate-400 font-medium">Cloud Mirror Live</span>
         </div>
       </header>
 
@@ -73,161 +69,147 @@
         <!-- MAIN STAGE HOOK CONTENT -->
         <div id="main-stage" class="hidden space-y-4">
           
-          <!-- VIEW 1: DYNAMIC GROUPS SELECTION CATALOG -->
+          <!-- VIEW 1: GROUPS REGISTRY CATALOG -->
           <section id="view-dashboard" class="space-y-4">
-            <div class="flex justify-between items-center">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Your Shared Workspaces</h3>
-              <button id="create-group-btn" class="bg-accent-600 dark:bg-accent-500 text-white dark:text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1 hover:opacity-95 cursor-pointer">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-                <span>New Group</span>
-              </button>
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs space-y-3">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Spawn New Group Ledger</h3>
+              <div class="flex space-x-2">
+                <input type="text" id="new-group-name-input" placeholder="e.g., Shared Flat, EuroTrip 2026..." class="flex-grow bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500">
+                <button id="create-group-btn" class="bg-accent-600 dark:bg-accent-500 text-white dark:text-slate-950 px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-95 cursor-pointer whitespace-nowrap">
+                  Create Room
+                </button>
+              </div>
             </div>
-            <div id="groups-directory-list" class="grid gap-2.5">
-              <!-- Render template box fallback sample row -->
-              <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex justify-between items-center shadow-xs group hover:border-accent-500/40 transition-all cursor-pointer">
-                <div class="space-y-0.5">
-                  <h4 class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-accent-500 transition-colors">Trip Sandbox Directory</h4>
-                  <p class="text-[10px] text-slate-400">Auto-created matching connection records</p>
-                </div>
-                <svg class="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+
+            <div class="space-y-2">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Your Active Group Directories</h3>
+              <div id="groups-directory-list" class="grid gap-2">
+                <!-- Dynamically loaded group directories list here -->
               </div>
             </div>
           </section>
 
-          <!-- VIEW 2: ACTIVE GROUP ACCOUNTING TRACKER VIEW -->
+          <!-- VIEW 2: GROUP DETAIL WORKSPACE -->
           <section id="view-group-detail" class="hidden space-y-4">
-            <!-- Summary Card -->
-            <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white dark:from-slate-950 dark:to-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <!-- Summary Dashboard Card -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 dark:from-accent-950 dark:to-slate-900 dark:border-accent-900/40">
               <div class="flex justify-between items-center">
                 <div>
-                  <h2 id="active-group-title" class="text-base font-bold tracking-tight text-white">Active Room</h2>
-                  <span class="text-[9px] text-accent-400 font-mono" id="active-sheet-id">ID: None</span>
+                  <h2 id="active-group-title" class="text-base font-black tracking-tight text-white">Group Room</h2>
+                  <span class="text-[9px] text-accent-300 font-mono" id="active-sheet-id">ID: None</span>
                 </div>
-                <button data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-                  <span>Log Expense</span>
-                </button>
+                <div class="flex space-x-1.5">
+                  <button data-route="dashboard" class="bg-slate-800 text-slate-300 text-xs font-bold py-1.5 px-2.5 rounded-lg border border-slate-700 cursor-pointer">
+                    Back
+                  </button>
+                  <button data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer shadow-sm">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+                    <span>Log Item</span>
+                  </button>
+                </div>
               </div>
               <div class="grid grid-cols-2 gap-2" id="balance-summary-grid"></div>
             </div>
 
-            <!-- Category Analysis Filtering Chips Row -->
+            <!-- Transaction History Timeline -->
             <div class="space-y-2">
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Filter Category</span>
-              <div class="flex space-x-1.5 overflow-x-auto pb-1 text-[10px] font-bold">
-                <button class="px-3 py-1 bg-accent-600 text-white rounded-full cursor-pointer">All</button>
-                <button class="px-3 py-1 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full cursor-pointer">🍔 Food</button>
-                <button class="px-3 py-1 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full cursor-pointer">💡 Bills</button>
-                <button class="px-3 py-1 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-full cursor-pointer">🚗 Travel</button>
-              </div>
-            </div>
-
-            <!-- Detailed Expenditure Activity Logs -->
-            <div class="space-y-2">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Transaction History Logs</h3>
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
               <div class="space-y-2" id="group-ledger-feed"></div>
             </div>
           </section>
 
-          <!-- VIEW 3: COMPLEX ARITHMETIC LOGGING & RECEIPT ATTACHMENT VIEW -->
+          <!-- VIEW 3: LEDGER TRANSACTION GENERATOR & PHONES KEYPAD -->
           <section id="view-add-expense" class="hidden space-y-4">
             <div class="flex items-center space-x-2">
               <button data-route="group-detail" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg></button>
-              <h3 class="text-sm font-bold">Record Transaction Entry</h3>
+              <h3 class="text-sm font-bold">New Ledger Entry</h3>
             </div>
 
             <form id="expense-form" class="space-y-4" onsubmit="return false;">
-              <!-- Formula Output Screen -->
+              <!-- Formula Display Box -->
               <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-right font-mono shadow-inner">
-                <span class="block text-left text-[9px] text-slate-500 uppercase font-bold tracking-wider">Arithmetic Input String</span>
+                <span class="block text-left text-[9px] text-slate-500 uppercase font-bold tracking-wider">Arithmetic Parser</span>
                 <div id="calc-display-expression" class="text-xs text-slate-400 min-h-4 truncate">0</div>
                 <div id="calc-display-value" class="text-3xl font-black text-emerald-400 mt-1 truncate">0.00</div>
               </div>
 
-              <!-- Meta Row -->
+              <!-- Parameter Mapping Matrix -->
               <div class="grid grid-cols-2 gap-2">
                 <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Label Name</label>
-                  <input type="text" id="exp-title" placeholder="Dinner table, supplies..." class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500">
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Entry Description / Target Email</label>
+                  <input type="text" id="exp-title" required placeholder="Dinner / recipient email..." class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none">
                 </div>
                 <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Category Select</label>
-                  <select id="exp-category" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-semibold focus:outline-none">
-                    <option value="Food">🍔 Food & Dining</option>
-                    <option value="Utilities">💡 Utilities & Bills</option>
-                    <option value="Travel">🚗 Transportation</option>
-                    <option value="Entertainment">🎬 Entertainment</option>
-                    <option value="Others">📦 Miscellaneous</option>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Transaction Type</label>
+                  <select id="exp-type" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-semibold focus:outline-none">
+                    <option value="EXPENSE_ADD">🍔 Standard Expense Add</option>
+                    <option value="TRANSFER">💸 Direct Cash Settlement</option>
+                    <option value="LOAN_INTEREST">📈 5% Interest Loan Event</option>
                   </select>
                 </div>
               </div>
 
-              <!-- ADVANCED OPTIMIZATION: DRAG & DROP DIGITAL IMAGE RECEIPT ATTACHMENT HUB -->
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
+                  <select id="exp-category" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none font-medium">
+                    <option value="Food">Food & Dining</option>
+                    <option value="Utilities">Utilities & Bills</option>
+                    <option value="Travel">Transportation</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Settlement">Settlements & Loans</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Split Strategy</label>
+                  <select id="exp-strategy" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium">
+                    <option value="EQUALLY">Split Equally</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- File Upload Attachment Hub -->
               <div class="space-y-2">
-                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Digital Receipt Capture</label>
-                <div class="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-accent-500/40 rounded-2xl p-4 text-center cursor-pointer transition-colors bg-white/40 dark:bg-slate-800/20">
+                <div id="receipt-upload-zone" class="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-accent-500/40 rounded-2xl p-4 text-center cursor-pointer transition-colors bg-white/40 dark:bg-slate-800/20">
                   <input type="file" id="receipt-file-input" class="hidden" accept="image/*">
-                  <div class="flex flex-col items-center space-y-1.5 text-slate-400">
-                    <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    <span class="text-xs font-bold text-slate-500 dark:text-slate-300">Drop receipt or snap image capture</span>
-                    <span class="text-[9px] text-slate-400">Pushed to GDrive folder automatically</span>
+                  <div class="flex flex-col items-center space-y-1 text-slate-400">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span class="text-xs font-bold text-slate-500 dark:text-slate-300" id="receipt-zone-status">Attach Digital Bill Receipt</span>
                   </div>
                 </div>
               </div>
 
-              <!-- DIAL NUMBER PAD GRID -->
-              <div class="grid grid-cols-4 gap-1 p-1.5 bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800/80 font-mono">
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="C">C</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="(">(</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val=")">)</button>
-                <button type="button" class="calc-btn p-3 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="/">/</button>
+              <!-- SCALED CALCULATOR KEYPAD (Optimized py-4 sizing targets for mobile viewports) -->
+              <div class="grid grid-cols-4 gap-1.5 p-2 bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800/80 font-mono">
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="C">C</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="(">(</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val=")">)</button>
+                <button type="button" class="calc-btn py-4 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="/">/</button>
 
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="7">7</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="8">8</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="9">9</button>
-                <button type="button" class="calc-btn p-3 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="*">*</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="7">7</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="8">8</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="9">9</button>
+                <button type="button" class="calc-btn py-4 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="*">*</button>
 
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="4">4</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="5">5</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="6">6</button>
-                <button type="button" class="calc-btn p-3 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="-">-</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="4">4</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="5">5</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="6">6</button>
+                <button type="button" class="calc-btn py-4 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="-">-</button>
 
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="1">1</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="2">2</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="3">3</button>
-                <button type="button" class="calc-btn p-3 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="+">+</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="1">1</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="2">2</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="3">3</button>
+                <button type="button" class="calc-btn py-4 bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="+">+</button>
 
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="0">0</button>
-                <button type="button" class="calc-btn p-3 bg-white dark:bg-slate-900 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val=".">.</button>
-                <button type="button" class="calc-btn p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-bold shadow-2xs cursor-pointer active:scale-95" data-val="DEL">⌫</button>
-                <button type="submit" id="btn-submit-expense" class="bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-md active:scale-98">OK</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="0">0</button>
+                <button type="button" class="calc-btn py-4 bg-white dark:bg-slate-900 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val=".">.</button>
+                <button type="button" class="calc-btn py-4 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl text-base font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="DEL">⌫</button>
+                <button type="submit" id="btn-submit-expense" class="bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 font-black rounded-xl text-base cursor-pointer shadow-md flex items-center justify-center transition-all active:scale-95">OK</button>
               </div>
             </form>
           </section>
 
-          <!-- VIEW 4: FUND TRANSFERS / SETTLEMENT LOGGING GATE -->
-          <section id="view-transfer" class="hidden space-y-4">
-            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Log Peer Settlement</h3>
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl space-y-4 shadow-2xs">
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Target Peer</label>
-                  <select class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-semibold">
-                    <option>partner.testing@niser.ac.in</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Transfer Cash</label>
-                  <input type="number" placeholder="INR 0.00" class="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-mono focus:outline-none">
-                </div>
-              </div>
-              <button class="w-full bg-accent-600 hover:bg-accent-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-md cursor-pointer transition-transform active:scale-98">
-                Record Fund Settlement Entry
-              </button>
-            </div>
-          </section>
-
-          <!-- VIEW 5: CONFIGURATION & DEVICE SETTINGS CONSOLE -->
+          <!-- VIEW 4: PLATFORM CONFIGURATION CONSOLE -->
           <section id="view-settings" class="hidden space-y-4">
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-4">
               <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">Visual Customization</h4>
@@ -276,15 +258,11 @@
         </div>
       </div>
 
-      <!-- MOBILE BOTTOM NAVIGATION DECK (Strictly small viewports) -->
-      <footer class="md:hidden fixed bottom-0 left-0 right-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-6 py-2 flex justify-between items-center z-40 shadow-xl">
+      <!-- MOBILE BOTTOM NAVIGATION MENU DECK -->
+      <footer class="md:hidden fixed bottom-0 left-0 right-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur px-6 py-2 flex justify-around items-center z-40 shadow-xl">
         <button data-route="dashboard" class="flex flex-col items-center space-y-0.5 text-accent-500 dark:text-accent-400 cursor-pointer">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m0 0l-7 7-7-7M21 12v7a2 2 0 01-2 2h-3"/></svg>
           <span class="text-[9px] font-bold">Groups</span>
-        </button>
-        <button data-route="transfer" class="flex flex-col items-center space-y-0.5 text-slate-400 cursor-pointer">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
-          <span class="text-[9px] font-medium">Transfer</span>
         </button>
         <button data-route="settings" class="flex flex-col items-center space-y-0.5 text-slate-400 cursor-pointer">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
