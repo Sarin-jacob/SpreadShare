@@ -360,7 +360,7 @@ async function handleAppLaunchSequence(token, profile) {
   setInterval(triggerBackgroundSyncLoop, 10000);
 }
 
-window.addEventListener('ss_open-expense-detail', (e) => {
+window.addEventListener('ss-open-expense-detail', (e) => {
   const { event } = e.detail;
   mountExpenseDetailComponent($expenseDetailSlot, event, handleTriggerExpenseEdit);
   navigateToView('expense-detail');
