@@ -429,13 +429,34 @@ export class ExpenseForm {
         let sumWeights = Object.values(values).reduce((a, b) => a + b, 0);
         this.activeRoster.forEach(m => allocations[m] = sumWeights > 0 ? normalizedTotal * (values[m] / sumWeights) : 0);
       } else if (strategy === 'EXACT') {
+        const inputs = Array.from(this.container.querySelectorAll('[data-member-allocation]'));
         let runningSum = 0;
-        this.activeRoster.forEach(m => { allocations[m] = values[m] || 0; runningSum += allocations[m]; });
+        let untouchedInputs = [];
+
+        inputs.forEach(i => {
+          const val = parseFloat(i.value);
+          if (!val || val === 0) untouchedInputs.push(i);
+          else runningSum += val;
+        });
+
+        // ─── THE N-1 MAGIC AUTO-FILL ───
+        // If exactly ONE person has no amount assigned, and the total hasn't been reached, auto-fill it!
+        if (untouchedInputs.length === 1 && runningSum < normalizedTotal) {
+          const remainder = normalizedTotal - runningSum;
+          untouchedInputs[0].value = remainder.toFixed(2);
+          runningSum += remainder; // Update sum so the math below passes
+        }
+
+        this.activeRoster.forEach(m => { 
+          const inputElement = this.container.querySelector(`[data-member-allocation="${m}"]`);
+          allocations[m] = parseFloat(inputElement?.value) || 0; 
+        });
+
         if (Math.abs(runningSum - normalizedTotal) > 0.01) {
           this.$previewError.innerText = `⚠️ Sum mismatch`;
           this.$previewError.classList.remove('hidden');
         }
-      } else if (strategy === 'ADJUSTMENT') {
+    } else if (strategy === 'ADJUSTMENT') {
         let sumAdjustments = Object.values(values).reduce((a, b) => a + b, 0);
         const baseShare = (normalizedTotal - sumAdjustments) / this.activeRoster.length;
         this.activeRoster.forEach(m => allocations[m] = baseShare + (values[m] || 0));

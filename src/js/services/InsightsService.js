@@ -1,112 +1,91 @@
 // src/js/services/InsightsService.js
 import { getAllFromStore } from '../db.js';
 
-// Helper to prevent JavaScript floating point precision issues
 const roundMoney = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 
 class GlobalInsightsService {
   
   /**
-   * Scans the entire local cache across all groups to build a unified profile
-   * of the user's personal spending habits.
-   * 
-   * @param {string} userEmail - The currently authenticated user's email
-   * @returns {Object} Aggregated metrics by category, time, and group
+   * Processes a raw array of events based on time and user constraints
+   * @param {Array} events - The ledger events
+   * @param {string|null} targetEmail - If set, only calculates this user's specific share. If null, calculates total group size.
+   * @param {number} days - Time window in days (e.g., 7, 30, 365)
    */
-  async generateUserInsights(userEmail) {
-    // 1. Pull every single event ever synced to this device
-    const rawEvents = await getAllFromStore('group_events_cache');
-    if (!rawEvents || rawEvents.length === 0) return this.getEmptyInsights();
+  processAnalytics(events, targetEmail = null, days = 30) {
+    const data = {
+      total: 0,
+      categories: {},
+      dayOfWeek: { 'Sun': 0, 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0 },
+      trendLine: [] // Array of chronological totals for line charts
+    };
 
-    const processedEventIds = new Set();
-    const deletedEventIds = new Set();
+    const now = new Date();
+    const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    
+    // Group events chronologically by date string for trendlines
+    const dateBuckets = {};
+    for (let i = 0; i < days; i++) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      dateBuckets[d.toISOString().split('T')[0]] = 0;
+    }
 
-    // 2. Sort chronologically and extract global deletions
-    const events = [...rawEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const processedIds = new Set();
+    const deletedIds = new Set();
+
     events.forEach(e => {
-      const id = e.eventId || e.event_id;
       if (e.event_type === 'EXPENSE_DELETE') {
-        const payload = typeof e.payload_json === 'string' ? JSON.parse(e.payload_json) : e.payload_json;
-        deletedEventIds.add(payload.target_event_id);
+        const p = typeof e.payload_json === 'string' ? JSON.parse(e.payload_json) : e.payload_json;
+        deletedIds.add(p.target_event_id);
       }
     });
 
-    const insights = this.getEmptyInsights();
-
-    // Establish time boundaries based on current client clock
-    const now = new Date();
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const oneMonthAgo = new Date(now);
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    const oneYearAgo = new Date(now);
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-    // 3. Process the unified stream
     for (const event of events) {
       const id = event.eventId || event.event_id;
-      
-      // Enforce deduplication and deletion states
-      if (processedEventIds.has(id) || deletedEventIds.has(id) || event.event_type === 'EXPENSE_DELETE') {
-        continue;
-      }
-      processedEventIds.add(id);
-
-      // Only standard expenses represent actual consumed value. 
-      // Loans and transfers are balance sheet movements.
-      if (event.event_type !== 'EXPENSE_ADD') continue;
+      if (processedIds.has(id) || deletedIds.has(id) || event.event_type !== 'EXPENSE_ADD') continue;
+      processedIds.add(id);
 
       const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
-      
-      // 4. Extract the user's personal consumption for this specific event
-      let userPersonalCost = 0;
-      if (payload.allocations && payload.allocations.length > 0) {
-        const userAlloc = payload.allocations.find(a => a.user === userEmail);
-        if (userAlloc) userPersonalCost = parseFloat(userAlloc.value) || 0;
-      }
-
-      // Skip if the user had no financial stake in this specific split
-      if (userPersonalCost <= 0) continue; 
-
-      userPersonalCost = roundMoney(userPersonalCost);
-      const category = payload.category || 'General';
       const eventDate = new Date(payload.custom_timestamp || event.timestamp);
-
-      // --- AGGREGATION PIPELINE ---
-
-      // Global Sum
-      insights.totalPersonalExpense = roundMoney(insights.totalPersonalExpense + userPersonalCost);
-
-      // Category Matrix
-      if (!insights.byCategory[category]) insights.byCategory[category] = 0;
-      insights.byCategory[category] = roundMoney(insights.byCategory[category] + userPersonalCost);
-
-      // Temporal Matrix
-      if (eventDate >= oneWeekAgo) {
-        insights.byTime.lastWeek = roundMoney(insights.byTime.lastWeek + userPersonalCost);
-      }
-      if (eventDate >= oneMonthAgo) {
-        insights.byTime.lastMonth = roundMoney(insights.byTime.lastMonth + userPersonalCost);
-      }
-      if (eventDate >= oneYearAgo) {
-        insights.byTime.lastYear = roundMoney(insights.byTime.lastYear + userPersonalCost);
-      }
       
-      // Group Distribution Matrix
-      const groupId = event.spreadsheetId;
-      if (!insights.byGroup[groupId]) insights.byGroup[groupId] = 0;
-      insights.byGroup[groupId] = roundMoney(insights.byGroup[groupId] + userPersonalCost);
+      // Ignore events outside the time window
+      if (eventDate < cutoffDate) continue;
+
+      let validAmount = 0;
+      if (targetEmail) {
+        // Individual focus: Extract user's exact share
+        const alloc = (payload.allocations || []).find(a => a.user === targetEmail);
+        if (alloc) validAmount = parseFloat(alloc.value) || 0;
+      } else {
+        // Group focus: Extract entire expense value
+        validAmount = parseFloat(payload.evaluated_amount) || 0;
+      }
+
+      if (validAmount <= 0) continue;
+      validAmount = roundMoney(validAmount);
+
+      data.total = roundMoney(data.total + validAmount);
+      
+      const cat = payload.category || 'General';
+      data.categories[cat] = roundMoney((data.categories[cat] || 0) + validAmount);
+
+      const dayName = eventDate.toLocaleDateString('en-US', { weekday: 'short' });
+      data.dayOfWeek[dayName] = roundMoney(data.dayOfWeek[dayName] + validAmount);
+
+      const dateStr = eventDate.toISOString().split('T')[0];
+      if (dateBuckets[dateStr] !== undefined) {
+        dateBuckets[dateStr] = roundMoney(dateBuckets[dateStr] + validAmount);
+      }
     }
 
-    return insights;
+    // Convert date buckets into a flat array sorted chronologically
+    data.trendLine = Object.keys(dateBuckets).sort().map(k => dateBuckets[k]);
+
+    return data;
   }
 
-  getEmptyInsights() {
-    return {
-      totalPersonalExpense: 0,
-      byCategory: {},
-      byTime: { lastWeek: 0, lastMonth: 0, lastYear: 0 },
-      byGroup: {} 
-    };
+  async getGlobalAnalytics(userEmail, days = 30) {
+    const rawEvents = await getAllFromStore('group_events_cache');
+    return this.processAnalytics(rawEvents, userEmail, days);
   }
 }
 

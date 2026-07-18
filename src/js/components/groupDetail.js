@@ -3,6 +3,8 @@ import { store } from '../store.js';
 import { computeLedgerState, optimizeDebts } from '../engine.js';
 import { LedgerService } from '../services/LedgerService.js';
 import { AppRouter } from '../router.js';
+import { InsightsService } from '../services/InsightsService.js';
+import { CanvasCharts } from '../utils/charts.js'
 
 export class GroupDetail {
   constructor(containerElement) {
@@ -65,20 +67,20 @@ export class GroupDetail {
 
         <!-- TAB CONTENT: INSIGHTS -->
         <div id="gd-view-insights" class="space-y-4 pb-8 hidden animate-fade-in">
-          <div class="grid grid-cols-2 gap-2">
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs">
-              <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Group Spend</span>
-              <span id="gd-insight-total" class="block text-lg font-black text-slate-700 dark:text-slate-200 mt-1 font-mono">0.00</span>
-            </div>
-            <div class="bg-accent-50 dark:bg-accent-900/20 border border-accent-100 dark:border-accent-800/40 p-3.5 rounded-xl shadow-2xs">
-              <span class="block text-[9px] text-accent-500 uppercase font-bold tracking-wider">Your Personal Share</span>
-              <span id="gd-insight-yours" class="block text-lg font-black text-accent-700 dark:text-accent-400 mt-1 font-mono">0.00</span>
-            </div>
-          </div>
           
+          <!-- Context Toggle -->
+          <div class="flex p-1 space-x-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl mb-4">
+            <button id="btn-scope-group" class="flex-1 py-1.5 text-xs font-bold rounded-lg bg-white shadow-xs text-slate-800 dark:bg-slate-700 dark:text-white transition-all">Total Group</button>
+            <button id="btn-scope-you" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all">Your Share</button>
+          </div>
+
+          <!-- Pie Chart Breakdown -->
           <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs">
-            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Group Category Spend</h4>
-            <div id="gd-insight-categories" class="space-y-3"></div>
+            <h4 id="gd-insight-title" class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Group Category Spend</h4>
+            <div class="flex items-center space-x-4">
+              <div class="w-32 h-32 relative shrink-0"><canvas id="gd-pie-canvas"></canvas></div>
+              <div id="gd-category-legend" class="flex-grow space-y-2"></div>
+            </div>
           </div>
           <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl shadow-2xs mt-4">
             <h4 class="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider border-b border-amber-500/20 pb-2 mb-3">Suggested Settle Up Plan</h4>
@@ -112,6 +114,12 @@ export class GroupDetail {
     this.$insightYours = this.container.querySelector('#gd-insight-yours');
     this.$insightCategories = this.container.querySelector('#gd-insight-categories');
     this.$insightSettlements = this.container.querySelector('#gd-insight-settlements');
+    this.$btnScopeGroup = this.container.querySelector('#btn-scope-group');
+    this.$btnScopeYou = this.container.querySelector('#btn-scope-you');
+    this.$pieCanvas = this.container.querySelector('#gd-pie-canvas');
+    this.$categoryLegend = this.container.querySelector('#gd-category-legend');
+    this.$insightTitle = this.container.querySelector('#gd-insight-title');
+    this.insightScope = 'group';
   }
 
   attachListeners() {
@@ -144,6 +152,27 @@ export class GroupDetail {
 
     this.$tabFeedBtn.addEventListener('click', () => switchTab('feed'));
     this.$tabInsightsBtn.addEventListener('click', () => switchTab('insights'));
+
+    const setScope = (scope) => {
+      this.insightScope = scope;
+      if (scope === 'group') {
+        this.$btnScopeGroup.classList.add('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
+        this.$btnScopeGroup.classList.remove('text-slate-500');
+        this.$btnScopeYou.classList.remove('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
+        this.$btnScopeYou.classList.add('text-slate-500');
+        this.$insightTitle.innerText = "Total Group Spend";
+      } else {
+        this.$btnScopeYou.classList.add('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
+        this.$btnScopeYou.classList.remove('text-slate-500');
+        this.$btnScopeGroup.classList.remove('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
+        this.$btnScopeGroup.classList.add('text-slate-500');
+        this.$insightTitle.innerText = "Your Personal Share";
+      }
+      this.updateUI(store.getState()); // Re-render charts
+    };
+
+    this.$btnScopeGroup.addEventListener('click', () => setScope('group'));
+    this.$btnScopeYou.addEventListener('click', () => setScope('you'));
 
     // 2. Invite Link Generation
     this.$btnInvite.addEventListener('click', async () => {
@@ -186,6 +215,15 @@ export class GroupDetail {
     });
   }
 
+  getAvatar(email, profiles, sizeClass = "w-8 h-8") {
+    const p = profiles[email];
+    if (p && p.picture) {
+      return `<img src="${p.picture}" alt="${p.name}" class="${sizeClass} rounded-full border-2 border-white dark:border-slate-800 object-cover shadow-sm">`;
+    }
+    const initial = p && p.name ? p.name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase();
+    return `<div class="${sizeClass} rounded-full bg-gradient-to-br from-accent-500 to-accent-600 border-2 border-white dark:border-slate-800 flex items-center justify-center text-white font-bold text-xs shadow-sm">${initial}</div>`;
+  }
+
   updateUI(state) {
     if (!state.activeGroupId) return;
 
@@ -221,7 +259,7 @@ export class GroupDetail {
     // 3. Render Transaction Feed
     if (computedLedger.expenses.length === 0) {
       this.$ledgerFeed.innerHTML = `<div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full"><p class="text-xs text-slate-400">No transactions recorded yet.</p></div>`;
-      this.renderInsights([], userEmail,computedLedger.members);
+      this.renderInsights([], userEmail,computedLedger.members, computedLedger.profiles);
       return;
     }
 
@@ -277,10 +315,10 @@ export class GroupDetail {
     });
 
     // 4. Render Group Insights Math
-    this.renderInsights(computedLedger.expenses, userEmail, computedLedger.members);
+    this.renderInsights(computedLedger.expenses, userEmail, computedLedger.members, computedLedger.profiles);
   }
 
-  renderInsights(expenses, userEmail, membersMap) {
+  renderInsights(expenses, userEmail, membersMap, profiles) {
     let totalGroupSpend = 0;
     let totalUserShare = 0;
     let categories = {};
@@ -301,51 +339,78 @@ export class GroupDetail {
       }
     });
 
-    this.$insightTotal.innerText = totalGroupSpend.toFixed(2);
-    this.$insightYours.innerText = totalUserShare.toFixed(2);
+    // this.$insightTotal.innerText = totalGroupSpend.toFixed(2);
+    // this.$insightYours.innerText = totalUserShare.toFixed(2);
 
     const sortedCategories = Object.entries(categories).sort((a, b) => b[1] - a[1]);
     const maxVal = sortedCategories.length > 0 ? sortedCategories[0][1] : 0;
 
-    this.$insightCategories.innerHTML = sortedCategories.length > 0
-      ? sortedCategories.map(([cat, val]) => {
-          const percentage = maxVal > 0 ? (val / maxVal) * 100 : 0;
-          return `
-            <div class="space-y-1">
-              <div class="flex justify-between text-xs font-medium">
-                <span class="text-slate-600 dark:text-slate-300 truncate pr-2">${cat}</span>
-                <span class="font-mono text-slate-800 dark:text-slate-100">INR ${val.toFixed(2)}</span>
-              </div>
-              <div class="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-700" style="width: ${percentage}%"></div>
-              </div>
-            </div>`;
-        }).join('')
-      : '<p class="text-[10px] text-slate-400 text-center py-2">No category data available yet.</p>';
+    // this.$insightCategories.innerHTML = sortedCategories.length > 0
+    //   ? sortedCategories.map(([cat, val]) => {
+    //       const percentage = maxVal > 0 ? (val / maxVal) * 100 : 0;
+    //       return `
+    //         <div class="space-y-1">
+    //           <div class="flex justify-between text-xs font-medium">
+    //             <span class="text-slate-600 dark:text-slate-300 truncate pr-2">${cat}</span>
+    //             <span class="font-mono text-slate-800 dark:text-slate-100">INR ${val.toFixed(2)}</span>
+    //           </div>
+    //           <div class="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden">
+    //             <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-700" style="width: ${percentage}%"></div>
+    //           </div>
+    //         </div>`;
+    //     }).join('')
+    //   : '<p class="text-[10px] text-slate-400 text-center py-2">No category data available yet.</p>';
 
     // Render Optimized Debt Settlements
-    const simplifiedDebts = optimizeDebts(membersMap);
+   const simplifiedDebts = optimizeDebts(membersMap);
     
+    // Render the beautiful Avatar-based Settlement Cards
     if (simplifiedDebts.length === 0) {
-      this.$insightSettlements.innerHTML = `<p class="text-[10px] text-amber-600/70 dark:text-amber-500/70 text-center py-2 font-bold">Everyone is perfectly settled up! 🎉</p>`;
+      this.$insightSettlements.innerHTML = `<p class="text-[10px] text-emerald-600 dark:text-emerald-500 text-center py-3 font-bold bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">✨ Everyone is perfectly settled up!</p>`;
     } else {
       this.$insightSettlements.innerHTML = simplifiedDebts.map(debt => {
+        const fromName = profiles[debt.from]?.name || debt.from.split('@')[0];
+        const toName = profiles[debt.to]?.name || debt.to.split('@')[0];
         const isUserInvolved = debt.from === userEmail || debt.to === userEmail;
-        const highlightClass = isUserInvolved ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700' : 'bg-white/50 dark:bg-slate-900/50 border-amber-500/10';
+        const highlightClass = isUserInvolved ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700/50';
         
-        let directionString = '';
-        if (debt.from === userEmail) directionString = `<span class="text-rose-600 font-bold">You owe</span> ${debt.to.split('@')[0]}`;
-        else if (debt.to === userEmail) directionString = `<span class="text-emerald-600 font-bold">${debt.from.split('@')[0]} owes you</span>`;
-        else directionString = `<span class="text-slate-600 dark:text-slate-400">${debt.from.split('@')[0]} owes ${debt.to.split('@')[0]}</span>`;
-
         return `
-          <div class="p-2.5 rounded-xl border ${highlightClass} flex justify-between items-center text-xs">
-            <div class="truncate pr-2">${directionString}</div>
-            <div class="font-black font-mono text-slate-800 dark:text-slate-200 shrink-0">INR ${debt.amount.toFixed(2)}</div>
+          <div class="flex items-center justify-between p-3 rounded-2xl shadow-2xs border ${highlightClass} mb-2">
+             <div class="flex items-center space-x-3">
+                <div class="flex -space-x-3">
+                   ${this.getAvatar(debt.from, profiles, "w-9 h-9 relative z-10")}
+                   ${this.getAvatar(debt.to, profiles, "w-9 h-9 opacity-80")}
+                </div>
+                <div class="text-[11px] leading-tight">
+                   <span class="font-bold text-slate-800 dark:text-slate-200">${debt.from === userEmail ? 'You' : fromName}</span>
+                   <span class="text-slate-400 mx-0.5 block">owe</span>
+                   <span class="font-bold text-slate-800 dark:text-slate-200">${debt.to === userEmail ? 'You' : toName}</span>
+                </div>
+             </div>
+             <div class="font-black font-mono text-accent-600 dark:text-accent-400 text-sm">INR ${debt.amount.toFixed(2)}</div>
           </div>
         `;
       }).join('');
     }
+
+    const targetEmail = this.insightScope === 'you' ? userEmail : null;
+    const analytics = InsightsService.processAnalytics(expenses, targetEmail, 365); // Default to 1 year inside the group view
+    
+    setTimeout(() => CanvasCharts.drawPie(this.$pieCanvas, analytics.categories), 50);
+
+    const colors = CanvasCharts.getColors();
+    const sortedCats = Object.entries(analytics.categories).sort((a, b) => b[1] - a[1]);
+    
+    this.$categoryLegend.innerHTML = sortedCats.length > 0 ? sortedCats.map(([cat, val], i) => `
+      <div class="flex justify-between items-center text-[10px] font-medium">
+        <div class="flex items-center space-x-1.5 truncate pr-2">
+          <span class="w-2.5 h-2.5 rounded-full block shrink-0" style="background-color: ${colors[i % colors.length]}"></span>
+          <span class="text-slate-600 dark:text-slate-300 truncate">${cat}</span>
+        </div>
+        <span class="font-mono text-slate-800 dark:text-slate-200">INR ${val.toFixed(0)}</span>
+      </div>
+    `).join('') : '<p class="text-[10px] text-slate-400">No data</p>';
+
   }
 
   destroy() {

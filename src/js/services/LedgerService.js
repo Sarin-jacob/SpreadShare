@@ -153,13 +153,19 @@ class SpreadsheetLedgerService {
       delete payload.override_actor_identity;
     }
 
+    const enrichedPayload = {
+      ...payload,
+      actor_name: state.userProfile.name,
+      actor_picture: state.userProfile.picture
+    };
+
     const eventRecord = {
       spreadsheetId: spreadsheetId,
       eventId: crypto.randomUUID(),
       timestamp: payload.custom_timestamp || new Date().toISOString(),
       event_type: eventType,
       actor_identity: trueActor, // Applies the intercepted sender
-      payload_json: payload
+      payload_json: enrichedPayload
     };
 
     // 1. Burn into local cache immediately

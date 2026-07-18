@@ -11,15 +11,18 @@ const roundMoney = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
  * @returns {Object} Reconstructed state containing totalSpent, members, and formatted expenses
  */
 export function computeLedgerState(rawEvents) {
-  const state = { totalSpent: 0, members: {}, expenses: [] };
+  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {} };
   
   // Track processed/deleted UUIDs to neutralize synchronization race conditions
   const processedEventIds = new Set();
   const deletedEventIds = new Set();
 
-  const discoverMember = (email) => {
+  const discoverMember = (email, name = null, picture = null) => {
     if (!state.members[email]) state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
-  };
+    if (!state.profiles[email]) state.profiles[email] = { name: email.split('@')[0], picture: null };
+    if (name) state.profiles[email].name = name;
+    if (picture) state.profiles[email].picture = picture;
+  };;
 
   // 1. Sort a COPY of the events chronologically (Never mutate the source array!)
   const events = [...rawEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -45,10 +48,10 @@ export function computeLedgerState(rawEvents) {
 
     const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
     const actor = event.actor_identity;
-    discoverMember(actor);
+    discoverMember(actor, payload.actor_name, payload.actor_picture);
 
     if (event.event_type === 'MEMBER_JOINED') {
-      discoverMember(payload.member_email);
+      discoverMember(payload.member_email, payload.member_name, payload.member_picture);
       continue;
     }
 
@@ -104,7 +107,7 @@ export function computeLedgerState(rawEvents) {
       target: targetPeer,
       timestamp: payload.custom_timestamp || event.timestamp,
       receiptUrl: payload.receipt_local_url || null,
-      rawPayload: payload // Store raw payload for the UI to reconstruct specific views
+      rawPayload: payload
     });
   }
 
