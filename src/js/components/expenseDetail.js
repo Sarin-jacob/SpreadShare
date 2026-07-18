@@ -17,14 +17,13 @@ export class ExpenseDetail {
   }
 
   onStateChange(state) {
-    // Only repaint if the detail view is active and we have an item selected
     if (state.currentView !== 'expense-detail' || !state.selectedExpenseDetails) return;
     this.updateUI(state.selectedExpenseDetails);
   }
 
   renderSkeleton() {
     this.container.innerHTML = `
-      <div class="space-y-4 animate-fade-in">
+      <div class="space-y-4 animate-fade-in pb-8">
         <div class="flex items-center space-x-2">
           <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
@@ -40,6 +39,7 @@ export class ExpenseDetail {
             </div>
             <div class="text-right">
               <div id="dtl-total" class="text-xl font-black text-slate-900 dark:text-slate-50 font-mono">INR 0.00</div>
+              <div id="dtl-foreign-meta" class="text-[9px] text-slate-400 font-medium mt-0.5 hidden"></div>
               <span id="dtl-type-badge" class="inline-block mt-1 text-[8px] uppercase tracking-wider font-bold px-1.5 py-0.2 rounded bg-accent-500/10 text-accent-500">EXPENSE</span>
             </div>
           </div>
@@ -76,6 +76,7 @@ export class ExpenseDetail {
     this.$title = this.container.querySelector('#dtl-title');
     this.$meta = this.container.querySelector('#dtl-meta');
     this.$total = this.container.querySelector('#dtl-total');
+    this.$foreignMeta = this.container.querySelector('#dtl-foreign-meta');
     this.$typeBadge = this.container.querySelector('#dtl-type-badge');
     this.$allocationsList = this.container.querySelector('#dtl-allocations-list');
     this.$receiptContainer = this.container.querySelector('#dtl-receipt-container');
@@ -86,7 +87,6 @@ export class ExpenseDetail {
   }
 
   attachListeners() {
-    // 1. Safe Deletion Protocol via LedgerService
     this.$btnDelete.addEventListener('click', async () => {
       if (!this.currentEvent) return;
       
@@ -104,11 +104,8 @@ export class ExpenseDetail {
       }
     });
 
-    // 2. Trigger Edit Mode
     this.$btnEdit.addEventListener('click', () => {
       if (!this.currentEvent) return;
-      // Dispatch a custom event. The main orchestrator will catch this and pass the 
-      // payload into the ExpenseForm component class securely.
       window.dispatchEvent(new CustomEvent('request-edit-expense', { detail: this.currentEvent }));
       AppRouter.navigate('add-expense');
     });
@@ -122,14 +119,22 @@ export class ExpenseDetail {
     const formattedDate = new Date(payload.custom_timestamp || eventItemNode.timestamp).toLocaleDateString();
 
     this.$title.innerText = payload.title;
-    this.$meta.innerHTML = `${payload.category || 'General'} &bull; Mapped by: ${eventItemNode.actor_identity} &bull; ${formattedDate}`;
+    this.$meta.innerHTML = `${payload.category || 'General'} &bull; Mapped by: ${eventItemNode.actor_identity.split('@')[0]} &bull; ${formattedDate}`;
     this.$total.innerText = `INR ${totalAmount.toFixed(2)}`;
     
+    // Render Foreign Currency Metadata if applicable
+    if (payload.foreign_currency && payload.foreign_currency !== 'INR') {
+      this.$foreignMeta.classList.remove('hidden');
+      this.$foreignMeta.innerText = `Paid ${parseFloat(payload.foreign_amount).toFixed(2)} ${payload.foreign_currency} (Rate: ${(payload.exchange_rate).toFixed(2)})`;
+    } else {
+      this.$foreignMeta.classList.add('hidden');
+      this.$foreignMeta.innerText = '';
+    }
+
     this.$typeBadge.innerText = (eventItemNode.event_type || 'EXPENSE').replace('_', ' ');
 
     this.$allocationsList.innerHTML = '';
 
-    // Render multi-payer parameters if applicable
     if (payload.payers && payload.payers.length > 0) {
       let payersStr = payload.payers.map(p => `${p.user.split('@')[0]} (INR ${p.value.toFixed(2)})`).join(', ');
       this.$allocationsList.innerHTML += `
@@ -139,18 +144,16 @@ export class ExpenseDetail {
         </div>`;
     }
 
-    // Render item shares splits
     if (payload.allocations) {
       payload.allocations.forEach(alloc => {
         this.$allocationsList.innerHTML += `
           <div class="flex justify-between items-center py-1 border-b border-slate-100 dark:border-slate-800/60 last:border-none">
-            <span class="text-slate-400">${alloc.user}</span>
+            <span class="text-slate-400">${alloc.user.split('@')[0]}</span>
             <span class="font-bold text-slate-700 dark:text-slate-300">INR ${(parseFloat(alloc.value) || 0).toFixed(2)}</span>
           </div>`;
       });
     }
 
-    // Render uploaded receipt image if present
     if (payload.receipt_local_url) {
       this.$receiptContainer.classList.remove('hidden');
       this.$receiptImg.src = payload.receipt_local_url;

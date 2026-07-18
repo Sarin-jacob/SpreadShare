@@ -1,6 +1,7 @@
 // src/js/components/ExpenseForm.js
 import { store } from '../store.js';
 import { LedgerService } from '../services/LedgerService.js';
+import { CurrencyService } from '../services/CurrencyService.js';
 import { computeLedgerState } from '../engine.js';
 import { Calculator } from '../calculator.js';
 import { AppRouter } from '../router.js';
@@ -59,10 +60,23 @@ export class ExpenseForm {
         <form id="comp-expense-form" class="space-y-3" onsubmit="return false;">
           
           <!-- SHARED CALCULATOR DISPLAY -->
-          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-right font-mono shadow-inner">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-right font-mono shadow-inner relative">
             <span class="block text-left text-[9px] text-slate-500 uppercase font-bold tracking-wider">Arithmetic Parser</span>
-            <div id="calc-display-expression" class="text-xs text-slate-400 min-h-4 truncate">0</div>
+            
+            <div class="absolute top-4 right-4 flex items-center space-x-1 bg-slate-800 rounded-lg px-2 py-1">
+              <select id="comp-currency" class="bg-transparent text-xs font-bold text-emerald-400 focus:outline-none appearance-none cursor-pointer">
+                <option value="INR">INR</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+                <option value="AED">AED</option>
+              </select>
+              <svg class="w-3 h-3 text-emerald-400/50" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+
+            <div id="calc-display-expression" class="text-xs text-slate-400 min-h-4 mt-4 truncate">0</div>
             <div id="calc-display-value" class="text-3xl font-black text-emerald-400 mt-1 truncate">0.00</div>
+            <div id="calc-converted-value" class="text-[10px] text-slate-400 hidden mt-1">≈ 0.00 INR</div>
           </div>
 
           <!-- COMMON FIELDS: Title & Date -->
@@ -241,6 +255,9 @@ export class ExpenseForm {
     this.$loanInterestRate = this.container.querySelector('#loan-interest-rate');
 
     this.calculator = new Calculator(this.container, () => this.calculateLiveOutputPreview());
+    this.$currency = this.container.querySelector('#comp-currency');
+    this.$convertedValue = this.container.querySelector('#calc-converted-value');
+    this.exchangeMultiplier = 1.0; // Default to 1:1
   }
 
   updateDropdowns() {
@@ -338,6 +355,20 @@ export class ExpenseForm {
     // 4. Form Submission
     this.$form.addEventListener('submit', () => this.handleSubmit());
     this.$cancelEditBtn.addEventListener('click', () => this.resetForm());
+
+    this.$currency.addEventListener('change', async (e) => {
+      const selectedCurrency = e.target.value;
+      if (selectedCurrency === 'INR') {
+        this.exchangeMultiplier = 1.0;
+        this.$convertedValue.classList.add('hidden');
+      } else {
+        this.$convertedValue.classList.remove('hidden');
+        this.$convertedValue.innerText = "Fetching rate...";
+        this.exchangeMultiplier = await CurrencyService.getMultiplier(selectedCurrency, 'INR');
+      }
+      this.calculateLiveOutputPreview(); // Recalculate splits with new rate
+    });
+
   }
 
   renderItemizedInputs() {
@@ -370,9 +401,15 @@ export class ExpenseForm {
   calculateLiveOutputPreview() {
     if (this.activeTab !== 'EXPENSE_ADD') return;
     
-    const totalAmount = this.calculator.total || 0;
-    const strategy = this.$strategySelect.value;
+    // CONVERT FOREIGN CURRENCY TO BASE (INR)
+    const baseAmount = this.calculator.total || 0;
+    const normalizedTotal = baseAmount * this.exchangeMultiplier;
     
+    if (this.exchangeMultiplier !== 1.0) {
+      this.$convertedValue.innerText = `≈ ${normalizedTotal.toFixed(2)} INR`;
+    }
+
+    const strategy = this.$strategySelect.value;
     this.$previewError.classList.add('hidden');
     this.$previewContainer.innerHTML = '';
     if (this.activeRoster.length === 0) return;
@@ -380,26 +417,27 @@ export class ExpenseForm {
     let allocations = {};
 
     if (strategy === 'EQUALLY') {
-      const share = totalAmount / this.activeRoster.length;
+      const share = normalizedTotal / this.activeRoster.length; // Split the normalized total!
       this.activeRoster.forEach(m => allocations[m] = share);
     } else {
+      // ... existing strategy logic, just replace totalAmount with normalizedTotal ...
       const inputs = this.container.querySelectorAll('[data-member-allocation]');
       let values = {};
       inputs.forEach(i => values[i.getAttribute('data-member-allocation')] = parseFloat(i.value) || 0);
 
       if (strategy === 'SHARES') {
         let sumWeights = Object.values(values).reduce((a, b) => a + b, 0);
-        this.activeRoster.forEach(m => allocations[m] = sumWeights > 0 ? totalAmount * (values[m] / sumWeights) : 0);
+        this.activeRoster.forEach(m => allocations[m] = sumWeights > 0 ? normalizedTotal * (values[m] / sumWeights) : 0);
       } else if (strategy === 'EXACT') {
         let runningSum = 0;
         this.activeRoster.forEach(m => { allocations[m] = values[m] || 0; runningSum += allocations[m]; });
-        if (Math.abs(runningSum - totalAmount) > 0.01) {
+        if (Math.abs(runningSum - normalizedTotal) > 0.01) {
           this.$previewError.innerText = `⚠️ Sum mismatch`;
           this.$previewError.classList.remove('hidden');
         }
       } else if (strategy === 'ADJUSTMENT') {
         let sumAdjustments = Object.values(values).reduce((a, b) => a + b, 0);
-        const baseShare = (totalAmount - sumAdjustments) / this.activeRoster.length;
+        const baseShare = (normalizedTotal - sumAdjustments) / this.activeRoster.length;
         this.activeRoster.forEach(m => allocations[m] = baseShare + (values[m] || 0));
       }
     }
@@ -418,11 +456,16 @@ export class ExpenseForm {
   async handleSubmit() {
     if (this.calculator.total <= 0) return alert("Value must evaluate above 0.00");
 
-    // Dynamic Payload Construction based on the Active Tab
+    const normalizedTotal = this.calculator.total * this.exchangeMultiplier;
+
     const payload = {
       title: this.$title.value,
       raw_amount_string: this.calculator.expression,
-      evaluated_amount: this.calculator.total,
+      evaluated_amount: normalizedTotal, // Engine ONLY sees normalized INR
+      foreign_amount: this.calculator.total,
+      foreign_currency: this.$currency.value,
+      exchange_rate: this.exchangeMultiplier,
+      currency: 'INR',
       custom_timestamp: new Date(this.$datetime.value).toISOString(),
     };
 

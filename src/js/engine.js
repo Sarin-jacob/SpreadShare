@@ -116,3 +116,58 @@ export function computeLedgerState(rawEvents) {
   
   return state;
 }
+
+/**
+ * Minimum Cash Flow Algorithm
+ * Simplifies a complex web of debts into the minimum number of direct transfers.
+ * 
+ * @param {Object} membersMap - The members object from computeLedgerState 
+ * @returns {Array} Array of simplified settlement objects { from, to, amount }
+ */
+export function optimizeDebts(membersMap) {
+  const debtors = [];
+  const creditors = [];
+
+  // 1. Separate into buckets based on net position
+  Object.entries(membersMap).forEach(([email, data]) => {
+    // Use 0.01 threshold to avoid microscopic floating point ghosts
+    if (data.netBalance < -0.01) {
+      debtors.push({ email, amount: Math.abs(data.netBalance) });
+    } else if (data.netBalance > 0.01) {
+      creditors.push({ email, amount: data.netBalance });
+    }
+  });
+
+  // 2. Sort descending to settle largest debts first (heuristic for fewer transactions)
+  debtors.sort((a, b) => b.amount - a.amount);
+  creditors.sort((a, b) => b.amount - a.amount);
+
+  const settlements = [];
+  let i = 0; // Debtors pointer
+  let j = 0; // Creditors pointer
+
+  // 3. Greedily match debtors to creditors
+  while (i < debtors.length && j < creditors.length) {
+    const debtor = debtors[i];
+    const creditor = creditors[j];
+
+    // The maximum we can settle right now is the smaller of the two balances
+    const settledAmount = Math.min(debtor.amount, creditor.amount);
+    
+    settlements.push({
+      from: debtor.email,
+      to: creditor.email,
+      amount: roundMoney(settledAmount)
+    });
+
+    // Deduct the settled amount from both
+    debtor.amount = roundMoney(debtor.amount - settledAmount);
+    creditor.amount = roundMoney(creditor.amount - settledAmount);
+
+    // Move pointers if a balance is fully resolved
+    if (debtor.amount < 0.01) i++;
+    if (creditor.amount < 0.01) j++;
+  }
+
+  return settlements;
+}

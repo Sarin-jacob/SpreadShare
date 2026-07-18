@@ -1,6 +1,6 @@
 // src/js/components/GroupDetail.js
 import { store } from '../store.js';
-import { computeLedgerState } from '../engine.js';
+import { computeLedgerState, optimizeDebts } from '../engine.js';
 import { LedgerService } from '../services/LedgerService.js';
 import { AppRouter } from '../router.js';
 
@@ -80,6 +80,10 @@ export class GroupDetail {
             <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Group Category Spend</h4>
             <div id="gd-insight-categories" class="space-y-3"></div>
           </div>
+          <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl shadow-2xs mt-4">
+            <h4 class="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider border-b border-amber-500/20 pb-2 mb-3">Suggested Settle Up Plan</h4>
+            <div id="gd-insight-settlements" class="space-y-2"></div>
+          </div>
         </div>
 
       </div>
@@ -107,6 +111,7 @@ export class GroupDetail {
     this.$insightTotal = this.container.querySelector('#gd-insight-total');
     this.$insightYours = this.container.querySelector('#gd-insight-yours');
     this.$insightCategories = this.container.querySelector('#gd-insight-categories');
+    this.$insightSettlements = this.container.querySelector('#gd-insight-settlements');
   }
 
   attachListeners() {
@@ -216,7 +221,7 @@ export class GroupDetail {
     // 3. Render Transaction Feed
     if (computedLedger.expenses.length === 0) {
       this.$ledgerFeed.innerHTML = `<div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full"><p class="text-xs text-slate-400">No transactions recorded yet.</p></div>`;
-      this.renderInsights([], userEmail);
+      this.renderInsights([], userEmail,computedLedger.members);
       return;
     }
 
@@ -272,10 +277,10 @@ export class GroupDetail {
     });
 
     // 4. Render Group Insights Math
-    this.renderInsights(computedLedger.expenses, userEmail);
+    this.renderInsights(computedLedger.expenses, userEmail, computedLedger.members);
   }
 
-  renderInsights(expenses, userEmail) {
+  renderInsights(expenses, userEmail, membersMap) {
     let totalGroupSpend = 0;
     let totalUserShare = 0;
     let categories = {};
@@ -317,6 +322,30 @@ export class GroupDetail {
             </div>`;
         }).join('')
       : '<p class="text-[10px] text-slate-400 text-center py-2">No category data available yet.</p>';
+
+    // Render Optimized Debt Settlements
+    const simplifiedDebts = optimizeDebts(membersMap);
+    
+    if (simplifiedDebts.length === 0) {
+      this.$insightSettlements.innerHTML = `<p class="text-[10px] text-amber-600/70 dark:text-amber-500/70 text-center py-2 font-bold">Everyone is perfectly settled up! 🎉</p>`;
+    } else {
+      this.$insightSettlements.innerHTML = simplifiedDebts.map(debt => {
+        const isUserInvolved = debt.from === userEmail || debt.to === userEmail;
+        const highlightClass = isUserInvolved ? 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700' : 'bg-white/50 dark:bg-slate-900/50 border-amber-500/10';
+        
+        let directionString = '';
+        if (debt.from === userEmail) directionString = `<span class="text-rose-600 font-bold">You owe</span> ${debt.to.split('@')[0]}`;
+        else if (debt.to === userEmail) directionString = `<span class="text-emerald-600 font-bold">${debt.from.split('@')[0]} owes you</span>`;
+        else directionString = `<span class="text-slate-600 dark:text-slate-400">${debt.from.split('@')[0]} owes ${debt.to.split('@')[0]}</span>`;
+
+        return `
+          <div class="p-2.5 rounded-xl border ${highlightClass} flex justify-between items-center text-xs">
+            <div class="truncate pr-2">${directionString}</div>
+            <div class="font-black font-mono text-slate-800 dark:text-slate-200 shrink-0">INR ${debt.amount.toFixed(2)}</div>
+          </div>
+        `;
+      }).join('');
+    }
   }
 
   destroy() {
