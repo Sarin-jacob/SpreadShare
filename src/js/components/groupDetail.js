@@ -1,7 +1,7 @@
 // src/js/components/groupDetail.js
 import { evaluateAdvancedLedgerState } from '../engine.js';
 
-export function mountGroupDetailComponent(containerElement, currentGroupEvents, userEmailAddress, onGenerateInvite) {
+export function mountGroupDetailComponent(containerElement, currentGroupEvents, userEmailAddress) {
   const state = evaluateAdvancedLedgerState(currentGroupEvents);
   const activeName = localStorage.getItem('ss_active_sheet_name') || 'Active Room';
   const activeId = localStorage.getItem('ss_active_sheet_id') || 'None';
@@ -15,11 +15,12 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
             <span class="text-[9px] text-accent-300 font-mono block truncate max-w-[180px]">ID: ${activeId}</span>
           </div>
           <div class="flex space-x-1.5">
-            <button id="detail-btn-invite" class="bg-slate-800 hover:bg-slate-700 text-accent-400 text-xs font-bold py-1.5 px-2 rounded-lg border border-slate-700 cursor-pointer flex items-center space-x-1">
+            <!-- FIXED: Added data-action="invite" tag attribute for stable root event tracking -->
+            <button type="button" data-action="invite" class="bg-slate-800 hover:bg-slate-700 text-accent-400 text-xs font-bold py-1.5 px-2.5 rounded-lg border border-slate-700 cursor-pointer flex items-center space-x-1">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
               <span id="invite-btn-text">Invite</span>
             </button>
-            <button data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-sm cursor-pointer">
+            <button type="button" data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-sm cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
               <span>Log Item</span>
             </button>
@@ -28,13 +29,13 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
         <div class="grid grid-cols-2 gap-2" id="detail-balances-grid"></div>
       </div>
 
-      <!-- Active Group Roster Sub-Panel Panel Layout -->
+      <!-- Active Group Roster Sub-Panel -->
       <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs space-y-2">
         <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Group Roster</h4>
         <div class="flex flex-wrap gap-1.5" id="detail-roster-tags"></div>
       </div>
 
-      <!-- Ledger Activity History streams -->
+      <!-- Ledger Activity Streams -->
       <div class="space-y-2">
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
         <div class="space-y-2" id="detail-ledger-feed"></div>
@@ -42,7 +43,7 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
     </div>
   `;
 
-  // Render the balances grid
+  // Render out current net metrics
   const $balancesGrid = document.getElementById('detail-balances-grid');
   Object.keys(state.members).forEach(member => {
     const data = state.members[member];
@@ -55,7 +56,7 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
       </div>`;
   });
 
-  // Render the group roster list tags
+  // Render roster user nodes
   const $rosterTags = document.getElementById('detail-roster-tags');
   Object.keys(state.members).forEach(memberEmail => {
     $rosterTags.innerHTML += `
@@ -65,7 +66,7 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
     `;
   });
 
-  // Render log entries feed
+  // Render timelines stream feed logs
   const $feed = document.getElementById('detail-ledger-feed');
   if (state.expenses.length === 0) {
     $feed.innerHTML = `
@@ -103,7 +104,4 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
         </div>
       </div>`;
   });
-
-  // Bind the invite generator listener
-  document.getElementById('detail-btn-invite').addEventListener('click', onGenerateInvite);
 }

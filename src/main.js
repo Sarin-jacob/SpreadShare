@@ -1,10 +1,10 @@
-// src/main.js (Update these target orchestration methods inside your core script)
+// src/main.js
 import { CONFIG } from './js/config.js';
 import { initGoogleAuth, requestAuthenticationData, checkExistingSession, clearSessionContext } from './js/auth.js';
 import { openDatabase, writeToStore } from './js/db.js';
 import { getOrCreateRootFolder, createGroupSpreadsheet, processOfflineQueue, fetchLedgerDelta, syncUserConfigRegistry, fetchUserConfigRegistry, enableLedgerPublicLinkSharing } from './js/sync.js';
 
-// Component Import Bindings
+// Import decoupled routing configurations
 import { initRouter, navigateToView } from './js/router.js';
 import { initCalculator, resetCalculator } from './js/calculator.js';
 import { mountExpenseFormComponent } from './js/components/expenseForm.js';
@@ -23,22 +23,21 @@ const $expenseFormSlot = document.getElementById('view-add-expense');
 const $settingsSlot = document.getElementById('view-settings');
 
 /**
- * ─── INVITE LINK COPIER UTILITY ───
+ * ─── LINK SHARING GENERATOR ROUTER ───
  */
 async function handleGenerateInviteLink() {
-    console.log("testuibg");
   const btnText = document.getElementById('invite-btn-text');
+  if (!btnText) return;
+  
   try {
     btnText.innerText = "Sharing...";
-    // 1. Set spreadsheet access permissions to open link sharing via Drive API
     await enableLedgerPublicLinkSharing(activeSpreadsheetId);
     
-    // 2. Build the unique deep-link routing string payload
     const groupName = localStorage.getItem('ss_active_sheet_name');
     const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${activeSpreadsheetId}&name=${encodeURIComponent(groupName)}`;
     
-    // 3. Write directly onto local clipboard channel registers
     await navigator.clipboard.writeText(inviteUrl);
+    console.log(inviteUrl);
     btnText.innerText = "Copied!";
     setTimeout(() => { if(btnText) btnText.innerText = "Invite"; }, 2000);
   } catch (err) {
@@ -52,9 +51,6 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
   localStorage.setItem('ss_active_sheet_id', spreadsheetId);
   localStorage.setItem('ss_active_sheet_name', groupName);
   
-  document.getElementById('active-group-title').innerText = groupName;
-  document.getElementById('active-sheet-id').innerText = `ID: ${spreadsheetId}`;
-  
   const db = await openDatabase();
   const tx = db.transaction('group_events_cache', 'readonly');
   const allEvents = await new Promise((res) => {
@@ -63,7 +59,7 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
 
   currentGroupEvents = allEvents.filter(evt => evt.spreadsheetId === spreadsheetId);
   
-  mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress, handleGenerateInviteLink);
+  mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress);
   navigateToView('group-detail');
   
   try {
@@ -86,7 +82,7 @@ async function loadGroupWorkspaceContext(spreadsheetId, groupName) {
         currentGroupEvents.push(parsed);
         await writeStore.put(parsed);
       }
-      mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress, handleGenerateInviteLink);
+      mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress);
     }
   } catch (err) { console.warn("Delta update loop deferred offline:", err); }
   finally { syncStatusIndicatorState('synced'); }
@@ -98,8 +94,6 @@ async function handleCreateGroup(groupName, inputElement) {
     const folderId = await getOrCreateRootFolder();
     const sheetId = await createGroupSpreadsheet(groupName, folderId);
     
-    // ─── LEDGER REGISTRATION SEED ENTRY ───
-    // Log the group creator as the first active member in the log stream
     const uuid = crypto.randomUUID();
     const currentISOString = new Date().toISOString();
     const joinEventRecord = {
@@ -111,7 +105,6 @@ async function handleCreateGroup(groupName, inputElement) {
       payload_json: { member_email: userEmailAddress }
     };
     
-    // Commit the join entry locally and queue it for the background sync sync loops
     await writeToStore('group_events_cache', joinEventRecord);
     await writeToStore('offline_sync_queue', { action: 'APPEND_ROW', spreadsheetId: sheetId, payload: joinEventRecord });
 
@@ -122,30 +115,35 @@ async function handleCreateGroup(groupName, inputElement) {
     inputElement.value = '';
     mountGroupDirectoryComponent($dashboardSlot, groupDirectoryIndex, handleCreateGroup, loadGroupWorkspaceContext);
     await loadGroupWorkspaceContext(sheetId, groupName);
-  } catch (err) {
-    alert(`Ecosystem Provision Error: ${err.message}`);
-  } finally { inputElement.disabled = false; }
+  } catch (err) { alert(`Ecosystem Provision Error: ${err.message}`); }
+  finally { inputElement.disabled = false; }
 }
 
+/**
+ * FIXED: Rewritten to read entry fields cleanly from component parameters 
+ * instead of fragile direct DOM queries using outdated element IDs.
+ */
 async function handleTransactionSubmit(fields) {
+  if (fields.amount <= 0) return alert("Value must parse above 0.00");
+
   try {
     const uuid = crypto.randomUUID();
     const iso = new Date().toISOString();
     
     const payload = {
-      title: fields.title,
-      category: document.getElementById('exp-category').value,
+      title: fields.type === 'EXPENSE_ADD' ? fields.title : `${fields.type} Log Entry`,
+      category: fields.category,
       raw_amount_string: fields.expression,
       evaluated_amount: fields.amount,
       currency: 'INR',
-      split_strategy: fields.type === 'EXPENSE_ADD' ? 'EQUALLY' : 'NONE'
+      split_strategy: fields.strategy
     };
 
     if (fields.type === 'TRANSFER' || fields.type === 'LOAN') {
-      payload.target_peer_identity = fields.title; // Interprets the label field value as the target peer's email
+      payload.target_peer_identity = fields.title; 
       if (fields.type === 'LOAN') {
-        payload.interest_type = document.getElementById('comp-loan-interest-type').value;
-        payload.interest_rate = document.getElementById('comp-loan-interest-rate').value;
+        payload.interest_type = fields.interestType;
+        payload.interest_rate = fields.interestRate;
       }
     }
 
@@ -163,28 +161,20 @@ async function handleTransactionSubmit(fields) {
     await writeToStore('offline_sync_queue', { action: 'APPEND_ROW', spreadsheetId: activeSpreadsheetId, payload: record });
 
     resetCalculator();
-    mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress, handleGenerateInviteLink);
+    mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress);
     navigateToView('group-detail');
     triggerBackgroundSyncLoop();
   } catch (err) { alert(`Commit error: ${err.message}`); }
 }
 
-/**
- * ─── DEEP LINK INVITATION INTERCEPT ROUTER ───
- */
 async function processIncomingUrlInvitation() {
   const urlParams = new URLSearchParams(window.location.search);
   const inviteSheetId = urlParams.get('invite');
   const inviteGroupName = urlParams.get('name');
 
-  if (!inviteSheetId || !inviteGroupName) return false; // Exit early if no invite token parameters match
+  if (!inviteSheetId || !inviteGroupName) return false;
 
-  console.log(`Processing inbound link invitation for group: ${inviteGroupName}...`);
-
-  // Clear query string tokens out of the URL bar so the invitation doesn't re-trigger on subsequent refreshes
   window.history.replaceState({}, document.title, window.location.pathname);
-
-  // Check if this sheet is already tracked inside the user's directory index
   const alreadyJoined = groupDirectoryIndex.some(g => g.id === inviteSheetId);
   if (alreadyJoined) {
     await loadGroupWorkspaceContext(inviteSheetId, inviteGroupName);
@@ -193,8 +183,6 @@ async function processIncomingUrlInvitation() {
 
   try {
     syncStatusIndicatorState('syncing');
-    
-    // Log the user's explicit joining entry token straight onto the remote open ledger rows
     const uuid = crypto.randomUUID();
     const currentISOString = new Date().toISOString();
     const joinRecord = {
@@ -206,16 +194,13 @@ async function processIncomingUrlInvitation() {
       payload_json: { member_email: userEmailAddress }
     };
 
-    // Commit locally and queue the update for backend delivery
     await writeToStore('group_events_cache', joinRecord);
     await writeToStore('offline_sync_queue', { action: 'APPEND_ROW', spreadsheetId: inviteSheetId, payload: joinRecord });
 
-    // Insert group references inside config file registries map
     groupDirectoryIndex.push({ id: inviteSheetId, name: inviteGroupName });
     localStorage.setItem('ss_groups_directory', JSON.stringify(groupDirectoryIndex));
     await syncUserConfigRegistry(groupDirectoryIndex);
 
-    // Refresh UI panels and load the newly joined workspace view context
     mountGroupDirectoryComponent($dashboardSlot, groupDirectoryIndex, handleCreateGroup, loadGroupWorkspaceContext);
     await loadGroupWorkspaceContext(inviteSheetId, inviteGroupName);
     return true;
@@ -262,7 +247,6 @@ async function handleAppLaunchSequence(token, profile) {
   document.getElementById('auth-gate').classList.add('hidden');
   document.getElementById('main-stage').classList.remove('hidden');
   
-  // Intercept and route inbound deep link invitations first
   const handledInvite = await processIncomingUrlInvitation();
   if (handledInvite) return;
 
@@ -282,8 +266,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   initRouter();
   initCalculator();
   
+  // FIXED: Attached the persistent Invite handling strategy using event delegation globally
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="invite"]')) {
+      handleGenerateInviteLink();
+    }
+  });
+
   document.getElementById('auth-btn').addEventListener('click', requestAuthenticationData);
-  // document.getElementById('theme-toggle').addEventListener('click', () => document.documentElement.classList.toggle('dark'));
 
   if (localStorage.getItem('ss_cfg_oled') === 'true') document.documentElement.classList.add('oled');
   const savedAccent = localStorage.getItem('ss_active_accent') || 'indigo';
