@@ -67,6 +67,12 @@ class SpreadsheetLedgerService {
     return await this._googleFetch(url, { method: 'POST', body: JSON.stringify(permissionMeta) });
   }
 
+  async makeFilePubliclyReadable(fileId) {
+    const url = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`;
+    const permissionMeta = { role: 'reader', type: 'anyone', allowFileDiscovery: false };
+    return await this._googleFetch(url, { method: 'POST', body: JSON.stringify(permissionMeta) });
+  }
+
   // ─── CONFIG REGISTRY (CROSS-DEVICE SYNC) ───
 
   async syncUserConfigRegistry(groupDirectoryArray) {
@@ -105,15 +111,12 @@ class SpreadsheetLedgerService {
 
   // ─── CORE LEDGER OPERATIONS ───
 
-  /**
-   * Fetches the latest rows from Sheets, writes them to IndexedDB, and updates the Store.
-   */
   async syncWorkspace(spreadsheetId) {
     store.setState({ syncStatus: 'syncing' });
     try {
       const currentState = store.getState();
       const lastKnownRowIndex = currentState.groupEvents.length;
-      const targetStartRow = lastKnownRowIndex + 2; // Offset for header + 1-based index
+      const targetStartRow = lastKnownRowIndex + 2; 
       const range = `transaction_ledger!A${targetStartRow}:E`;
       const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
       
@@ -130,12 +133,10 @@ class SpreadsheetLedgerService {
           payload_json: JSON.parse(row[4])
         }));
 
-        // Write all new events to IndexedDB
         for (const ev of parsedEvents) {
           await writeToStore('group_events_cache', ev);
         }
 
-        // Update application store to trigger UI re-renders
         store.setState({ groupEvents: [...currentState.groupEvents, ...parsedEvents] });
       }
     } catch (err) {
@@ -145,10 +146,6 @@ class SpreadsheetLedgerService {
     }
   }
 
-  /**
-   * Universal method to add an expense, join a group, or delete an item.
-   * Caches locally, pushes to UI, and queues for background Google Sheets push.
-   */
   async appendLocalEvent(spreadsheetId, eventType, payload) {
     const state = store.getState();
     const eventRecord = {
@@ -160,7 +157,7 @@ class SpreadsheetLedgerService {
       payload_json: payload
     };
 
-    // 1. Burn into local IndexedDB cache
+    // 1. Burn into local cache immediately
     await writeToStore('group_events_cache', eventRecord);
     
     // 2. Queue for offline sync transmission
@@ -186,6 +183,49 @@ class SpreadsheetLedgerService {
     for (const queuedItem of allQueuedRequests) {
       if (queuedItem.action === 'APPEND_ROW') {
         const record = queuedItem.payload;
+
+        // ─── CRITICAL FIX: INTERCEPT BASE64 RECEIPTS AND OFFLOAD TO GOOGLE DRIVE ───
+        if (record.payload_json.receipt_local_url && record.payload_json.receipt_local_url.startsWith('data:image')) {
+          try {
+            const folderId = await this.getOrCreateRootFolder();
+            
+            // 1. Create file metadata in Drive
+            const meta = { 
+              name: `receipt_${record.eventId}.jpg`, 
+              parents: [folderId],
+              mimeType: 'image/jpeg' 
+            };
+            const fileRes = await this._googleFetch('https://www.googleapis.com/drive/v3/files', { 
+              method: 'POST', 
+              body: JSON.stringify(meta) 
+            });
+
+            // 2. Convert base64 back to raw binary blob
+            const res = await fetch(record.payload_json.receipt_local_url);
+            const blob = await res.blob();
+
+            // 3. Upload the media bytes directly into the new Drive file
+            const uploadRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileRes.id}?uploadType=media`, {
+              method: 'PATCH',
+              headers: { 'Authorization': `Bearer ${AuthService.getAccessToken()}` },
+              body: blob
+            });
+
+            if (!uploadRes.ok) throw new Error("Media payload rejected by Google Drive.");
+
+            // 4. Ensure group members can view the receipt link
+            await this.makeFilePubliclyReadable(fileRes.id);
+
+            // 5. Swap the 2-million character Base64 string for a 50 character Drive URL
+            record.payload_json.receipt_local_url = `https://drive.google.com/uc?id=${fileRes.id}`;
+            
+          } catch (err) {
+            console.error(`Failed to offload receipt to Drive for task [${queuedItem.id}] - pausing queue:`, err);
+            break; // Stop queue processing if the Drive upload fails, preventing the 50k char crash
+          }
+        }
+
+        // ─── STANDARD PUSH TO GOOGLE SHEETS ───
         const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${queuedItem.spreadsheetId}/values/transaction_ledger!A:E:append?valueInputOption=USER_ENTERED`;
         const payloadData = {
           values: [[record.timestamp, record.eventId, record.event_type, record.actor_identity, JSON.stringify(record.payload_json)]]
@@ -193,11 +233,10 @@ class SpreadsheetLedgerService {
         
         try {
           await this._googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(payloadData) });
-          // Safe deletion using new db helper ONLY if fetch succeeded
           await deleteFromStore('offline_sync_queue', queuedItem.id);
         } catch (err) {
           console.error(`Failed pushing row append task [${queuedItem.id}] - pausing queue:`, err);
-          break; // Stop processing further queue items if network fails
+          break; 
         }
       }
     }
