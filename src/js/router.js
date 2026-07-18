@@ -4,6 +4,7 @@ const views = {
   'dashboard': document.getElementById('view-dashboard'),
   'group-detail': document.getElementById('view-group-detail'),
   'add-expense': document.getElementById('view-add-expense'),
+  'expense-detail': document.getElementById('view-expense-detail'),
   'settings': document.getElementById('view-settings')
 };
 

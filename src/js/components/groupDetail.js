@@ -15,7 +15,6 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
             <span class="text-[9px] text-accent-300 font-mono block truncate max-w-[180px]">ID: ${activeId}</span>
           </div>
           <div class="flex space-x-1.5">
-            <!-- FIXED: Added data-action="invite" tag attribute for stable root event tracking -->
             <button type="button" data-action="invite" class="bg-slate-800 hover:bg-slate-700 text-accent-400 text-xs font-bold py-1.5 px-2.5 rounded-lg border border-slate-700 cursor-pointer flex items-center space-x-1">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
               <span id="invite-btn-text">Invite</span>
@@ -29,13 +28,11 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
         <div class="grid grid-cols-2 gap-2" id="detail-balances-grid"></div>
       </div>
 
-      <!-- Active Group Roster Sub-Panel -->
       <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs space-y-2">
         <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Group Roster</h4>
         <div class="flex flex-wrap gap-1.5" id="detail-roster-tags"></div>
       </div>
 
-      <!-- Ledger Activity Streams -->
       <div class="space-y-2">
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
         <div class="space-y-2" id="detail-ledger-feed"></div>
@@ -43,7 +40,6 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
     </div>
   `;
 
-  // Render out current net metrics
   const $balancesGrid = document.getElementById('detail-balances-grid');
   Object.keys(state.members).forEach(member => {
     const data = state.members[member];
@@ -56,52 +52,102 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
       </div>`;
   });
 
-  // Render roster user nodes
   const $rosterTags = document.getElementById('detail-roster-tags');
   Object.keys(state.members).forEach(memberEmail => {
     $rosterTags.innerHTML += `
-      <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] px-2.5 py-1 rounded-md max-w-[160px] truncate" title="${memberEmail}">
+      <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] px-2.5 py-1 rounded-md max-w-[160px] truncate">
         👤 ${memberEmail === userEmailAddress ? 'You' : memberEmail.split('@')[0]}
-      </span>
-    `;
+      </span>`;
   });
 
-  // Render timelines stream feed logs
   const $feed = document.getElementById('detail-ledger-feed');
   if (state.expenses.length === 0) {
-    $feed.innerHTML = `
-      <div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full">
-        <p class="text-xs text-slate-400">No recorded stream activities mapped inside ledger.</p>
-      </div>`;
+    $feed.innerHTML = `<div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full"><p class="text-xs text-slate-400">No transactions recorded yet.</p></div>`;
     return;
   }
 
-  [...state.expenses].reverse().forEach(exp => {
-    let badgeColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
-    let desc = exp.title;
+  // REPLAY FEEDS SYSTEM WITH REAL-TIME DEBT INDICATOR MARKERS
+  [...currentGroupEvents].reverse().forEach(event => {
+    if (event.event_type === 'MEMBER_JOINED') return;
+
+    const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
+    const amount = parseFloat(payload.evaluated_amount) || 0;
+    const actor = event.actor_identity;
     
-    if (exp.type === 'TRANSFER') {
+    let badgeColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
+    let desc = payload.title;
+    let contextPersonalDebtString = "";
+
+    // ─── CONTEXTUAL BALANCE CALCULATION LOGIC STRINGS ───
+    if (event.event_type === 'EXPENSE_ADD') {
+      const allAllocations = payload.allocations || [];
+      const userShareMeta = allAllocations.find(a => a.user === userEmailAddress);
+      const userOwesAmount = userShareMeta ? parseFloat(userShareMeta.value) || 0 : 0;
+
+      if (actor === userEmailAddress) {
+        const totalOwedToMe = amount - userOwesAmount;
+        contextPersonalDebtString = totalOwedToMe > 0 
+          ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold">You are owed INR ${totalOwedToMe.toFixed(2)}</span>`
+          : `<span class="text-slate-400">You covered your exact share</span>`;
+      } else {
+        contextPersonalDebtString = userOwesAmount > 0
+          ? `<span class="text-rose-600 dark:text-rose-400 font-bold">You owe INR ${userOwesAmount.toFixed(2)}</span>`
+          : `<span class="text-slate-400">You aren't in this split</span>`;
+      }
+    } else if (event.event_type === 'TRANSFER') {
       badgeColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
-      desc = `Settlement transfer sent to: ${exp.target}`;
-    } else if (exp.type === 'LOAN') {
+      const target = payload.target_peer_identity || '';
+      if (actor === userEmailAddress) {
+        desc = `You sent settlement to ${target.split('@')[0]}`;
+        contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Sent payment</span>`;
+      } else if (target === userEmailAddress) {
+        desc = `${actor.split('@')[0]} sent you a settlement`;
+        contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Received payment</span>`;
+      } else {
+        desc = `${actor.split('@')[0]} settled with ${target.split('@')[0]}`;
+        contextPersonalDebtString = `<span class="text-slate-400">Peer settlement</span>`;
+      }
+    } else if (event.event_type === 'LOAN') {
       badgeColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
-      desc = `Issued Loan to: ${exp.target}`;
+      const target = payload.target_peer_identity || '';
+      const rate = parseFloat(payload.interest_rate) || 0;
+      const type = payload.interest_type || 'NONE';
+      const principalPlusInterest = amount * ((type === 'NONE') ? 1.0 : (1 + (rate / 100)));
+
+      if (actor === userEmailAddress) {
+        desc = `You issued a loan to ${target.split('@')[0]}`;
+        contextPersonalDebtString = `<span class="text-emerald-600 font-bold">Lent asset (Owed ${principalPlusInterest.toFixed(2)})</span>`;
+      } else if (target === userEmailAddress) {
+        desc = `${actor.split('@')[0]} issued you a loan`;
+        contextPersonalDebtString = `<span class="text-rose-600 font-bold">Borrowed asset (Owe ${principalPlusInterest.toFixed(2)})</span>`;
+      } else {
+        desc = `${actor.split('@')[0]} lent assets to ${target.split('@')[0]}`;
+        contextPersonalDebtString = `<span class="text-slate-400">Peer loan transaction</span>`;
+      }
     }
 
-    $feed.innerHTML += `
-      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex justify-between items-center text-xs shadow-2xs">
-        <div class="space-y-1 max-w-[65%]">
-          <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${desc}</div>
-          <div class="flex items-center space-x-2 text-[10px] text-slate-400 font-medium">
-            <span class="truncate">Actor: ${exp.payer === userEmailAddress ? 'You' : exp.payer}</span>
-            <span class="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700"></span>
-            <span class="px-1.5 py-0.2 rounded font-bold text-[8px] uppercase tracking-wide ${badgeColor}">${exp.category}</span>
-          </div>
+    const itemRow = document.createElement('div');
+    itemRow.className = "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex justify-between items-center text-xs shadow-2xs cursor-pointer hover:border-accent-500/30 transition-colors";
+    itemRow.innerHTML = `
+      <div class="space-y-1 max-w-[65%]">
+        <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${desc}</div>
+        <div class="text-[10px] block font-medium">${contextPersonalDebtString}</div>
+        <div class="flex items-center space-x-1.5 text-[9px] text-slate-400 pt-0.5">
+          <span class="px-1.5 py-0.2 rounded font-bold text-[8px] uppercase tracking-wide ${badgeColor}">${payload.category || 'General'}</span>
+          <span>&bull;</span>
+          <span>By: ${actor === userEmailAddress ? 'You' : actor.split('@')[0]}</span>
         </div>
-        <div class="text-right space-y-0.5">
-          <div class="font-mono font-black text-slate-900 dark:text-slate-100">INR ${exp.amount.toFixed(2)}</div>
-          <div class="text-[9px] text-slate-400">${new Date(exp.timestamp).toLocaleDateString()}</div>
-        </div>
+      </div>
+      <div class="text-right space-y-0.5 font-mono">
+        <div class="font-black text-slate-900 dark:text-slate-100">INR ${amount.toFixed(2)}</div>
+        <div class="text-[9px] text-slate-400">${new Date(event.timestamp).toLocaleDateString()}</div>
       </div>`;
+    
+    // Clicking the item opens the comprehensive itemized breakdown sheet layout view
+    itemRow.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('ss-open-expense-detail', { detail: { event } }));
+    });
+
+    $feed.appendChild(itemRow);
   });
 }

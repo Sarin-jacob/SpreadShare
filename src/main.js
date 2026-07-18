@@ -12,6 +12,7 @@ import { mountExpenseFormComponent } from './js/components/expenseForm.js';
 import { mountGroupDirectoryComponent } from './js/components/groupDirectory.js';
 import { mountGroupDetailComponent } from './js/components/groupDetail.js';
 import { mountSettingsComponent } from './js/components/settings.js';
+import { mountExpenseDetailComponent } from './js/components/expenseDetail.js';
 
 let activeSpreadsheetId = null;
 let currentGroupEvents = [];
@@ -21,6 +22,7 @@ let groupDirectoryIndex = [];
 const $dashboardSlot = document.getElementById('view-dashboard');
 const $groupDetailSlot = document.getElementById('view-group-detail');
 const $expenseFormSlot = document.getElementById('view-add-expense');
+const $expenseDetailSlot = document.getElementById('view-expense-detail');
 const $settingsSlot = document.getElementById('view-settings');
 
 /**
@@ -120,22 +122,16 @@ async function handleCreateGroup(groupName, inputElement) {
   finally { inputElement.disabled = false; }
 }
 
-/**
- * FIXED: Rewritten to read entry fields cleanly from component parameters 
- * instead of fragile direct DOM queries using outdated element IDs.
- */
+
 async function handleTransactionSubmit(fields) {
   if (fields.amount <= 0) return alert("Value must evaluate above 0.00");
 
   try {
-    const uuid = crypto.randomUUID();
+    const uuid = fields.isEditingEventId || crypto.randomUUID();
     const iso = new Date().toISOString();
 
-    // Reconstruct the active group roster live up to this execution second
     const computedState = evaluateAdvancedLedgerState(currentGroupEvents);
-    const activeRoster = Object.keys(computedState.members).length > 0 
-      ? Object.keys(computedState.members) 
-      : [userEmailAddress];
+    const activeRoster = Object.keys(computedState.members).length > 0 ? Object.keys(computedState.members) : [userEmailAddress];
 
     const payload = {
       title: fields.type === 'EXPENSE_ADD' ? fields.title : `${fields.type} Log Entry`,
@@ -147,6 +143,9 @@ async function handleTransactionSubmit(fields) {
       allocations: []
     };
 
+    // Keep file URL reference variables persistent during edits
+    if (fields.cachedReceiptUrl) payload.receipt_local_url = fields.cachedReceiptUrl;
+
     if (fields.type === 'TRANSFER' || fields.type === 'LOAN') {
       payload.target_peer_identity = fields.title; 
       if (fields.type === 'LOAN') {
@@ -154,49 +153,43 @@ async function handleTransactionSubmit(fields) {
         payload.interest_rate = fields.interestRate;
       }
     } else {
-      // ─── RUN ADVANCED STRATEGY ALGEBRA PARSING NODES ───
       switch (fields.strategy) {
         case 'EQUALLY':
-          const equalCut = fields.amount / activeRoster.length;
-          payload.allocations = activeRoster.map(user => ({ user, value: equalCut }));
+          const share = fields.amount / activeRoster.length;
+          payload.allocations = activeRoster.map(user => ({ user, value: share }));
           break;
 
         case 'SHARES':
           let totalWeights = 0;
           activeRoster.forEach(u => totalWeights += (fields.rawAllocationsMap[u] || 0));
           if (totalWeights <= 0) throw new Error("Sum of weight shares must be greater than zero.");
-          
           payload.allocations = activeRoster.map(user => ({
-            user,
-            value: fields.amount * ((fields.rawAllocationsMap[user] || 0) / totalWeights)
+            user, value: fields.amount * ((fields.rawAllocationsMap[user] || 0) / totalWeights)
           }));
           break;
 
         case 'EXACT':
-          let runningExactTotal = 0;
+          let sumExact = 0;
           payload.allocations = activeRoster.map(user => {
-            const val = fields.rawAllocationsMap[user] || 0;
-            runningExactTotal += val;
-            return { user, value: val };
+            const v = fields.rawAllocationsMap[user] || 0;
+            sumExact += v;
+            return { user, value: v };
           });
-          // Verify that manual matrix definitions sum precisely to item totals
-          if (Math.abs(runningExactTotal - fields.amount) > 0.01) {
-            throw new Error(`Sum of exact entries (INR ${runningExactTotal.toFixed(2)}) must equal total cost (INR ${fields.amount.toFixed(2)})`);
+          if (Math.abs(sumExact - fields.amount) > 0.02) {
+            throw new Error(`Exact items sum (INR ${sumExact.toFixed(2)}) must equal total cost (INR ${fields.amount.toFixed(2)})`);
           }
           break;
 
         case 'ADJUSTMENT':
-          const baseSlice = fields.amount / activeRoster.length;
-          let verificationSum = 0;
-          payload.allocations = activeRoster.map(user => {
-            const adj = fields.rawAllocationsMap[user] || 0;
-            verificationSum += adj;
-            return { user, value: baseSlice + adj };
-          });
-          // Premium and deduction inputs must offset each other exactly to net zero
-          if (Math.abs(verificationSum) > 0.01) {
-            throw new Error(`Sum of premium adjustments must equal exactly 0.00 (Current total: ${verificationSum.toFixed(2)})`);
-          }
+          // AUTOMATED BASE SHARE CALCULATION PARSING LOGIC ENGINE
+          let sumAdjustments = 0;
+          activeRoster.forEach(u => sumAdjustments += (fields.rawAllocationsMap[u] || 0));
+          
+          const balancedBaseShare = (fields.amount - sumAdjustments) / activeRoster.length;
+          payload.allocations = activeRoster.map(user => ({
+            user,
+            value: balancedBaseShare + (fields.rawAllocationsMap[user] || 0)
+          }));
           break;
       }
     }
@@ -210,17 +203,68 @@ async function handleTransactionSubmit(fields) {
       payload_json: payload
     };
 
+    // If updating an existing transaction record, clear its old entry from local cache parameters first
+    if (fields.isEditingEventId) {
+      currentGroupEvents = currentGroupEvents.filter(e => (e.eventId || e.event_id) !== fields.isEditingEventId);
+    }
+
     currentGroupEvents.push(record);
     await writeToStore('group_events_cache', record);
-    await writeToStore('offline_sync_queue', { action: 'APPEND_ROW', spreadsheetId: activeSpreadsheetId, payload: record });
+    await writeToStore('offline_sync_queue', { 
+      action: 'APPEND_ROW', 
+      spreadsheetId: activeSpreadsheetId, 
+      payload: record 
+    });
 
-    resetCalculator();
     mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress);
     navigateToView('group-detail');
-    triggerBackgroundSyncLoop();
-  } catch (err) { 
-    alert(`Split Verification Rejection: ${err.message}`); 
+  } catch (err) { alert(`Verification Failure: ${err.message}`); }
+}
+
+function handleTriggerExpenseEdit(eventItemNode) {
+  const payload = typeof eventItemNode.payload_json === 'string' ? JSON.parse(eventItemNode.payload_json) : eventItemNode.payload_json;
+  const computedState = evaluateAdvancedLedgerState(currentGroupEvents);
+  const activeRoster = Object.keys(computedState.members).length > 0 ? Object.keys(computedState.members) : [userEmailAddress];
+
+  // 1. Mount form view component
+  mountExpenseFormComponent($expenseFormSlot, activeRoster, handleTransactionSubmit);
+  
+  // 2. Pre-fill input fields with existing transaction metadata values
+  document.getElementById('comp-exp-title').value = eventItemNode.event_type === 'EXPENSE_ADD' ? payload.title : payload.target_peer_identity || '';
+  document.getElementById('comp-exp-type').value = eventItemNode.event_type;
+  document.getElementById('comp-exp-category').value = payload.category || 'Food';
+  document.getElementById('comp-exp-strategy').value = payload.split_strategy || 'EQUALLY';
+  
+  // Dispatch a simulated change event to update sub-panels correctly
+  document.getElementById('comp-exp-type').dispatchEvent(new Event('change'));
+  document.getElementById('comp-exp-strategy').dispatchEvent(new Event('change'));
+
+  // 3. Load previous math calculations back into screen variables
+  document.getElementById('calc-display-expression').innerText = payload.raw_amount_string || payload.evaluated_amount.toString();
+  document.getElementById('calc-display-value').innerText = payload.evaluated_amount.toFixed(2);
+
+  // If previous itemizations are present, restore input row data fields
+  if (payload.allocations && payload.split_strategy !== 'EQUALLY') {
+    payload.allocations.forEach(alloc => {
+      const input = $expenseFormSlot.querySelector(`[data-member-allocation="${alloc.user}"]`);
+      if (input) {
+        if (payload.split_strategy === 'ADJUSTMENT') {
+          // For adjustments, calculate the original adjustment factor relative to the base split
+          const baseSplit = payload.evaluated_amount / payload.allocations.length;
+          input.value = (alloc.value - baseSplit).toFixed(2);
+        } else {
+          input.value = alloc.value.toString();
+        }
+      }
+    });
   }
+
+  // 4. Attach temporary update tokens to track modification history layers
+  const $form = document.getElementById('comp-expense-form');
+  $form.setAttribute('data-edit-event-id', eventItemNode.eventId || eventItemNode.event_id);
+  if (payload.receipt_local_url) $form.setAttribute('data-edit-receipt-url', payload.receipt_local_url);
+
+  navigateToView('add-expense');
 }
 
 async function processIncomingUrlInvitation() {
@@ -290,7 +334,6 @@ async function handleAppLaunchSequence(token, profile) {
   userEmailAddress = profile.email;
   
   mountSettingsComponent($settingsSlot, userEmailAddress, handleSignOut);
-  mountExpenseFormComponent($expenseFormSlot, handleTransactionSubmit);
 
   try {
     const remoteIndex = await fetchUserConfigRegistry();
@@ -317,6 +360,12 @@ async function handleAppLaunchSequence(token, profile) {
   setInterval(triggerBackgroundSyncLoop, 10000);
 }
 
+window.addEventListener('ss_open-expense-detail', (e) => {
+  const { event } = e.detail;
+  mountExpenseDetailComponent($expenseDetailSlot, event, handleTriggerExpenseEdit);
+  navigateToView('expense-detail');
+});
+
 window.addEventListener('DOMContentLoaded', async () => {
   await openDatabase();
   initRouter();
@@ -330,14 +379,19 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.addEventListener('click', (e) => {
     const trigger = e.target.closest('[data-route="add-expense"]');
-      if (trigger) {
-        const state = evaluateAdvancedLedgerState(currentGroupEvents);
-        const activeRoster = Object.keys(state.members).length > 0 ? Object.keys(state.members) : [userEmailAddress];
-        
-        // Pass the live calculated group roster right into the fresh form layout window instance
-        mountExpenseFormComponent($expenseFormSlot, activeRoster, handleTransactionSubmit);
-      }
-    });
+    if (trigger) {
+      const computedState = evaluateAdvancedLedgerState(currentGroupEvents);
+      const activeRoster = Object.keys(computedState.members).length > 0 ? Object.keys(computedState.members) : [userEmailAddress];
+      
+      mountExpenseFormComponent($expenseFormSlot, activeRoster, (fields) => {
+        const $form = document.getElementById('comp-expense-form');
+        // Append update context tokens onto submit parameter structures
+        fields.isEditingEventId = $form.getAttribute('data-edit-event-id');
+        fields.cachedReceiptUrl = $form.getAttribute('data-edit-receipt-url');
+        handleTransactionSubmit(fields);
+      });
+    }
+  });
 
   document.getElementById('auth-btn').addEventListener('click', requestAuthenticationData);
 

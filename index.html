@@ -208,6 +208,49 @@
             </form>
           </section>
 
+          <section id="view-expense-detail" class="hidden space-y-4">
+            <div class="flex items-center space-x-2">
+              <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+              </button>
+              <h3 class="text-sm font-bold">Transaction Breakdown</h3>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-4">
+              <div class="flex justify-between items-start border-b border-slate-100 dark:border-slate-700/60 pb-3">
+                <div>
+                  <h2 id="dtl-title" class="text-base font-black text-slate-800 dark:text-slate-100">Item Label</h2>
+                  <span id="dtl-meta" class="text-[10px] text-slate-400 font-medium block mt-0.5">Category &bull; Date</span>
+                </div>
+                <div class="text-right">
+                  <div id="dtl-total" class="text-xl font-black text-slate-900 dark:text-slate-50 font-mono">INR 0.00</div>
+                  <span id="dtl-type-badge" class="inline-block mt-1 text-[8px] uppercase tracking-wider font-bold px-1.5 py-0.2 rounded bg-accent-500/10 text-accent-500">EXPENSE</span>
+                </div>
+              </div>
+
+              <!-- Itemized Member Split Allocations Grid -->
+              <div class="space-y-2">
+                <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Share Distributions</h4>
+                <div id="dtl-allocations-list" class="space-y-1.5 font-mono text-xs"></div>
+              </div>
+
+              <!-- Attached Image Receipt Frame Container -->
+              <div id="dtl-receipt-container" class="space-y-2 hidden">
+                <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Associated Bill Receipt</h4>
+                <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/60 p-2">
+                  <img id="dtl-receipt-img" src="" alt="Attached digital file receipt asset" class="max-h-64 object-contain mx-auto rounded-lg">
+                </div>
+              </div>
+
+              <!-- Action Mutation Controls Deck -->
+              <div class="pt-2 flex space-x-2">
+                <button id="dtl-btn-edit" class="flex-grow bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer">
+                  ✏️ Edit Transaction Details
+                </button>
+              </div>
+            </div>
+          </section>
+
           <!-- VIEW 4: SYSTEM CONFIGURATION CONSOLE -->
           <section id="view-settings" class="hidden space-y-4">
             <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-4">
