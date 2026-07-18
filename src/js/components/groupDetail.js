@@ -1,22 +1,24 @@
 // src/js/components/groupDetail.js
 import { evaluateAdvancedLedgerState } from '../engine.js';
 
-export function mountGroupDetailComponent(containerElement, currentGroupEvents, userEmailAddress) {
+export function mountGroupDetailComponent(containerElement, currentGroupEvents, userEmailAddress, onGenerateInvite) {
   const state = evaluateAdvancedLedgerState(currentGroupEvents);
   const activeName = localStorage.getItem('ss_active_sheet_name') || 'Active Room';
   const activeId = localStorage.getItem('ss_active_sheet_id') || 'None';
 
   containerElement.innerHTML = `
     <div class="space-y-4 animate-fade-in">
-      <!-- Dynamic Dashboard Net Matrices Cards summary block -->
       <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 dark:from-accent-950 dark:to-slate-900 dark:border-accent-900/40">
         <div class="flex justify-between items-center">
           <div>
             <h2 class="text-base font-black tracking-tight text-white">${activeName}</h2>
-            <span class="text-[9px] text-accent-300 font-mono">ID: ${activeId}</span>
+            <span class="text-[9px] text-accent-300 font-mono block truncate max-w-[180px]">ID: ${activeId}</span>
           </div>
           <div class="flex space-x-1.5">
-            <button data-route="dashboard" class="bg-slate-800 text-slate-300 text-xs font-bold py-1.5 px-2.5 rounded-lg border border-slate-700 cursor-pointer">Back</button>
+            <button id="detail-btn-invite" class="bg-slate-800 hover:bg-slate-700 text-accent-400 text-xs font-bold py-1.5 px-2 rounded-lg border border-slate-700 cursor-pointer flex items-center space-x-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+              <span id="invite-btn-text">Invite</span>
+            </button>
             <button data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-sm cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
               <span>Log Item</span>
@@ -26,7 +28,13 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
         <div class="grid grid-cols-2 gap-2" id="detail-balances-grid"></div>
       </div>
 
-      <!-- Transaction Event History Timelines -->
+      <!-- Active Group Roster Sub-Panel Panel Layout -->
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs space-y-2">
+        <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Group Roster</h4>
+        <div class="flex flex-wrap gap-1.5" id="detail-roster-tags"></div>
+      </div>
+
+      <!-- Ledger Activity History streams -->
       <div class="space-y-2">
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
         <div class="space-y-2" id="detail-ledger-feed"></div>
@@ -47,7 +55,17 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
       </div>`;
   });
 
-  // Render the log stream feed
+  // Render the group roster list tags
+  const $rosterTags = document.getElementById('detail-roster-tags');
+  Object.keys(state.members).forEach(memberEmail => {
+    $rosterTags.innerHTML += `
+      <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] px-2.5 py-1 rounded-md max-w-[160px] truncate" title="${memberEmail}">
+        👤 ${memberEmail === userEmailAddress ? 'You' : memberEmail.split('@')[0]}
+      </span>
+    `;
+  });
+
+  // Render log entries feed
   const $feed = document.getElementById('detail-ledger-feed');
   if (state.expenses.length === 0) {
     $feed.innerHTML = `
@@ -66,7 +84,7 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
       desc = `Settlement transfer sent to: ${exp.target}`;
     } else if (exp.type === 'LOAN') {
       badgeColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
-      desc = `Issued dynamic Loan to: ${exp.target}`;
+      desc = `Issued Loan to: ${exp.target}`;
     }
 
     $feed.innerHTML += `
@@ -85,4 +103,7 @@ export function mountGroupDetailComponent(containerElement, currentGroupEvents, 
         </div>
       </div>`;
   });
+
+  // Bind the invite generator listener
+  document.getElementById('detail-btn-invite').addEventListener('click', onGenerateInvite);
 }

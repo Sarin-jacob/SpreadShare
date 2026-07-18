@@ -64,29 +64,44 @@ export function reconstructState(events) {
 export function evaluateAdvancedLedgerState(events) {
   const state = { totalSpent: 0, members: {}, expenses: [] };
 
+  // Helper to safely initialize a user profile node in our memory balance sheet
   const discoverMember = (email) => {
-    if (!state.members[email]) state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
+    if (!state.members[email]) {
+      state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
+    }
   };
 
+  // Ensure all operations are processed chronologically
   events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
   for (const event of events) {
     const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
-    const amount = parseFloat(payload.evaluated_amount) || 0;
     const actor = event.actor_identity;
-    const targetPeer = payload.target_peer_identity || "";
-
+    
     discoverMember(actor);
+
+    // Track explicit membership registrations
+    if (event.event_type === 'MEMBER_JOINED') {
+      discoverMember(payload.member_email);
+      continue; // Move to the next log entry row
+    }
+
+    const amount = parseFloat(payload.evaluated_amount) || 0;
+    const targetPeer = payload.target_peer_identity || "";
     if (targetPeer) discoverMember(targetPeer);
 
     switch (event.event_type) {
       case 'EXPENSE_ADD':
         state.totalSpent += amount;
         state.members[actor].paid += amount;
-        if (payload.allocations) {
-          payload.allocations.forEach(alloc => {
-            discoverMember(alloc.user);
-            state.members[alloc.user].owes += parseFloat(alloc.value) || 0;
+        
+        if (payload.split_strategy === 'EQUALLY') {
+          // Dynamic Roster Split Calculation Rule
+          const activeRoster = Object.keys(state.members);
+          const proportionalCut = amount / activeRoster.length;
+          
+          activeRoster.forEach(memberEmail => {
+            state.members[memberEmail].owes += proportionalCut;
           });
         }
         break;
@@ -97,11 +112,10 @@ export function evaluateAdvancedLedgerState(events) {
         break;
 
       case 'LOAN':
-        // Dynamic Interest Loan Event Parsing Architecture[cite: 3]
         const rate = parseFloat(payload.interest_rate) || 0;
         const type = payload.interest_type || 'NONE';
-        const weightedMultiplier = (type === 'NONE') ? 1.0 : (1 + (rate / 100));
-        const finalCompoundValue = amount * weightedMultiplier;
+        const multiplier = (type === 'NONE') ? 1.0 : (1 + (rate / 100));
+        const finalCompoundValue = amount * multiplier;
 
         state.members[actor].paid += finalCompoundValue;
         state.members[targetPeer].owes += finalCompoundValue;
@@ -120,8 +134,10 @@ export function evaluateAdvancedLedgerState(events) {
     });
   }
 
+  // Calculate final net positions
   Object.keys(state.members).forEach(m => {
     state.members[m].netBalance = state.members[m].paid - state.members[m].owes;
   });
+
   return state;
 }

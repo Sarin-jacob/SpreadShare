@@ -140,3 +140,35 @@ export async function processOfflineQueue(onSyncProgress) {
   }
   if (onSyncProgress) onSyncProgress(false);
 }
+
+/**
+ * Adjusts the Google Drive file permissions so that anyone with the unique link 
+ * can act as a reader/writer node for serverless collaboration.
+ * @param {string} fileId - The spreadsheet's unique file ID token
+ */
+export async function enableLedgerPublicLinkSharing(fileId) {
+  console.log("Modifying file permissions for secure link sharing...");
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/permissions`;
+  
+  const permissionMeta = {
+    role: 'writer',
+    type: 'anyone',
+    allowFileDiscovery: false // Prevents the ledger from showing up in public search results
+  };
+
+  const token = getAccessToken();
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(permissionMeta)
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Failed to initialize file sharing states: ${err}`);
+  }
+  return response.json();
+}
