@@ -7,6 +7,7 @@ class AppStore {
       directory: [], // Array of { id, name }
       activeGroupId: null,
       activeGroupName: null,
+      currentView: 'dashboard',
       groupEvents: [],
       syncStatus: 'synced', // 'synced' | 'syncing' | 'error'
       theme: {
