@@ -4,15 +4,13 @@ import { store } from './store.js';
 class ApplicationRouter {
   constructor() {
     this.currentRoute = null;
-    // Map of valid routes to prevent users navigating to non-existent hashes
-    this.validRoutes = ['dashboard', 'group-detail', 'add-expense', 'expense-detail', 'settings'];
+    // Added 'insights' to the valid routes array
+    this.validRoutes = ['dashboard', 'group-detail', 'add-expense', 'expense-detail', 'settings', 'insights'];
   }
 
   init() {
-    // 1. Listen for browser Back/Forward navigation
     window.addEventListener('hashchange', () => this.handleHashChange());
     
-    // 2. Intercept local navigation button clicks
     document.addEventListener('click', (e) => {
       const trigger = e.target.closest('[data-route]');
       if (trigger) {
@@ -22,14 +20,9 @@ class ApplicationRouter {
       }
     });
 
-    // 3. Trigger initial route calculation on app launch
     this.handleHashChange();
   }
 
-  /**
-   * Programmatic navigation. Updates the URL hash, which inherently 
-   * triggers handleHashChange() to process the UI switch.
-   */
   navigate(route) {
     if (this.validRoutes.includes(route)) {
       window.location.hash = route;
@@ -37,33 +30,26 @@ class ApplicationRouter {
   }
 
   handleHashChange() {
-    // Extract route from URL, default to dashboard
     const hash = window.location.hash.replace('#', '') || 'dashboard';
     const targetRoute = this.validRoutes.includes(hash) ? hash : 'dashboard';
     
     if (this.currentRoute === targetRoute) return;
     this.currentRoute = targetRoute;
 
-    // Repaint the UI
     this.updateDOM(targetRoute);
-    
-    // Notify the central store so active components can wake up / fetch data
     store.setState({ currentView: targetRoute });
   }
 
   updateDOM(targetRoute) {
-    // Hide all view sections
     document.querySelectorAll('section[id^="view-"]').forEach(section => {
       section.classList.add('hidden');
     });
     
-    // Reveal the target view
     const activeView = document.getElementById(`view-${targetRoute}`);
     if (activeView) {
       activeView.classList.remove('hidden');
     }
 
-    // Update navigation tab visual highlights (Desktop Sidebar & Mobile Bottom Nav)
     document.querySelectorAll('[data-route]').forEach(btn => {
       if (btn.getAttribute('data-route') === targetRoute) {
         btn.classList.add('text-accent-600', 'dark:text-accent-400', 'font-bold');
@@ -76,5 +62,4 @@ class ApplicationRouter {
   }
 }
 
-// Export a single singleton instance
 export const AppRouter = new ApplicationRouter();

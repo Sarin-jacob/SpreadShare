@@ -148,12 +148,17 @@ class SpreadsheetLedgerService {
 
   async appendLocalEvent(spreadsheetId, eventType, payload) {
     const state = store.getState();
+    const trueActor = payload.override_actor_identity || state.userProfile.email;
+    if (payload.override_actor_identity) {
+      delete payload.override_actor_identity;
+    }
+
     const eventRecord = {
       spreadsheetId: spreadsheetId,
       eventId: crypto.randomUUID(),
-      timestamp: payload.customTimestamp || new Date().toISOString(),
+      timestamp: payload.custom_timestamp || new Date().toISOString(),
       event_type: eventType,
-      actor_identity: state.userProfile.email,
+      actor_identity: trueActor, // Applies the intercepted sender
       payload_json: payload
     };
 

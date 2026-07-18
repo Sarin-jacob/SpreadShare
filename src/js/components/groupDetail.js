@@ -7,6 +7,7 @@ import { AppRouter } from '../router.js';
 export class GroupDetail {
   constructor(containerElement) {
     this.container = containerElement;
+    this.activeTab = 'feed'; // 'feed' | 'insights'
     
     // Subscribe to global state changes
     this.unsubscribe = store.subscribe((state) => this.onStateChange(state));
@@ -17,15 +18,13 @@ export class GroupDetail {
   }
 
   onStateChange(state) {
-    // Only process heavy DOM updates if this view is visible
     if (state.currentView !== 'group-detail') return;
-
     this.updateUI(state);
   }
 
   renderSkeleton() {
     this.container.innerHTML = `
-      <div class="space-y-4 animate-fade-in">
+      <div class="space-y-4 animate-fade-in pb-8">
         <!-- Group Header Card -->
         <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 dark:from-accent-950 dark:to-slate-900 dark:border-accent-900/40">
           <div class="flex justify-between items-center">
@@ -53,11 +52,36 @@ export class GroupDetail {
           <div class="flex flex-wrap gap-1.5" id="gd-roster-tags"></div>
         </div>
 
-        <!-- Transaction Feed -->
-        <div class="space-y-2 pb-8">
-          <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
+        <!-- TABS NAVIGATOR -->
+        <div class="flex space-x-4 border-b border-slate-200 dark:border-slate-800">
+          <button id="gd-tab-feed" class="text-xs font-bold pb-2 transition-colors border-b-2 border-accent-500 text-accent-600 dark:text-accent-400 cursor-pointer">Ledger Feed</button>
+          <button id="gd-tab-insights" class="text-xs font-bold pb-2 transition-colors border-b-2 border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer">Group Insights</button>
+        </div>
+
+        <!-- TAB CONTENT: FEED -->
+        <div id="gd-view-feed" class="space-y-2 pb-8">
           <div class="space-y-2" id="gd-ledger-feed"></div>
         </div>
+
+        <!-- TAB CONTENT: INSIGHTS -->
+        <div id="gd-view-insights" class="space-y-4 pb-8 hidden animate-fade-in">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs">
+              <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Group Spend</span>
+              <span id="gd-insight-total" class="block text-lg font-black text-slate-700 dark:text-slate-200 mt-1 font-mono">0.00</span>
+            </div>
+            <div class="bg-accent-50 dark:bg-accent-900/20 border border-accent-100 dark:border-accent-800/40 p-3.5 rounded-xl shadow-2xs">
+              <span class="block text-[9px] text-accent-500 uppercase font-bold tracking-wider">Your Personal Share</span>
+              <span id="gd-insight-yours" class="block text-lg font-black text-accent-700 dark:text-accent-400 mt-1 font-mono">0.00</span>
+            </div>
+          </div>
+          
+          <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Group Category Spend</h4>
+            <div id="gd-insight-categories" class="space-y-3"></div>
+          </div>
+        </div>
+
       </div>
     `;
   }
@@ -67,13 +91,56 @@ export class GroupDetail {
     this.$id = this.container.querySelector('#gd-id');
     this.$balancesGrid = this.container.querySelector('#gd-balances-grid');
     this.$rosterTags = this.container.querySelector('#gd-roster-tags');
+    
+    // Tabs & Views
+    this.$tabFeedBtn = this.container.querySelector('#gd-tab-feed');
+    this.$tabInsightsBtn = this.container.querySelector('#gd-tab-insights');
+    this.$viewFeed = this.container.querySelector('#gd-view-feed');
+    this.$viewInsights = this.container.querySelector('#gd-view-insights');
+    
+    // Feed Elements
     this.$ledgerFeed = this.container.querySelector('#gd-ledger-feed');
     this.$btnInvite = this.container.querySelector('#gd-btn-invite');
     this.$inviteText = this.container.querySelector('#gd-invite-text');
+
+    // Insight Elements
+    this.$insightTotal = this.container.querySelector('#gd-insight-total');
+    this.$insightYours = this.container.querySelector('#gd-insight-yours');
+    this.$insightCategories = this.container.querySelector('#gd-insight-categories');
   }
 
   attachListeners() {
-    // 1. Invite Link Generation
+    // 1. Tab Navigation
+    const switchTab = (target) => {
+      this.activeTab = target;
+      
+      // Update Button Styles
+      const activeClass = ['border-accent-500', 'text-accent-600', 'dark:text-accent-400'];
+      const inactiveClass = ['border-transparent', 'text-slate-400'];
+      
+      if (target === 'feed') {
+        this.$tabFeedBtn.classList.add(...activeClass);
+        this.$tabFeedBtn.classList.remove(...inactiveClass);
+        this.$tabInsightsBtn.classList.add(...inactiveClass);
+        this.$tabInsightsBtn.classList.remove(...activeClass);
+        
+        this.$viewFeed.classList.remove('hidden');
+        this.$viewInsights.classList.add('hidden');
+      } else {
+        this.$tabInsightsBtn.classList.add(...activeClass);
+        this.$tabInsightsBtn.classList.remove(...inactiveClass);
+        this.$tabFeedBtn.classList.add(...inactiveClass);
+        this.$tabFeedBtn.classList.remove(...activeClass);
+        
+        this.$viewInsights.classList.remove('hidden');
+        this.$viewFeed.classList.add('hidden');
+      }
+    };
+
+    this.$tabFeedBtn.addEventListener('click', () => switchTab('feed'));
+    this.$tabInsightsBtn.addEventListener('click', () => switchTab('insights'));
+
+    // 2. Invite Link Generation
     this.$btnInvite.addEventListener('click', async () => {
       const state = store.getState();
       if (!state.activeGroupId) return;
@@ -82,9 +149,7 @@ export class GroupDetail {
         this.$inviteText.innerText = "Sharing...";
         this.$btnInvite.disabled = true;
 
-        // Ensure the file is accessible to anyone with the link
         await LedgerService.enableLedgerPublicLinkSharing(state.activeGroupId);
-        
         const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${state.activeGroupId}&name=${encodeURIComponent(state.activeGroupName)}`;
         
         await navigator.clipboard.writeText(inviteUrl);
@@ -100,19 +165,16 @@ export class GroupDetail {
       }
     });
 
-    // 2. Feed Item Click Delegation (Opens Expense Details)
+    // 3. Feed Item Click Delegation
     this.$ledgerFeed.addEventListener('click', (e) => {
       const itemRow = e.target.closest('[data-event-id]');
       if (!itemRow) return;
 
       const eventId = itemRow.getAttribute('data-event-id');
       const state = store.getState();
-      
-      // Locate the exact raw event that generated this ledger entry
       const selectedEvent = state.groupEvents.find(ev => (ev.eventId || ev.event_id) === eventId);
       
       if (selectedEvent) {
-        // We inject the selection into the store so the ExpenseDetail view can grab it
         store.setState({ selectedExpenseDetails: selectedEvent });
         AppRouter.navigate('expense-detail');
       }
@@ -154,18 +216,16 @@ export class GroupDetail {
     // 3. Render Transaction Feed
     if (computedLedger.expenses.length === 0) {
       this.$ledgerFeed.innerHTML = `<div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full"><p class="text-xs text-slate-400">No transactions recorded yet.</p></div>`;
+      this.renderInsights([], userEmail);
       return;
     }
 
     this.$ledgerFeed.innerHTML = '';
-    
-    // Reverse chronological order for the UI feed
     [...computedLedger.expenses].reverse().forEach(expense => {
       const payload = expense.rawPayload;
       let badgeColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
       let contextPersonalDebtString = "";
 
-      // ─── CONTEXTUAL BALANCE STRINGS ───
       if (expense.type === 'EXPENSE_ADD') {
         const allAllocations = payload.allocations || [];
         const userShareMeta = allAllocations.find(a => a.user === userEmail);
@@ -190,7 +250,7 @@ export class GroupDetail {
         badgeColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
         if (expense.payer === userEmail) contextPersonalDebtString = `<span class="text-emerald-600 font-bold">Lent asset</span>`;
         else if (expense.target === userEmail) contextPersonalDebtString = `<span class="text-rose-600 font-bold">Borrowed asset</span>`;
-        else contextPersonalDebtString = `<span class="text-slate-400">Peer loan transaction</span>`;
+        else contextPersonalDebtString = `<span class="text-slate-400">Peer loan</span>`;
       }
 
       this.$ledgerFeed.innerHTML += `
@@ -210,6 +270,53 @@ export class GroupDetail {
           </div>
         </div>`;
     });
+
+    // 4. Render Group Insights Math
+    this.renderInsights(computedLedger.expenses, userEmail);
+  }
+
+  renderInsights(expenses, userEmail) {
+    let totalGroupSpend = 0;
+    let totalUserShare = 0;
+    let categories = {};
+
+    expenses.forEach(exp => {
+      // We only analyze pure expenses, not balance transfers or loans
+      if (exp.type === 'EXPENSE_ADD') {
+        totalGroupSpend += exp.amount;
+        
+        const cat = exp.category || 'General';
+        categories[cat] = (categories[cat] || 0) + exp.amount;
+
+        const allAllocations = exp.rawPayload.allocations || [];
+        const userAlloc = allAllocations.find(a => a.user === userEmail);
+        if (userAlloc) {
+          totalUserShare += (parseFloat(userAlloc.value) || 0);
+        }
+      }
+    });
+
+    this.$insightTotal.innerText = totalGroupSpend.toFixed(2);
+    this.$insightYours.innerText = totalUserShare.toFixed(2);
+
+    const sortedCategories = Object.entries(categories).sort((a, b) => b[1] - a[1]);
+    const maxVal = sortedCategories.length > 0 ? sortedCategories[0][1] : 0;
+
+    this.$insightCategories.innerHTML = sortedCategories.length > 0
+      ? sortedCategories.map(([cat, val]) => {
+          const percentage = maxVal > 0 ? (val / maxVal) * 100 : 0;
+          return `
+            <div class="space-y-1">
+              <div class="flex justify-between text-xs font-medium">
+                <span class="text-slate-600 dark:text-slate-300 truncate pr-2">${cat}</span>
+                <span class="font-mono text-slate-800 dark:text-slate-100">INR ${val.toFixed(2)}</span>
+              </div>
+              <div class="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-700" style="width: ${percentage}%"></div>
+              </div>
+            </div>`;
+        }).join('')
+      : '<p class="text-[10px] text-slate-400 text-center py-2">No category data available yet.</p>';
   }
 
   destroy() {
