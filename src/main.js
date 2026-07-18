@@ -2,6 +2,7 @@
 import { CONFIG } from './js/config.js';
 import { initGoogleAuth, requestAuthenticationData, checkExistingSession, clearSessionContext } from './js/auth.js';
 import { openDatabase, writeToStore } from './js/db.js';
+import { evaluateAdvancedLedgerState } from './js/engine.js';
 import { getOrCreateRootFolder, createGroupSpreadsheet, processOfflineQueue, fetchLedgerDelta, syncUserConfigRegistry, fetchUserConfigRegistry, enableLedgerPublicLinkSharing } from './js/sync.js';
 
 // Import decoupled routing configurations
@@ -124,19 +125,26 @@ async function handleCreateGroup(groupName, inputElement) {
  * instead of fragile direct DOM queries using outdated element IDs.
  */
 async function handleTransactionSubmit(fields) {
-  if (fields.amount <= 0) return alert("Value must parse above 0.00");
+  if (fields.amount <= 0) return alert("Value must evaluate above 0.00");
 
   try {
     const uuid = crypto.randomUUID();
     const iso = new Date().toISOString();
-    
+
+    // Reconstruct the active group roster live up to this execution second
+    const computedState = evaluateAdvancedLedgerState(currentGroupEvents);
+    const activeRoster = Object.keys(computedState.members).length > 0 
+      ? Object.keys(computedState.members) 
+      : [userEmailAddress];
+
     const payload = {
       title: fields.type === 'EXPENSE_ADD' ? fields.title : `${fields.type} Log Entry`,
       category: fields.category,
       raw_amount_string: fields.expression,
       evaluated_amount: fields.amount,
       currency: 'INR',
-      split_strategy: fields.strategy
+      split_strategy: fields.strategy,
+      allocations: []
     };
 
     if (fields.type === 'TRANSFER' || fields.type === 'LOAN') {
@@ -144,6 +152,52 @@ async function handleTransactionSubmit(fields) {
       if (fields.type === 'LOAN') {
         payload.interest_type = fields.interestType;
         payload.interest_rate = fields.interestRate;
+      }
+    } else {
+      // ─── RUN ADVANCED STRATEGY ALGEBRA PARSING NODES ───
+      switch (fields.strategy) {
+        case 'EQUALLY':
+          const equalCut = fields.amount / activeRoster.length;
+          payload.allocations = activeRoster.map(user => ({ user, value: equalCut }));
+          break;
+
+        case 'SHARES':
+          let totalWeights = 0;
+          activeRoster.forEach(u => totalWeights += (fields.rawAllocationsMap[u] || 0));
+          if (totalWeights <= 0) throw new Error("Sum of weight shares must be greater than zero.");
+          
+          payload.allocations = activeRoster.map(user => ({
+            user,
+            value: fields.amount * ((fields.rawAllocationsMap[user] || 0) / totalWeights)
+          }));
+          break;
+
+        case 'EXACT':
+          let runningExactTotal = 0;
+          payload.allocations = activeRoster.map(user => {
+            const val = fields.rawAllocationsMap[user] || 0;
+            runningExactTotal += val;
+            return { user, value: val };
+          });
+          // Verify that manual matrix definitions sum precisely to item totals
+          if (Math.abs(runningExactTotal - fields.amount) > 0.01) {
+            throw new Error(`Sum of exact entries (INR ${runningExactTotal.toFixed(2)}) must equal total cost (INR ${fields.amount.toFixed(2)})`);
+          }
+          break;
+
+        case 'ADJUSTMENT':
+          const baseSlice = fields.amount / activeRoster.length;
+          let verificationSum = 0;
+          payload.allocations = activeRoster.map(user => {
+            const adj = fields.rawAllocationsMap[user] || 0;
+            verificationSum += adj;
+            return { user, value: baseSlice + adj };
+          });
+          // Premium and deduction inputs must offset each other exactly to net zero
+          if (Math.abs(verificationSum) > 0.01) {
+            throw new Error(`Sum of premium adjustments must equal exactly 0.00 (Current total: ${verificationSum.toFixed(2)})`);
+          }
+          break;
       }
     }
 
@@ -164,7 +218,9 @@ async function handleTransactionSubmit(fields) {
     mountGroupDetailComponent($groupDetailSlot, currentGroupEvents, userEmailAddress);
     navigateToView('group-detail');
     triggerBackgroundSyncLoop();
-  } catch (err) { alert(`Commit error: ${err.message}`); }
+  } catch (err) { 
+    alert(`Split Verification Rejection: ${err.message}`); 
+  }
 }
 
 async function processIncomingUrlInvitation() {
@@ -272,6 +328,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       handleGenerateInviteLink();
     }
   });
+  document.addEventListener('click', (e) => {
+    const trigger = e.target.closest('[data-route="add-expense"]');
+      if (trigger) {
+        const state = evaluateAdvancedLedgerState(currentGroupEvents);
+        const activeRoster = Object.keys(state.members).length > 0 ? Object.keys(state.members) : [userEmailAddress];
+        
+        // Pass the live calculated group roster right into the fresh form layout window instance
+        mountExpenseFormComponent($expenseFormSlot, activeRoster, handleTransactionSubmit);
+      }
+    });
 
   document.getElementById('auth-btn').addEventListener('click', requestAuthenticationData);
 
