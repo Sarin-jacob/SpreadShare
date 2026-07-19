@@ -34,9 +34,9 @@ SpreadShare operates on a double-entry ledger system. Every action (Expense, Tra
 
 Upcoming features focused on bringing privacy-first, on-device AI to expense management via small client-side models running entirely in the browser:
 
-*   **Smart Auto-Categorization:** Context-aware prediction of expense categories based on the transaction title and description.
-*   **Receipt Auto-Parsing:** On-device Optical Character Recognition (OCR) to automatically extract totals, dates, and merchant names from uploaded images.
-*   **Item-Wise Bill Splitting:** Granular line-item extraction from scanned receipts, allowing users to assign specific items to specific members rather than splitting the grand total.
+- [ ] **Smart Auto-Categorization:** Context-aware prediction of expense categories based on the transaction title and description.
+- [ ] **Receipt Auto-Parsing:** On-device Optical Character Recognition (OCR) to automatically extract totals, dates, and merchant names from uploaded images.
+- [ ] **Item-Wise Bill Splitting:** Granular line-item extraction from scanned receipts, allowing users to assign specific items to specific members rather than splitting the grand total.
 
 ## Setup & Deployment
 
