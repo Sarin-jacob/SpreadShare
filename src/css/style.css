@@ -35,7 +35,6 @@
 }
 
 /* ─── PITCH BLACK OLED OVERRIDE CONFIGURATION ─── */
-/* When .oled and .dark are both active on the html tag, strip all background lighting variables */
 html.dark.oled {
   --slate-900: #000000;
   --slate-800: #0a0a0a;
@@ -48,25 +47,55 @@ html.dark.oled {
   --accent-400: #818cf8; --accent-500: #6366f1; --accent-600: #4f46e5; --accent-700: #4338ca;
   --accent-800: #3730a3; --accent-900: #312e81;
 }
+html[data-accent="blue"] {
+  --accent-50: #eff6ff; --accent-100: #dbeafe; --accent-200: #bfdbfe; --accent-300: #93c5fd;
+  --accent-400: #60a5fa; --accent-500: #3b82f6; --accent-600: #2563eb; --accent-700: #1d4ed8;
+  --accent-800: #1e40af; --accent-900: #1e3a8a;
+}
+html[data-accent="cyan"] {
+  --accent-50: #ecfeff; --accent-100: #cffafe; --accent-200: #a5f3fc; --accent-300: #67e8f9;
+  --accent-400: #22d3ee; --accent-500: #06b6d4; --accent-600: #0891b2; --accent-700: #0e7490;
+  --accent-800: #155e75; --accent-900: #164e63;
+}
+html[data-accent="teal"] {
+  --accent-50: #f0fdfa; --accent-100: #ccfbf1; --accent-200: #99f6e4; --accent-300: #5eead4;
+  --accent-400: #2dd4bf; --accent-500: #14b8a6; --accent-600: #0d9488; --accent-700: #0f766e;
+  --accent-800: #115e59; --accent-900: #134e4a;
+}
 html[data-accent="emerald"] {
   --accent-50: #ecfdf5; --accent-100: #d1fae5; --accent-200: #a7f3d0; --accent-300: #6ee7b7;
   --accent-400: #34d399; --accent-500: #10b981; --accent-600: #059669; --accent-700: #047857;
   --accent-800: #065f46; --accent-900: #064e3b;
-}
-html[data-accent="violet"] {
-  --accent-50: #f5f3ff; --accent-100: #ede9fe; --accent-200: #ddd6fe; --accent-300: #c084fc;
-  --accent-400: #a78bfa; --accent-500: #8b5cf6; --accent-600: #7c3aed; --accent-700: #6d28d9;
-  --accent-800: #5b21b6; --accent-900: #4c1d95;
 }
 html[data-accent="amber"] {
   --accent-50: #fffbeb; --accent-100: #fef3c7; --accent-200: #fde68a; --accent-300: #fcd34d;
   --accent-400: #fbbf24; --accent-500: #f59e0b; --accent-600: #d97706; --accent-700: #b45309;
   --accent-800: #92400e; --accent-900: #78350f;
 }
+html[data-accent="orange"] {
+  --accent-50: #fff7ed; --accent-100: #ffedd5; --accent-200: #fed7aa; --accent-300: #fdba74;
+  --accent-400: #fb923c; --accent-500: #f97316; --accent-600: #ea580c; --accent-700: #c2410c;
+  --accent-800: #9a3412; --accent-900: #7c2d12;
+}
 html[data-accent="rose"] {
   --accent-50: #fff1f2; --accent-100: #ffe4e6; --accent-200: #fecdd3; --accent-300: #fda4af;
   --accent-400: #fb7185; --accent-500: #f43f5e; --accent-600: #e11d48; --accent-700: #be123c;
   --accent-800: #9f1239; --accent-900: #881337;
+}
+html[data-accent="pink"] {
+  --accent-50: #fdf2f8; --accent-100: #fce7f3; --accent-200: #fbcfe8; --accent-300: #f9a8d4;
+  --accent-400: #f472b6; --accent-500: #ec4899; --accent-600: #db2777; --accent-700: #be185d;
+  --accent-800: #9d174d; --accent-900: #831843;
+}
+html[data-accent="fuchsia"] {
+  --accent-50: #fdf4ff; --accent-100: #fae8ff; --accent-200: #f5d0fe; --accent-300: #f0abfc;
+  --accent-400: #e879f9; --accent-500: #d946ef; --accent-600: #c026d3; --accent-700: #a21caf;
+  --accent-800: #86198f; --accent-900: #701a75;
+}
+html[data-accent="violet"] {
+  --accent-50: #f5f3ff; --accent-100: #ede9fe; --accent-200: #ddd6fe; --accent-300: #c084fc;
+  --accent-400: #a78bfa; --accent-500: #8b5cf6; --accent-600: #7c3aed; --accent-700: #6d28d9;
+  --accent-800: #5b21b6; --accent-900: #4c1d95;
 }
 html[data-accent="slate"] {
   --accent-50: #f8fafc; --accent-100: #f1f5f9; --accent-200: #e2e8f0; --accent-300: #cbd5e1;

@@ -46,12 +46,19 @@ export class Settings {
           <!-- Accent Colors -->
           <div class="p-4 border-b border-slate-100 dark:border-slate-700/60">
             <h4 class="text-xs font-bold text-slate-700 dark:text-slate-200 mb-3">Active Design Palette Accent</h4>
-            <div class="flex space-x-3" id="cfg-accent-container">
+            <div class="grid grid-cols-6 gap-3" id="cfg-accent-container">
               <button data-select-accent="indigo" class="w-6 h-6 rounded-full bg-indigo-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="blue" class="w-6 h-6 rounded-full bg-blue-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="cyan" class="w-6 h-6 rounded-full bg-cyan-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="teal" class="w-6 h-6 rounded-full bg-teal-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
               <button data-select-accent="emerald" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
-              <button data-select-accent="violet" class="w-6 h-6 rounded-full bg-violet-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
               <button data-select-accent="amber" class="w-6 h-6 rounded-full bg-amber-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              
+              <button data-select-accent="orange" class="w-6 h-6 rounded-full bg-orange-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
               <button data-select-accent="rose" class="w-6 h-6 rounded-full bg-rose-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="pink" class="w-6 h-6 rounded-full bg-pink-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="fuchsia" class="w-6 h-6 rounded-full bg-fuchsia-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
+              <button data-select-accent="violet" class="w-6 h-6 rounded-full bg-violet-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
               <button data-select-accent="slate" class="w-6 h-6 rounded-full bg-slate-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800 transition-all shadow-sm"></button>
             </div>
           </div>
