@@ -50,8 +50,8 @@ export class GlobalInsights {
         </div>
 
         <!-- TOTAL SPEND HERO & TRENDLINE -->
-        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-sm overflow-hidden relative">
-          <h4 class="text-[10px] font-bold uppercase tracking-wider text-indigo-300 relative z-10">Total Consumption</h4>
+        <div class="bg-gradient-to-br from-accent-900 to-slate-700 dark:to-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-sm overflow-hidden relative">
+          <h4 class="text-[10px] font-bold uppercase tracking-wider text-accent-300 relative z-10">Total Consumption</h4>
           <div id="gi-total" class="text-3xl font-black font-mono mt-1 relative z-10">INR 0.00</div>
           
           <div class="h-20 w-full mt-4 -mb-5 -mx-2 relative z-0">

@@ -79,7 +79,7 @@ export class CanvasCharts {
     });
 
     ctx.lineWidth = 3;
-    ctx.strokeStyle = '#6366f1';
+    ctx.strokeStyle = `${getCssVariableToHex('--accent-400')}`;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.stroke();
@@ -94,4 +94,48 @@ export class CanvasCharts {
     ctx.fillStyle = gradient;
     ctx.fill();
   }
+}
+
+/**
+ * Gets a CSS variable's color value and converts it to Hex format.
+ * @param {string} variableName - The CSS variable name (e.g., '--main-color').
+ * @param {HTMLElement} [element=document.documentElement] - The element where the variable is defined.
+ * @returns {string} The hexadecimal color string (e.g., '#ff0000').
+ */
+function getCssVariableToHex(variableName, element = document.documentElement) {
+  // 1. Get the computed style of the element (returns 'rgb(r, g, b)' or 'rgba(r, g, b, a)')
+  const computedColor = getComputedStyle(element).getPropertyValue(variableName).trim();
+  
+  if (!computedColor) {
+    throw new Error(`CSS variable ${variableName} is not defined or empty.`);
+  }
+
+  // 2. Parse the numbers out of the rgb/rgba string using a regular expression
+  const rgbaMatch = computedColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/);
+  
+  if (!rgbaMatch) {
+    // If the variable is already a hex string, return it directly
+    if (computedColor.startsWith('#')) return computedColor;
+    throw new Error(`Could not parse color format: ${computedColor}`);
+  }
+
+  // 3. Extract the red, green, blue, and alpha segments
+  const r = parseInt(rgbaMatch[1], 10);
+  const g = parseInt(rgbaMatch[2], 10);
+  const b = parseInt(rgbaMatch[3], 10);
+  const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : null;
+
+  // Helper to convert a single decimal number to a 2-digit hex string
+  const toHex = (num) => num.toString(16).padStart(2, '0');
+
+  // 4. Combine into final Hex format
+  let hex = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+
+  // Append alpha hex channel if an opacity value exists less than 1
+  if (a !== null && a < 1) {
+    const alphaHex = Math.round(a * 255).toString(16).padStart(2, '0');
+    hex += alphaHex;
+  }
+
+  return hex;
 }
