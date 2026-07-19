@@ -1,5 +1,6 @@
 // src/js/components/GroupDetail.js
 import { store } from '../store.js';
+import { Toast } from '../utils/toast.js';
 import { computeLedgerState, optimizeDebts } from '../engine.js';
 import { LedgerService } from '../services/LedgerService.js';
 import { AppRouter } from '../router.js';
@@ -150,6 +151,37 @@ export class GroupDetail {
       this.updateUI(store.getState()); 
     });
 
+    this.$btnInvite.addEventListener('click', async () => {
+      const state = store.getState();
+      if (!state.activeGroupId) return;
+      try {
+        this.$inviteText.innerText = "Sharing...";
+        this.$btnInvite.disabled = true;
+        
+        // This will fail if the user is not the file owner
+        await LedgerService.enableLedgerPublicLinkSharing(state.activeGroupId);
+        
+        const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${state.activeGroupId}&name=${encodeURIComponent(state.activeGroupName)}`;
+        await navigator.clipboard.writeText(inviteUrl);
+        
+        Toast.show('Invite link copied to clipboard!', 'success');
+        this.$inviteText.innerText = "Copied!";
+      } catch (err) {
+        // Handle unauthorized error gracefully
+        if (err.message.includes('404') || err.message.includes('notFound')) {
+           Toast.show('Only the group creator can generate invite links.', 'error');
+        } else {
+           Toast.show('Failed to generate invite.', 'error');
+        }
+        this.$inviteText.innerText = "Error";
+      } finally {
+        setTimeout(() => { 
+          this.$inviteText.innerText = "Invite"; 
+          this.$btnInvite.disabled = false; 
+        }, 2000);
+      }
+    });
+
     this.$btnScopeYou.addEventListener('click', () => {
       this.insightScope = 'you';
       this.$btnScopeYou.classList.add('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
@@ -172,24 +204,6 @@ export class GroupDetail {
       }
     });
 
-    this.$btnInvite.addEventListener('click', async () => {
-      const state = store.getState();
-      if (!state.activeGroupId) return;
-      try {
-        this.$inviteText.innerText = "Sharing...";
-        this.$btnInvite.disabled = true;
-        await LedgerService.enableLedgerPublicLinkSharing(state.activeGroupId);
-        const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${state.activeGroupId}&name=${encodeURIComponent(state.activeGroupName)}`;
-        console.log(inviteUrl);
-        await navigator.clipboard.writeText(inviteUrl);
-        this.$inviteText.innerText = "Copied!";
-      } catch (err) {
-        alert(`Invite generation failed: ${err.message}`);
-        this.$inviteText.innerText = "Error";
-      } finally {
-        setTimeout(() => { this.$inviteText.innerText = "Invite"; this.$btnInvite.disabled = false; }, 2000);
-      }
-    });
   }
 
   getAvatar(email, profiles, sizeClass = "w-8 h-8") {
@@ -207,17 +221,8 @@ export class GroupDetail {
     this.$title.innerText = state.activeGroupName || 'Active Room';
     this.$id.innerText = `ID: ${state.activeGroupId}`;
     if (this.$btnInvite) {
-      // Check roles cached during initial spreadsheet discovery metadata handshake
-      const userRole = state.activeGroupRole || 'member'; 
-      const isOwner = userRole === 'owner' || userRole === 'creator';
-      
-      if (isOwner) {
-        this.$btnInvite.classList.remove('hidden');
-        this.$btnInvite.style.display = 'flex'; // Safeguard Tailwind grid rules
-      } else {
-        this.$btnInvite.classList.add('hidden');
-        this.$btnInvite.style.display = 'none';
-      }
+      this.$btnInvite.classList.remove('hidden');
+      this.$btnInvite.style.display = 'flex';
     }
 
     const computedLedger = computeLedgerState(state.groupEvents);

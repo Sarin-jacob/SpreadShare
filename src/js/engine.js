@@ -37,12 +37,29 @@ export function computeLedgerState(rawEvents) {
   const processedEventIds = new Set();
   const deletedEventIds = new Set();
 
+  const globalProfileCache = JSON.parse(localStorage.getItem('ss_profile_cache') || '{}');
+
   const discoverMember = (email, name = null, picture = null) => {
     if (!email) return;
     if (!state.members[email]) state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
-    if (!state.profiles[email]) state.profiles[email] = { name: email.split('@')[0], picture: null };
-    if (name) state.profiles[email].name = name;
-    if (picture) state.profiles[email].picture = picture;
+    if (!state.profiles[email]) {
+       state.profiles[email] = globalProfileCache[email] || { name: email.split('@')[0], picture: null };
+    }
+    let cacheUpdated = false;
+    if (name && state.profiles[email].name !== name) { 
+      state.profiles[email].name = name; 
+      cacheUpdated = true; 
+    }
+    if (picture && state.profiles[email].picture !== picture) { 
+      state.profiles[email].picture = picture; 
+      cacheUpdated = true; 
+    }
+
+    // Persist to global memory so it's instantly available next time
+    if (cacheUpdated) {
+       globalProfileCache[email] = state.profiles[email];
+       localStorage.setItem('ss_profile_cache', JSON.stringify(globalProfileCache));
+    }
   };
 
   const events = [...rawEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
