@@ -33,27 +33,28 @@ export class GlobalInsights {
   renderSkeleton() {
     this.container.innerHTML = `
       <div class="space-y-4 animate-fade-in pb-12">
-        <div class="flex items-center space-x-2">
-          <button type="button" data-route="dashboard" class="text-slate-400 hover:text-slate-600 p-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-          </button>
-          <h3 class="text-sm font-bold">Global Insights</h3>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <button type="button" data-route="dashboard" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            </button>
+            <h3 class="text-sm font-bold">Personal Analytics</h3>
+          </div>
         </div>
 
         <!-- TIMEFRAME TABS -->
         <div class="flex p-1 space-x-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl">
-          <button data-days="7" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all">7 Days</button>
-          <button data-days="30" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg bg-white shadow-xs text-slate-800 dark:bg-slate-700 dark:text-white transition-all">30 Days</button>
-          <button data-days="365" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all">1 Year</button>
+          <button data-days="7" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all cursor-pointer">7 Days</button>
+          <button data-days="30" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg bg-white shadow-xs text-slate-800 dark:bg-slate-700 dark:text-white transition-all cursor-pointer">30 Days</button>
+          <button data-days="365" class="time-tab flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all cursor-pointer">1 Year</button>
         </div>
 
-        <!-- TOTAL SPEND HERO -->
-        <div class="bg-gradient-to-br from-accent-600 to-accent-500 text-white rounded-2xl p-5 shadow-sm">
-          <h4 class="text-[10px] font-bold uppercase tracking-wider text-accent-100">Personal Consumption</h4>
-          <div id="gi-total" class="text-3xl font-black font-mono mt-1">INR 0.00</div>
+        <!-- TOTAL SPEND HERO & TRENDLINE -->
+        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 border border-slate-800 text-white rounded-2xl p-5 shadow-sm overflow-hidden relative">
+          <h4 class="text-[10px] font-bold uppercase tracking-wider text-indigo-300 relative z-10">Total Consumption</h4>
+          <div id="gi-total" class="text-3xl font-black font-mono mt-1 relative z-10">INR 0.00</div>
           
-          <!-- TREND LINE CANVAS -->
-          <div class="h-16 w-full mt-4 -mb-2 relative">
+          <div class="h-20 w-full mt-4 -mb-5 -mx-2 relative z-0">
              <canvas id="gi-trend-canvas"></canvas>
           </div>
         </div>
@@ -63,13 +64,13 @@ export class GlobalInsights {
           <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">By Category</h4>
           <div class="flex items-center space-x-4">
             <div class="w-32 h-32 relative shrink-0"><canvas id="gi-pie-canvas"></canvas></div>
-            <div id="gi-category-legend" class="flex-grow space-y-2"></div>
+            <div id="gi-category-legend" class="flex-grow space-y-2 max-h-32 overflow-y-auto pr-1"></div>
           </div>
         </div>
 
         <!-- DAY OF WEEK AVERAGES -->
         <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs">
-          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Weekly Heatmap</h4>
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Weekly Velocity</h4>
           <div id="gi-day-bars" class="space-y-2"></div>
         </div>
       </div>
@@ -98,20 +99,19 @@ export class GlobalInsights {
         e.target.classList.add('bg-white', 'text-slate-800', 'dark:bg-slate-700', 'dark:text-white', 'shadow-xs');
         e.target.classList.remove('text-slate-500');
 
-        this.loadData(); // Re-fetch analytics for new date range
+        this.loadData();
       });
     });
   }
 
   renderData(data) {
-    // Render Total
     this.$total.innerText = `INR ${data.total.toFixed(2)}`;
 
-    // Render Canvas Charts
+    // Render Canvas Charts safely
     setTimeout(() => {
       CanvasCharts.drawTrendLine(this.$trendCanvas, data.trendLine);
       CanvasCharts.drawPie(this.$pieCanvas, data.categories);
-    }, 50); // Minor delay ensures DOM is sized before canvas paints
+    }, 100);
 
     // Render Category Legend
     const colors = CanvasCharts.getColors();
@@ -125,7 +125,7 @@ export class GlobalInsights {
         </div>
         <span class="font-mono text-slate-800 dark:text-slate-200">INR ${val.toFixed(0)}</span>
       </div>
-    `).join('') : '<p class="text-[10px] text-slate-400">No data</p>';
+    `).join('') : '<p class="text-[10px] text-slate-400">No category data found.</p>';
 
     // Render Day Averages Bars
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -138,9 +138,9 @@ export class GlobalInsights {
         <div class="flex items-center space-x-2 text-xs">
           <span class="w-8 font-bold text-slate-400 shrink-0">${day}</span>
           <div class="flex-grow bg-slate-100 dark:bg-slate-900 h-2.5 rounded-full overflow-hidden">
-            <div class="h-2.5 bg-amber-500 rounded-full" style="width: ${pct}%"></div>
+            <div class="h-2.5 bg-accent-500 rounded-full transition-all duration-700" style="width: ${pct}%"></div>
           </div>
-          <span class="w-12 text-right font-mono font-bold text-slate-600 dark:text-slate-300">${val.toFixed(0)}</span>
+          <span class="w-14 text-right font-mono font-bold text-slate-600 dark:text-slate-300">INR ${val.toFixed(0)}</span>
         </div>
       `;
     }).join('');

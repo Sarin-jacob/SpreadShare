@@ -5,8 +5,13 @@ export class CanvasCharts {
   }
 
   static setupCanvas(canvas) {
+    if (!canvas || !canvas.parentElement) return null;
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.parentElement.getBoundingClientRect();
+    
+    // Prevent negative rendering crashes
+    if (rect.width <= 0 || rect.height <= 0) return null;
+
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;
     canvas.style.width = `${rect.width}px`;
@@ -17,7 +22,10 @@ export class CanvasCharts {
   }
 
   static drawPie(canvas, dataObject) {
-    const { ctx, width, height } = this.setupCanvas(canvas);
+    const setup = this.setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, width, height } = setup;
+
     ctx.clearRect(0, 0, width, height);
 
     const entries = Object.entries(dataObject).sort((a, b) => b[1] - a[1]);
@@ -27,8 +35,11 @@ export class CanvasCharts {
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.min(centerX, centerY) - 10;
-    const colors = this.getColors();
+    
+    // Final crash guard
+    if (radius <= 0) return;
 
+    const colors = this.getColors();
     let startAngle = -0.5 * Math.PI;
     
     entries.forEach(([label, value], index) => {
@@ -41,16 +52,19 @@ export class CanvasCharts {
       ctx.fillStyle = colors[index % colors.length];
       ctx.fill();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff';
+      ctx.strokeStyle = document.documentElement.classList.contains('dark') ? '#1e293b' : '#ffffff';
       ctx.stroke();
       startAngle = endAngle;
     });
   }
 
   static drawTrendLine(canvas, dataArray) {
-    const { ctx, width, height } = this.setupCanvas(canvas);
+    const setup = this.setupCanvas(canvas);
+    if (!setup) return;
+    const { ctx, width, height } = setup;
+
     ctx.clearRect(0, 0, width, height);
-    if (dataArray.length === 0) return;
+    if (!dataArray || dataArray.length === 0) return;
 
     const maxVal = Math.max(...dataArray, 1);
     const padding = 10;
@@ -73,6 +87,7 @@ export class CanvasCharts {
     ctx.lineTo(width - padding, height);
     ctx.lineTo(padding, height);
     ctx.closePath();
+    
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
     gradient.addColorStop(0, 'rgba(99, 102, 241, 0.2)');
     gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
