@@ -2,9 +2,32 @@
 <html lang="en" class="dark" data-accent="indigo">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
   <title>SpreadShare Studio</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SpreadShare">
+  
+  <!-- Optional Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="/assets/icon-192.png">
+
   <link rel="stylesheet" href="/src/css/style.css">
+  
+  <!-- Register the Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('Service Worker registered!', reg))
+          .catch(err => console.error('Service Worker registration failed: ', err));
+      });
+    }
+  </script>
 </head>
 <body class="bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200 antialiased font-sans pb-24 md:pb-0">
 
@@ -20,6 +43,10 @@
           <button data-route="dashboard" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z"/></svg>
             <span>Groups Directory</span>
+          </button>
+          <button data-route="insights" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            <span>Global Insights</span>
           </button>
           <button data-route="settings" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 font-semibold text-sm text-left hover:bg-slate-200/40 cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -61,239 +88,12 @@
 
         <!-- ACTIVE SYSTEM WRAPPER -->
         <div id="main-stage" class="hidden space-y-4">
-          
-          <!-- VIEW 1: DASHBOARD DIRECTORY -->
-          <section id="view-dashboard" class="space-y-4">
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs space-y-3">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Spawn New Group Ledger</h3>
-              <div class="flex space-x-2">
-                <input type="text" id="new-group-name-input" placeholder="e.g., Shared Flat, EuroTrip 2026..." class="flex-grow bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none focus:border-accent-500">
-                <button id="create-group-btn" class="bg-accent-600 dark:bg-accent-500 text-white dark:text-slate-950 px-4 py-2.5 rounded-xl text-xs font-bold hover:opacity-95 whitespace-nowrap cursor-pointer">
-                  Create Room
-                </button>
-              </div>
-            </div>
-            <div class="space-y-2">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Your Active Group Directories</h3>
-              <div id="groups-directory-list" class="grid gap-2"></div>
-            </div>
-          </section>
-
-          <!-- VIEW 2: GROUP INTERFACE LOGS FEED -->
-          <section id="view-group-detail" class="hidden space-y-4">
-            <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3 dark:from-accent-950 dark:to-slate-900 dark:border-accent-900/40">
-              <div class="flex justify-between items-center">
-                <div>
-                  <h2 id="active-group-title" class="text-base font-black tracking-tight text-white">Loading Room...</h2>
-                  <span class="text-[9px] text-accent-400 font-mono" id="active-sheet-id">ID: None</span>
-                </div>
-                <div class="flex space-x-1.5">
-                  <button data-route="dashboard" class="bg-slate-800 text-slate-300 text-xs font-bold py-1.5 px-2.5 rounded-lg border border-slate-700 cursor-pointer">Back</button>
-                  <button data-route="add-expense" class="bg-white text-slate-950 dark:bg-accent-500 dark:text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg flex items-center space-x-1 shadow-sm cursor-pointer">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-                    <span>Log Item</span>
-                  </button>
-                </div>
-              </div>
-              <div class="grid grid-cols-2 gap-2" id="balance-summary-grid"></div>
-            </div>
-            <div class="space-y-2">
-              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Group Log Stream</h3>
-              <div class="space-y-2" id="group-ledger-feed"></div>
-            </div>
-          </section>
-
-          <!-- VIEW 3: LEDGER EXPENSE ENTRY / LARGE CALCULATOR PAD -->
-          <section id="view-add-expense" class="hidden space-y-4">
-            <div class="flex items-center space-x-2">
-              <button data-route="group-detail" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg></button>
-              <h3 class="text-sm font-bold">New Ledger Entry</h3>
-            </div>
-
-            <form id="expense-form" class="space-y-3" onsubmit="return false;">
-              <!-- Readout Screen -->
-              <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl text-right font-mono shadow-inner">
-                <span class="block text-left text-[9px] text-slate-500 uppercase font-bold tracking-wider">Arithmetic Input String</span>
-                <div id="calc-display-expression" class="text-xs text-slate-400 min-h-4 truncate">0</div>
-                <div id="calc-display-value" class="text-3xl font-black text-emerald-400 mt-1 truncate">0.00</div>
-              </div>
-
-              <!-- Content Row -->
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Description / Peer Target Email</label>
-                  <input type="text" id="exp-title" required placeholder="Dinner / user@email.com..." class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs focus:outline-none">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Transaction Type</label>
-                  <select id="exp-type" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-semibold focus:outline-none">
-                    <option value="EXPENSE_ADD">🍔 Standard Shared Expense</option>
-                    <option value="TRANSFER">💸 Cash Settlement Transfer</option>
-                    <option value="LOAN">📈 Loan Issuance Event</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- DYNAMIC LOAN SUB-OPTIONS CONFIGURATION FOOTPRINT -->
-              <div id="loan-options-container" class="hidden grid grid-cols-2 gap-2 p-3 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 rounded-2xl animate-fade-in">
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Interest Logic Model</label>
-                  <select id="loan-interest-type" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-medium focus:outline-none">
-                    <option value="SIMPLE">Simple Flat Rate</option>
-                    <option value="COMPOUND">Compound Dynamic Rate</option>
-                    <option value="NONE">0% Fixed Principal</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Annual Interest Rate (%)</label>
-                  <input type="number" id="loan-interest-rate" value="5" placeholder="e.g., 5" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs font-mono focus:outline-none">
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Category</label>
-                  <select id="exp-category" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium focus:outline-none">
-                    <option value="Food">Food & Dining</option>
-                    <option value="Utilities">Utilities & Bills</option>
-                    <option value="Travel">Transportation</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Financial">Settlements & Loans</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Split Method</label>
-                  <select id="exp-strategy" class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-medium focus:outline-none">
-                    <option value="EQUALLY">Split Equally</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- Upload Field -->
-              <div id="receipt-upload-zone" class="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-accent-500/40 rounded-2xl p-3 text-center cursor-pointer transition-colors bg-white/40 dark:bg-slate-800/20">
-                <input type="file" id="receipt-file-input" class="hidden" accept="image/*">
-                <div class="flex items-center justify-center space-x-2 text-slate-400">
-                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                  <span class="text-xs font-bold text-slate-500 dark:text-slate-300" id="receipt-zone-status">Attach Bill Image Receipt</span>
-                </div>
-              </div>
-
-              <!-- PROPER SCALED PHONE KEYBOARD PAD PANEL[cite: 3] -->
-              <div class="grid grid-cols-4 gap-2 p-2 bg-slate-100 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800/80 font-mono">
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="C">C</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="(">(</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val=")">)</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="/">/</button>
-
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="7">7</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="8">8</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="9">9</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="*">*</button>
-
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="4">4</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="5">5</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="6">6</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="-">-</button>
-
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="1">1</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="2">2</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="3">3</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-accent-500/10 text-accent-600 dark:text-accent-400 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="+">+</button>
-
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="0">0</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val=".">.</button>
-                <button type="button" class="calc-btn h-14 text-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl font-bold shadow-2xs cursor-pointer flex items-center justify-center" data-val="DEL">⌫</button>
-                <button type="submit" id="btn-submit-expense" class="bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 font-black rounded-xl text-lg cursor-pointer shadow-md flex items-center justify-center transition-all active:scale-95">OK</button>
-              </div>
-            </form>
-          </section>
-
-          <section id="view-expense-detail" class="hidden space-y-4">
-            <div class="flex items-center space-x-2">
-              <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-              </button>
-              <h3 class="text-sm font-bold">Transaction Breakdown</h3>
-            </div>
-
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-4">
-              <div class="flex justify-between items-start border-b border-slate-100 dark:border-slate-700/60 pb-3">
-                <div>
-                  <h2 id="dtl-title" class="text-base font-black text-slate-800 dark:text-slate-100">Item Label</h2>
-                  <span id="dtl-meta" class="text-[10px] text-slate-400 font-medium block mt-0.5">Category &bull; Date</span>
-                </div>
-                <div class="text-right">
-                  <div id="dtl-total" class="text-xl font-black text-slate-900 dark:text-slate-50 font-mono">INR 0.00</div>
-                  <span id="dtl-type-badge" class="inline-block mt-1 text-[8px] uppercase tracking-wider font-bold px-1.5 py-0.2 rounded bg-accent-500/10 text-accent-500">EXPENSE</span>
-                </div>
-              </div>
-
-              <!-- Itemized Member Split Allocations Grid -->
-              <div class="space-y-2">
-                <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Share Distributions</h4>
-                <div id="dtl-allocations-list" class="space-y-1.5 font-mono text-xs"></div>
-              </div>
-
-              <!-- Attached Image Receipt Frame Container -->
-              <div id="dtl-receipt-container" class="space-y-2 hidden">
-                <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Associated Bill Receipt</h4>
-                <div class="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-900/60 p-2">
-                  <img id="dtl-receipt-img" src="" alt="Attached digital file receipt asset" class="max-h-64 object-contain mx-auto rounded-lg">
-                </div>
-              </div>
-
-              <!-- Action Mutation Controls Deck -->
-              <div class="pt-2 flex space-x-2">
-                <button id="dtl-btn-edit" class="flex-grow bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer">
-                  ✏️ Edit Transaction Details
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <!-- VIEW 4: SYSTEM CONFIGURATION CONSOLE -->
-          <section id="view-settings" class="hidden space-y-4">
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-4">
-              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">Visual Customization</h4>
-              <div class="space-y-2">
-                <label class="block text-xs text-slate-400 font-semibold">Active Design Palette Accent</label>
-                <div class="flex space-x-2">
-                  <button data-select-accent="indigo" class="w-6 h-6 rounded-full bg-indigo-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                  <button data-select-accent="emerald" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                  <button data-select-accent="violet" class="w-6 h-6 rounded-full bg-violet-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                  <button data-select-accent="amber" class="w-6 h-6 rounded-full bg-amber-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                  <button data-select-accent="rose" class="w-6 h-6 rounded-full bg-rose-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                  <button data-select-accent="slate" class="w-6 h-6 rounded-full bg-slate-500 border-2 border-transparent cursor-pointer ring-offset-2 dark:ring-offset-slate-800"></button>
-                </div>
-              </div>
-              <div class="flex items-center justify-between pt-1">
-                <div>
-                  <label class="block text-xs font-bold text-slate-700 dark:text-slate-200">System Night Theme</label>
-                  <span class="text-[9px] text-slate-400 block">Toggle default dark layout frame options</span>
-                </div>
-                <button id="cfg-dark-toggle" class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1.5 px-3 rounded-lg text-xs font-bold cursor-pointer">Toggle</button>
-              </div>
-              <div class="flex items-center justify-between pt-1">
-                <div>
-                  <label class="block text-xs font-bold text-slate-700 dark:text-slate-200">Pure OLED Contrast Override</label>
-                  <span class="text-[9px] text-slate-400 block">Forces pure deep pitch blacks (#000000)</span>
-                </div>
-                <button id="cfg-oled-toggle" class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1.5 px-3 rounded-lg text-xs font-bold cursor-pointer">Enable</button>
-              </div>
-            </div>
-
-            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-2xs space-y-3">
-              <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2">Cloud Node Credentials</h4>
-              <div class="text-xs space-y-0.5">
-                <div class="text-slate-400">Authenticated Node User:</div>
-                <div class="font-mono font-bold text-slate-700 dark:text-slate-200 truncate" id="cfg-user-email">Resolving profile...</div>
-              </div>
-              <button id="sign-out-btn" class="mt-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 w-full text-xs font-bold py-2 rounded-xl transition-colors cursor-pointer">
-                Disconnect Workspace Tokens
-              </button>
-            </div>
-          </section>
-
+          <section id="view-dashboard" class="space-y-4"></section>
+          <section id="view-insights" class="hidden space-y-4"></section> <!-- ADD THIS LINE -->
+          <section id="view-group-detail" class="hidden space-y-4"></section>
+          <section id="view-add-expense" class="hidden space-y-4"></section>
+          <section id="view-expense-detail" class="hidden space-y-4"></section>
+          <section id="view-settings" class="hidden space-y-4"></section>
         </div>
       </div>
 
@@ -302,6 +102,10 @@
         <button data-route="dashboard" class="flex flex-col items-center space-y-0.5 text-accent-500 dark:text-accent-400 cursor-pointer">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m0 0l-7 7-7-7M21 12v7a2 2 0 01-2 2h-3"/></svg>
           <span class="text-[9px] font-bold">Groups</span>
+        </button>
+        <button data-route="insights" class="flex flex-col items-center space-y-0.5 text-slate-400 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <span class="text-[9px] font-medium">Insights</span>
         </button>
         <button data-route="settings" class="flex flex-col items-center space-y-0.5 text-slate-400 cursor-pointer">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>

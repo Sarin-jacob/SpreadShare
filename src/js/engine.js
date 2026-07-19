@@ -1,143 +1,150 @@
 // src/js/engine.js
+const roundMoney = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 
-/**
- * Replays the append-only ledger events to compute the active group state.
- * @param {Array} events - Raw event rows sorted by timestamp/row index
- * @returns {Object} Reconstructed state containing members, total spent, and balances
- */
-export function reconstructState(events) {
-  const state = {
-    totalSpent: 0,
-    members: {}, // Map of email -> total spent / balances
-    expenses: []
-  };
+export function optimizeDebts(membersMap) {
+  const debtors = [];
+  const creditors = [];
 
-  for (const event of events) {
-    if (event.event_type === 'EXPENSE_ADD') {
-      const payload = typeof event.payload_json === 'string' 
-        ? JSON.parse(event.payload_json) 
-        : event.payload_json;
-      
-      const parsedAmount = parseFloat(payload.evaluated_amount) || 0;
-      state.totalSpent += parsedAmount;
-      
-      const payer = event.actor_identity;
-      
-      // Initialize payer record
-      if (!state.members[payer]) {
-        state.members[payer] = { paid: 0, owes: 0, netBalance: 0 };
-      }
-      state.members[payer].paid += parsedAmount;
+  Object.entries(membersMap).forEach(([email, data]) => {
+    if (data.netBalance < -0.01) debtors.push({ email, amount: Math.abs(data.netBalance) });
+    else if (data.netBalance > 0.01) creditors.push({ email, amount: data.netBalance });
+  });
 
-      // Process allocations
-      if (payload.allocations) {
-        payload.allocations.forEach(alloc => {
-          const user = alloc.user;
-          const share = parseFloat(alloc.value) || 0;
-          
-          if (!state.members[user]) {
-            state.members[user] = { paid: 0, owes: 0, netBalance: 0 };
-          }
-          state.members[user].owes += share;
-        });
-      }
+  debtors.sort((a, b) => b.amount - a.amount);
+  creditors.sort((a, b) => b.amount - a.amount);
 
-      state.expenses.push({
-        eventId: event.event_id,
-        title: payload.title,
-        amount: parsedAmount,
-        payer: payer,
-        timestamp: event.timestamp
-      });
-    }
+  const settlements = [];
+  let i = 0, j = 0;
+
+  while (i < debtors.length && j < creditors.length) {
+    const debtor = debtors[i];
+    const creditor = creditors[j];
+    const settledAmount = Math.min(debtor.amount, creditor.amount);
+    
+    settlements.push({ from: debtor.email, to: creditor.email, amount: roundMoney(settledAmount) });
+    
+    debtor.amount = roundMoney(debtor.amount - settledAmount);
+    creditor.amount = roundMoney(creditor.amount - settledAmount);
+    
+    if (debtor.amount < 0.01) i++;
+    if (creditor.amount < 0.01) j++;
   }
-
-  // Calculate final net positions (Positive = gets money back, Negative = owes money)
-  for (const email in state.members) {
-    const member = state.members[email];
-    member.netBalance = member.paid - member.owes;
-  }
-
-  return state;
+  return settlements;
 }
 
-export function evaluateAdvancedLedgerState(events) {
-  const state = { totalSpent: 0, members: {}, expenses: [] };
+export function computeLedgerState(rawEvents) {
+  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {} };
+  const processedEventIds = new Set();
+  const deletedEventIds = new Set();
 
-  // Helper to safely initialize a user profile node in our memory balance sheet
-  const discoverMember = (email) => {
-    if (!state.members[email]) {
-      state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
+  const globalProfileCache = JSON.parse(localStorage.getItem('ss_profile_cache') || '{}');
+
+  const discoverMember = (email, name = null, picture = null) => {
+    if (!email) return;
+    if (!state.members[email]) state.members[email] = { paid: 0, owes: 0, netBalance: 0 };
+    if (!state.profiles[email]) {
+       state.profiles[email] = globalProfileCache[email] || { name: email.split('@')[0], picture: null };
+    }
+    let cacheUpdated = false;
+    if (name && state.profiles[email].name !== name) { 
+      state.profiles[email].name = name; 
+      cacheUpdated = true; 
+    }
+    if (picture && state.profiles[email].picture !== picture) { 
+      state.profiles[email].picture = picture; 
+      cacheUpdated = true; 
+    }
+
+    // Persist to global memory so it's instantly available next time
+    if (cacheUpdated) {
+       globalProfileCache[email] = state.profiles[email];
+       localStorage.setItem('ss_profile_cache', JSON.stringify(globalProfileCache));
     }
   };
 
-  // Ensure all operations are processed chronologically
-  events.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  const events = [...rawEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  
+  events.forEach(e => {
+    const id = e.eventId || e.event_id;
+    if (e.event_type === 'EXPENSE_DELETE') {
+      const payload = typeof e.payload_json === 'string' ? JSON.parse(e.payload_json) : e.payload_json;
+      deletedEventIds.add(payload.target_event_id);
+    }
+  });
 
   for (const event of events) {
+    const id = event.eventId || event.event_id;
+    if (processedEventIds.has(id) || deletedEventIds.has(id) || event.event_type === 'EXPENSE_DELETE') continue; 
+    processedEventIds.add(id);
+
     const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
     const actor = event.actor_identity;
     
-    discoverMember(actor);
+    discoverMember(actor, payload.actor_name, payload.actor_picture);
 
-    // Track explicit membership registrations
     if (event.event_type === 'MEMBER_JOINED') {
-      discoverMember(payload.member_email);
-      continue; // Move to the next log entry row
+      discoverMember(payload.member_email, payload.member_name, payload.member_picture);
+      continue;
     }
 
-    const amount = parseFloat(payload.evaluated_amount) || 0;
+    const amount = roundMoney(parseFloat(payload.evaluated_amount) || 0);
     const targetPeer = payload.target_peer_identity || "";
     if (targetPeer) discoverMember(targetPeer);
 
-    switch (event.event_type) {
-      case 'EXPENSE_ADD':
-        state.totalSpent += amount;
+    // CORE MATH CALCULATIONS
+    if (event.event_type === 'EXPENSE_ADD') {
+      state.totalSpent = roundMoney(state.totalSpent + amount);
+      
+      // Who paid?
+      if (payload.payers && payload.payers.length > 0) {
+        payload.payers.forEach(p => {
+          discoverMember(p.user);
+          state.members[p.user].paid += parseFloat(p.value) || 0;
+        });
+      } else {
         state.members[actor].paid += amount;
-        
-        if (payload.split_strategy === 'EQUALLY') {
-          // Dynamic Roster Split Calculation Rule
-          const activeRoster = Object.keys(state.members);
-          const proportionalCut = amount / activeRoster.length;
-          
-          activeRoster.forEach(memberEmail => {
-            state.members[memberEmail].owes += proportionalCut;
-          });
-        }
-        break;
+      }
 
-      case 'TRANSFER':
-        state.members[actor].paid += amount;
-        state.members[targetPeer].owes += amount;
-        break;
-
-      case 'LOAN':
-        const rate = parseFloat(payload.interest_rate) || 0;
-        const type = payload.interest_type || 'NONE';
-        const multiplier = (type === 'NONE') ? 1.0 : (1 + (rate / 100));
-        const finalCompoundValue = amount * multiplier;
-
-        state.members[actor].paid += finalCompoundValue;
-        state.members[targetPeer].owes += finalCompoundValue;
-        break;
+      // Who owes?
+      if (payload.allocations) {
+        payload.allocations.forEach(alloc => {
+          discoverMember(alloc.user);
+          state.members[alloc.user].owes += parseFloat(alloc.value) || 0;
+        });
+      }
+    } 
+    else if (event.event_type === 'TRANSFER') {
+      state.members[actor].paid += amount;
+      state.members[targetPeer].owes += amount;
+    } 
+    else if (event.event_type === 'LOAN') {
+      let totalOwed = amount;
+      if (payload.interest_type === 'SIMPLE' && payload.interest_rate > 0) {
+        totalOwed = amount + (amount * (payload.interest_rate / 100));
+      }
+      state.members[actor].paid += roundMoney(totalOwed);
+      state.members[targetPeer].owes += roundMoney(totalOwed);
     }
 
     state.expenses.push({
-      eventId: event.eventId || event.event_id,
+      eventId: id,
       title: payload.title,
       type: event.event_type,
       category: payload.category || 'General',
       amount: amount,
       payer: actor,
       target: targetPeer,
-      timestamp: event.timestamp
+      timestamp: payload.custom_timestamp || event.timestamp,
+      receiptUrl: payload.receipt_local_url || null,
+      rawPayload: payload
     });
   }
 
-  // Calculate final net positions
+  // Final Net Balance resolution
   Object.keys(state.members).forEach(m => {
-    state.members[m].netBalance = state.members[m].paid - state.members[m].owes;
+    const member = state.members[m];
+    member.netBalance = roundMoney(member.paid - member.owes);
   });
-
+  
   return state;
 }

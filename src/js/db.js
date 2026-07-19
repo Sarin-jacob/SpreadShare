@@ -1,13 +1,23 @@
-// js/db.js
+// src/js/db.js
+
 const DB_NAME = 'SpreadShareDB';
 const DB_VERSION = 1;
 
+let dbInstance = null; // Cache the database connection
+
 export function openDatabase() {
   return new Promise((resolve, reject) => {
+    if (dbInstance) {
+      return resolve(dbInstance);
+    }
+
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = (event) => {
+      dbInstance = event.target.result;
+      resolve(dbInstance);
+    };
 
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
@@ -30,13 +40,48 @@ export function openDatabase() {
   });
 }
 
-// Helper utility to write out mutation frames dynamically
 export async function writeToStore(storeName, data) {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(storeName, 'readwrite');
     const store = transaction.objectStore(storeName);
     const request = store.put(data);
+
+    transaction.oncomplete = () => resolve(true);
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+export async function getFromStore(storeName, key) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.get(key);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getAllFromStore(storeName) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteFromStore(storeName, key) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.delete(key);
 
     transaction.oncomplete = () => resolve(true);
     transaction.onerror = () => reject(transaction.error);

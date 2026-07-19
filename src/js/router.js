@@ -1,45 +1,65 @@
 // src/js/router.js
+import { store } from './store.js';
 
-const views = {
-  'dashboard': document.getElementById('view-dashboard'),
-  'group-detail': document.getElementById('view-group-detail'),
-  'add-expense': document.getElementById('view-add-expense'),
-  'expense-detail': document.getElementById('view-expense-detail'),
-  'settings': document.getElementById('view-settings')
-};
+class ApplicationRouter {
+  constructor() {
+    this.currentRoute = null;
+    // Added 'insights' to the valid routes array
+    this.validRoutes = ['dashboard', 'group-detail', 'add-expense', 'expense-detail', 'settings', 'insights'];
+  }
 
-/**
- * Single Page Application Router
- * Switches active visible containers and repaints navigation button highlights
- * @param {string} targetViewKey 
- */
-export function navigateToView(targetViewKey) {
-  if (!views[targetViewKey]) return;
-  
-  // Hide all sections, reveal the target view
-  Object.keys(views).forEach(key => views[key].classList.add('hidden'));
-  views[targetViewKey].classList.remove('hidden');
-  
-  // Manage navigation active states across desktop sidebars and mobile bottom tabs
-  document.querySelectorAll('[data-route]').forEach(btn => {
-    if (btn.getAttribute('data-route') === targetViewKey) {
-      btn.classList.add('text-accent-600', 'dark:text-accent-400', 'font-bold');
-      btn.classList.remove('text-slate-400', 'dark:text-slate-500');
-    } else {
-      btn.classList.remove('text-accent-600', 'dark:text-accent-400', 'font-bold');
-      btn.classList.add('text-slate-400', 'dark:text-slate-500');
-    }
-  });
-}
-
-export function initRouter() {
-  document.addEventListener('click', (e) => {
-    // Looks for the closest matching element up the DOM tree (handles inner SVG/span click targets)
-    const trigger = e.target.closest('[data-route]');
+  init() {
+    window.addEventListener('hashchange', () => this.handleHashChange());
     
-    if (trigger) {
-      const route = trigger.getAttribute('data-route');
-      navigateToView(route);
+    document.addEventListener('click', (e) => {
+      const trigger = e.target.closest('[data-route]');
+      if (trigger) {
+        e.preventDefault();
+        const route = trigger.getAttribute('data-route');
+        this.navigate(route);
+      }
+    });
+
+    this.handleHashChange();
+  }
+
+  navigate(route) {
+    if (this.validRoutes.includes(route)) {
+      window.location.hash = route;
     }
-  });
+  }
+
+  handleHashChange() {
+    const hash = window.location.hash.replace('#', '') || 'dashboard';
+    const targetRoute = this.validRoutes.includes(hash) ? hash : 'dashboard';
+    
+    if (this.currentRoute === targetRoute) return;
+    this.currentRoute = targetRoute;
+
+    this.updateDOM(targetRoute);
+    store.setState({ currentView: targetRoute });
+  }
+
+  updateDOM(targetRoute) {
+    document.querySelectorAll('section[id^="view-"]').forEach(section => {
+      section.classList.add('hidden');
+    });
+    
+    const activeView = document.getElementById(`view-${targetRoute}`);
+    if (activeView) {
+      activeView.classList.remove('hidden');
+    }
+
+    document.querySelectorAll('[data-route]').forEach(btn => {
+      if (btn.getAttribute('data-route') === targetRoute) {
+        btn.classList.add('text-accent-600', 'dark:text-accent-400', 'font-bold');
+        btn.classList.remove('text-slate-400', 'dark:text-slate-500');
+      } else {
+        btn.classList.remove('text-accent-600', 'dark:text-accent-400', 'font-bold');
+        btn.classList.add('text-slate-400', 'dark:text-slate-500');
+      }
+    });
+  }
 }
+
+export const AppRouter = new ApplicationRouter();
