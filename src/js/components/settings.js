@@ -107,7 +107,7 @@ export class Settings {
         <div class="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30 p-4 rounded-3xl">
           <h4 class="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">Serverless Architecture</h4>
           <p class="text-xs text-indigo-800/70 dark:text-indigo-300/70 leading-relaxed font-medium mb-3">
-            SpreadShare uses a 100% serverless PWA architecture. Your data is never routed through our servers—it goes directly from this device into your personal Google Drive and Sheets APIs.
+            SpreadShare uses a 100% serverless PWA architecture. Your data is never routed through our servers, it goes directly from this device into your personal Google Drive and Sheets APIs.
           </p>
           <p class="text-[10px] font-mono text-indigo-500 font-bold">Security Layer: Direct OAuth 2.0</p>
         </div>
