@@ -206,6 +206,19 @@ export class GroupDetail {
 
     this.$title.innerText = state.activeGroupName || 'Active Room';
     this.$id.innerText = `ID: ${state.activeGroupId}`;
+    if (this.$btnInvite) {
+      // Check roles cached during initial spreadsheet discovery metadata handshake
+      const userRole = state.activeGroupRole || 'member'; 
+      const isOwner = userRole === 'owner' || userRole === 'creator';
+      
+      if (isOwner) {
+        this.$btnInvite.classList.remove('hidden');
+        this.$btnInvite.style.display = 'flex'; // Safeguard Tailwind grid rules
+      } else {
+        this.$btnInvite.classList.add('hidden');
+        this.$btnInvite.style.display = 'none';
+      }
+    }
 
     const computedLedger = computeLedgerState(state.groupEvents);
     const userEmail = state.userProfile?.email || '';

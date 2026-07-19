@@ -23,7 +23,7 @@ export class ExpenseDetail {
 
   renderSkeleton() {
     this.container.innerHTML = `
-      <div class="space-y-4 animate-fade-in pb-8 max-w-lg mx-auto">
+      <div class="space-y-4 animate-fade-in pb-8 max-w-lg mx-auto relative">
         <div class="flex items-center space-x-2">
           <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-800 dark:hover:text-white p-2 -ml-2 rounded-full transition-colors cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
@@ -31,7 +31,6 @@ export class ExpenseDetail {
           <h3 class="text-sm font-black tracking-tight">Transaction Summary</h3>
         </div>
 
-        <!-- Hero Card -->
         <div class="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 p-5 rounded-3xl shadow-sm space-y-4 overflow-hidden relative">
           <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent-400 to-emerald-400 opacity-50"></div>
           
@@ -49,7 +48,6 @@ export class ExpenseDetail {
             </div>
           </div>
 
-          <!-- Itemized Payer/Split Grid -->
           <div class="space-y-3 pt-2">
             <div>
               <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Paid By</h4>
@@ -61,16 +59,14 @@ export class ExpenseDetail {
             </div>
           </div>
 
-          <!-- Receipt Image -->
           <div id="dtl-receipt-container" class="space-y-2 hidden pt-3 border-t border-slate-100 dark:border-slate-700/60">
-            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Attached Bill</h4>
-            <div class="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900/60 p-2">
-              <img id="dtl-receipt-img" src="" alt="Attached digital file receipt asset" class="w-full max-h-72 object-contain rounded-xl">
+            <h4 class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Attached Bill (Tap to zoom)</h4>
+            <div class="border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-900/60 p-2 cursor-zoom-in">
+              <img id="dtl-receipt-img" src="" referrerpolicy="no-referrer" alt="Attached digital file receipt asset" class="w-full max-h-72 object-contain rounded-xl">
             </div>
           </div>
         </div>
 
-        <!-- Action Controls -->
         <div class="flex space-x-2">
           <button id="dtl-btn-edit" class="flex-grow bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-accent-500 text-slate-700 dark:text-slate-200 font-bold py-3.5 rounded-2xl text-xs transition-colors cursor-pointer shadow-sm">
             ✏️ Edit Entry
@@ -78,6 +74,12 @@ export class ExpenseDetail {
           <button id="dtl-btn-delete" class="flex-grow bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 hover:bg-rose-500 hover:text-white text-rose-600 font-bold py-3.5 rounded-2xl text-xs transition-all cursor-pointer shadow-sm text-center">
             🚨 Delete
           </button>
+        </div>
+
+        <!-- FULLSCREEN IMAGE OVERLAY -->
+        <div id="dtl-fullscreen-overlay" class="fixed inset-0 z-[200] bg-slate-900/95 hidden flex flex-col items-center justify-center p-4 cursor-zoom-out backdrop-blur-md">
+           <img id="dtl-fullscreen-img" class="max-w-full max-h-full rounded-lg shadow-2xl transition-transform transform scale-95" referrerpolicy="no-referrer" src="">
+           <p class="text-white/50 text-xs mt-4 font-bold tracking-wider uppercase">Tap anywhere to close</p>
         </div>
       </div>
     `;
@@ -94,11 +96,27 @@ export class ExpenseDetail {
     this.$receiptContainer = this.container.querySelector('#dtl-receipt-container');
     this.$receiptImg = this.container.querySelector('#dtl-receipt-img');
     
+    this.$fsOverlay = this.container.querySelector('#dtl-fullscreen-overlay');
+    this.$fsImg = this.container.querySelector('#dtl-fullscreen-img');
+
     this.$btnEdit = this.container.querySelector('#dtl-btn-edit');
     this.$btnDelete = this.container.querySelector('#dtl-btn-delete');
   }
 
   attachListeners() {
+    // Zoom out overlay
+    this.$fsOverlay.addEventListener('click', () => {
+      this.$fsImg.classList.replace('scale-100', 'scale-95');
+      setTimeout(() => this.$fsOverlay.classList.add('hidden'), 150);
+    });
+
+    // Zoom in overlay
+    this.$receiptImg.addEventListener('click', () => {
+      this.$fsImg.src = this.$receiptImg.src;
+      this.$fsOverlay.classList.remove('hidden');
+      setTimeout(() => this.$fsImg.classList.replace('scale-95', 'scale-100'), 10);
+    });
+
     this.$btnDelete.addEventListener('click', async () => {
       if (!this.currentEvent) return;
       const confirmDelete = confirm("Are you sure you want to permanently delete this transaction?");
@@ -159,7 +177,6 @@ export class ExpenseDetail {
     this.$payersList.innerHTML = '';
     this.$allocationsList.innerHTML = '';
 
-    // Render Payers
     if (payload.payers && payload.payers.length > 0) {
       payload.payers.forEach(p => {
         const name = p.user === userEmail ? 'You' : (profiles[p.user]?.name || p.user.split('@')[0]);
@@ -184,7 +201,6 @@ export class ExpenseDetail {
         </div>`;
     }
 
-    // Render Allocations
     if (payload.allocations) {
       payload.allocations.forEach(alloc => {
         const name = alloc.user === userEmail ? 'You' : (profiles[alloc.user]?.name || alloc.user.split('@')[0]);

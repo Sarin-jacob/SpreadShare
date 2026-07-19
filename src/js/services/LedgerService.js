@@ -9,7 +9,11 @@ class SpreadsheetLedgerService {
   // ─── INTERNAL NETWORK ENGINE ───
 
   async _googleFetch(url, options = {}) {
-    const token = AuthService.getAccessToken();
+    // 1. SILENT REFRESH INTERCEPTOR: Guarantees token is valid before ANY request
+    const state = store.getState();
+    const activeEmail = state.userProfile?.email;
+    const token = await AuthService.ensureValidToken(activeEmail);
+    
     if (!token) throw new Error("Sync engine stalled: Invalid context session.");
 
     options.headers = {
@@ -81,7 +85,9 @@ class SpreadsheetLedgerService {
     const searchResult = await this._googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
     const payloadBlob = new Blob([JSON.stringify(groupDirectoryArray)], { type: 'application/json' });
     
-    const token = AuthService.getAccessToken();
+    const state = store.getState();
+    const token = await AuthService.ensureValidToken(state.userProfile?.email);
+
     if (searchResult.files && searchResult.files.length > 0) {
       await fetch(`https://www.googleapis.com/upload/drive/v3/files/${searchResult.files[0].id}?uploadType=media`, {
         method: 'PATCH', headers: { 'Authorization': `Bearer ${token}` }, body: payloadBlob
@@ -101,8 +107,10 @@ class SpreadsheetLedgerService {
     const searchResult = await this._googleFetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id)`);
     
     if (searchResult.files && searchResult.files.length > 0) {
+      const state = store.getState();
+      const token = await AuthService.ensureValidToken(state.userProfile?.email);
       const res = await fetch(`https://www.googleapis.com/drive/v3/files/${searchResult.files[0].id}?alt=media`, {
-        headers: { 'Authorization': `Bearer ${AuthService.getAccessToken()}` }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) return await res.json();
     }
@@ -164,24 +172,19 @@ class SpreadsheetLedgerService {
       eventId: crypto.randomUUID(),
       timestamp: payload.custom_timestamp || new Date().toISOString(),
       event_type: eventType,
-      actor_identity: trueActor, // Applies the intercepted sender
+      actor_identity: trueActor, 
       payload_json: enrichedPayload
     };
 
-    // 1. Burn into local cache immediately
     await writeToStore('group_events_cache', eventRecord);
     
-    // 2. Queue for offline sync transmission
     await writeToStore('offline_sync_queue', { 
       action: 'APPEND_ROW', 
       spreadsheetId: spreadsheetId, 
       payload: eventRecord 
     });
 
-    // 3. Update active store instantly for zero-latency UI interaction
     store.setState({ groupEvents: [...state.groupEvents, eventRecord] });
-
-    // 4. Fire background network push
     this.processOfflineQueue();
   }
 
@@ -195,12 +198,11 @@ class SpreadsheetLedgerService {
       if (queuedItem.action === 'APPEND_ROW') {
         const record = queuedItem.payload;
 
-        // ─── CRITICAL FIX: INTERCEPT BASE64 RECEIPTS AND OFFLOAD TO GOOGLE DRIVE ───
+        // ─── GOOGLE DRIVE OFFLOAD ───
         if (record.payload_json.receipt_local_url && record.payload_json.receipt_local_url.startsWith('data:image')) {
           try {
             const folderId = await this.getOrCreateRootFolder();
             
-            // 1. Create file metadata in Drive
             const meta = { 
               name: `receipt_${record.eventId}.jpg`, 
               parents: [folderId],
@@ -211,28 +213,28 @@ class SpreadsheetLedgerService {
               body: JSON.stringify(meta) 
             });
 
-            // 2. Convert base64 back to raw binary blob
             const res = await fetch(record.payload_json.receipt_local_url);
             const blob = await res.blob();
 
-            // 3. Upload the media bytes directly into the new Drive file
+            const state = store.getState();
+            const token = await AuthService.ensureValidToken(state.userProfile?.email);
+
             const uploadRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileRes.id}?uploadType=media`, {
               method: 'PATCH',
-              headers: { 'Authorization': `Bearer ${AuthService.getAccessToken()}` },
+              headers: { 'Authorization': `Bearer ${token}` },
               body: blob
             });
 
             if (!uploadRes.ok) throw new Error("Media payload rejected by Google Drive.");
 
-            // 4. Ensure group members can view the receipt link
             await this.makeFilePubliclyReadable(fileRes.id);
 
-            // 5. Swap the 2-million character Base64 string for a 50 character Drive URL
-            record.payload_json.receipt_local_url = `https://drive.google.com/uc?id=${fileRes.id}`;
+            // CHANGED: Use the Thumbnail API to completely bypass the NS_BINDING_ABORTED tracker block
+            record.payload_json.receipt_local_url = `https://drive.google.com/thumbnail?id=${fileRes.id}&sz=w1000`;
             
           } catch (err) {
-            console.error(`Failed to offload receipt to Drive for task [${queuedItem.id}] - pausing queue:`, err);
-            break; // Stop queue processing if the Drive upload fails, preventing the 50k char crash
+            console.error(`Failed to offload receipt to Drive - pausing queue:`, err);
+            break; 
           }
         }
 
@@ -246,7 +248,7 @@ class SpreadsheetLedgerService {
           await this._googleFetch(appendUrl, { method: 'POST', body: JSON.stringify(payloadData) });
           await deleteFromStore('offline_sync_queue', queuedItem.id);
         } catch (err) {
-          console.error(`Failed pushing row append task [${queuedItem.id}] - pausing queue:`, err);
+          console.error(`Failed pushing row append task - pausing queue:`, err);
           break; 
         }
       }

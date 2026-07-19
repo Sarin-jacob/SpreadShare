@@ -6,7 +6,6 @@ import { Calculator } from '../calculator.js';
 import { AppRouter } from '../router.js';
 import { CurrencyService } from '../services/CurrencyService.js';
 
-// Safe inline arithmetic parser for split boxes
 const evaluateInlineMath = (str) => {
   try {
     const clean = (str || '').replace(/[^0-9+\-*/.()]/g, '');
@@ -52,7 +51,6 @@ export class ExpenseForm {
 
     this.container.innerHTML = `
       <div class="space-y-5 animate-fade-in pb-12 max-w-lg mx-auto relative">
-        <!-- Header -->
         <div class="flex items-center justify-between">
           <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-800 dark:hover:text-white p-2 -ml-2 rounded-full transition-colors cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
@@ -61,7 +59,6 @@ export class ExpenseForm {
           <button id="cancel-edit-btn" class="hidden text-[10px] uppercase tracking-wider text-rose-500 font-bold bg-rose-500/10 px-3 py-1.5 rounded-full transition-all">Cancel Edit</button>
         </div>
 
-        <!-- Segmented Tabs -->
         <div class="flex p-1 space-x-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl shadow-inner border border-slate-200/50 dark:border-slate-700/50">
           <button data-tab="EXPENSE_ADD" class="form-tab flex-1 py-2 text-xs font-bold rounded-lg shadow-sm bg-white text-slate-800 dark:bg-slate-700 dark:text-white transition-all cursor-pointer">Expense</button>
           <button data-tab="TRANSFER" class="form-tab flex-1 py-2 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all cursor-pointer">Transfer</button>
@@ -69,11 +66,8 @@ export class ExpenseForm {
         </div>
 
         <form id="comp-expense-form" class="space-y-4" onsubmit="return false;">
-          
-          <!-- HYBRID CALCULATOR DISPLAY (Clickable on Mobile) -->
           <div id="calc-display-zone" class="relative bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl shadow-sm focus-within:border-accent-500 focus-within:ring-4 focus-within:ring-accent-500/20 transition-all group overflow-hidden cursor-pointer md:cursor-default">
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent-400 to-emerald-400 opacity-50"></div>
-            
             <div class="flex justify-between items-start mb-2">
               <span class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Amount</span>
               <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 cursor-pointer hover:bg-slate-200 transition-colors pointer-events-auto">
@@ -87,13 +81,11 @@ export class ExpenseForm {
                 <svg class="w-3 h-3 text-accent-500/50" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
               </div>
             </div>
-
             <div class="text-right">
               <div id="calc-display-expression" class="text-xs text-slate-400 min-h-[1rem] truncate font-mono">0</div>
               <div id="calc-display-value" class="text-4xl font-black text-slate-800 dark:text-white mt-1 truncate tracking-tight">0.00</div>
               <div id="calc-converted-value" class="text-[10px] text-emerald-500 font-bold hidden mt-1">≈ 0.00 INR</div>
             </div>
-            
             <p class="hidden md:block text-[9px] text-slate-400 text-center mt-3 font-medium">✨ Type numbers directly on your keyboard</p>
             <p class="md:hidden text-[9px] text-accent-500 text-center mt-3 font-bold uppercase tracking-wider animate-pulse">Tap to open Calculator</p>
           </div>
@@ -162,7 +154,7 @@ export class ExpenseForm {
               <div id="comp-live-calculation-preview" class="grid grid-cols-2 gap-2 text-[11px]"></div>
             </div>
 
-            <div id="receipt-upload-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-accent-500 dark:hover:border-accent-500 rounded-2xl p-4 text-center cursor-pointer bg-white/40 dark:bg-slate-900/40 transition-colors group">
+            <div id="receipt-upload-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-accent-500 rounded-2xl p-4 text-center cursor-pointer bg-white/40 dark:bg-slate-900/40 transition-colors group">
               <input type="file" id="receipt-file-input" class="hidden" accept="image/*">
               <div class="flex flex-col items-center justify-center space-y-1 text-slate-400 group-hover:text-accent-500 transition-colors">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -175,14 +167,14 @@ export class ExpenseForm {
           <div id="section-transfer" class="space-y-4 hidden animate-fade-in">
             <div class="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-700/30 p-4 rounded-2xl space-y-4 relative">
               <div>
-                <label class="block text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1.5 ml-1">Sender (Who Paid)</label>
+                <label class="block text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1.5 ml-1">Sender</label>
                 <select id="transfer-sender" class="w-full roster-dropdown bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700/50 rounded-xl p-3 text-sm font-semibold focus:outline-none"></select>
               </div>
-              <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 bg-amber-100 dark:bg-amber-900 p-2 rounded-full border border-amber-200 dark:border-amber-700 text-amber-500 shadow-sm mt-1">
+              <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 bg-amber-100 dark:bg-amber-900 p-2 rounded-full border border-amber-200 text-amber-500 shadow-sm mt-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
               </div>
               <div>
-                <label class="block text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1.5 ml-1">Receiver (Who got it)</label>
+                <label class="block text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1.5 ml-1">Receiver</label>
                 <select id="transfer-receiver" class="w-full roster-dropdown bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-700/50 rounded-xl p-3 text-sm font-semibold focus:outline-none"></select>
               </div>
             </div>
@@ -201,20 +193,6 @@ export class ExpenseForm {
                   <select id="loan-borrower" class="w-full roster-dropdown bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-700/50 rounded-xl p-2.5 text-xs font-semibold focus:outline-none"></select>
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-violet-200 dark:border-violet-700/30">
-                <div>
-                  <label class="block text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1.5 ml-1">Interest Type</label>
-                  <select id="loan-interest-type" class="w-full bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-700/50 rounded-xl p-2.5 text-xs font-medium focus:outline-none">
-                    <option value="SIMPLE">Simple Flat Rate</option>
-                    <option value="COMPOUND">Compound Dynamic</option>
-                    <option value="NONE" selected>0% Fixed Principal</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-1.5 ml-1">Rate (%)</label>
-                  <input type="number" id="loan-interest-rate" value="0" placeholder="e.g. 5" class="w-full bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-700/50 rounded-xl p-2.5 text-xs font-mono focus:outline-none">
-                </div>
-              </div>
             </div>
           </div>
 
@@ -229,14 +207,20 @@ export class ExpenseForm {
           <div class="bg-slate-100 dark:bg-slate-900 rounded-t-3xl p-5 pb-8 shadow-2xl transform transition-transform border-t border-slate-200 dark:border-slate-800">
             <div class="flex justify-between items-center mb-4">
               <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Amount Input</span>
-              <button type="button" id="close-calc-modal" class="bg-accent-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all">Done</button>
+            </div>
+
+            <!-- Modal Display Screen -->
+            <div class="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl mb-4 text-right shadow-inner">
+               <div id="modal-calc-expression" class="text-xs text-slate-400 font-mono min-h-[1rem] truncate">0</div>
+               <div id="modal-calc-value" class="text-4xl font-black text-slate-800 dark:text-white mt-1 tracking-tight truncate">0.00</div>
             </div>
             
             <div class="grid grid-cols-4 gap-2">
               ${['C', '(', ')', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '0', '.', 'DEL'].map(char => `
                 <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl font-bold shadow-sm active:scale-95 transition-all border border-slate-200 dark:border-slate-700" data-val="${char}">${char}</button>
               `).join('')}
-              <button type="button" id="comp-btn-submit-mobile" class="bg-accent-600 text-white font-black rounded-2xl text-lg active:scale-95 transition-all shadow-md flex items-center justify-center">
+              <!-- TICK BUTTON NOW CLOSES MODAL INSTEAD OF SUBMITTING -->
+              <button type="button" id="mobile-calc-done" class="bg-accent-600 text-white font-black rounded-2xl text-lg active:scale-95 transition-all shadow-md flex items-center justify-center">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
               </button>
             </div>
@@ -261,9 +245,12 @@ export class ExpenseForm {
     this.$currency = this.container.querySelector('#comp-currency');
     this.$convertedValue = this.container.querySelector('#calc-converted-value');
     this.$displayZone = this.container.querySelector('#calc-display-zone');
+    
+    // Modal Elements
     this.$calcModal = this.container.querySelector('#mobile-calc-modal');
-    this.$closeCalcModal = this.container.querySelector('#close-calc-modal');
-    this.$mobileSubmit = this.container.querySelector('#comp-btn-submit-mobile');
+    this.$mobileCalcDone = this.container.querySelector('#mobile-calc-done');
+    this.$modalCalcExpr = this.container.querySelector('#modal-calc-expression');
+    this.$modalCalcVal = this.container.querySelector('#modal-calc-value');
 
     this.$payerMode = this.container.querySelector('#comp-payer-mode');
     this.$singleSlot = this.container.querySelector('#comp-payer-single-slot');
@@ -284,8 +271,6 @@ export class ExpenseForm {
     this.$transferReceiver = this.container.querySelector('#transfer-receiver');
     this.$loanLender = this.container.querySelector('#loan-lender');
     this.$loanBorrower = this.container.querySelector('#loan-borrower');
-    this.$loanInterestType = this.container.querySelector('#loan-interest-type');
-    this.$loanInterestRate = this.container.querySelector('#loan-interest-rate');
 
     this.calculator = new Calculator(this.container, () => this.calculateLiveOutputPreview());
   }
@@ -340,7 +325,7 @@ export class ExpenseForm {
   }
 
   attachListeners() {
-    // Modal logic
+    // ─── Modal Trigger Logic ───
     this.$displayZone.addEventListener('click', (e) => {
       if(e.target.closest('#comp-currency')) return;
       if (window.innerWidth < 768) {
@@ -348,13 +333,9 @@ export class ExpenseForm {
       }
     });
 
-    this.$closeCalcModal.addEventListener('click', () => {
+    // Modal Tick Button now just CLOSES the calculator
+    this.$mobileCalcDone.addEventListener('click', () => {
       this.$calcModal.classList.add('hidden');
-    });
-
-    this.$mobileSubmit.addEventListener('click', () => {
-      this.$calcModal.classList.add('hidden');
-      this.handleSubmit();
     });
 
     this.$tabButtons.forEach(btn => {
@@ -407,16 +388,39 @@ export class ExpenseForm {
     }, true);
 
     this.$uploadZone.addEventListener('click', () => this.$fileInput.click());
+    
+    // ─── IMAGE COMPRESSION ENGINE ───
     this.$fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      this.$zoneStatus.innerText = "Converting...";
+      this.$zoneStatus.innerText = "Compressing...";
+      
       const reader = new FileReader();
       reader.onload = (event) => {
-        this.receiptBase64 = event.target.result;
-        this.$zoneStatus.innerText = `✓ ${file.name.slice(0, 15)}...`;
-        this.$zoneStatus.classList.add('text-accent-500');
-        this.$uploadZone.classList.add('border-accent-500', 'bg-accent-50');
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_WIDTH = 800; // Force downscale to fix Sheets 50k char limit
+          
+          if (width > MAX_WIDTH) {
+            height = Math.round(height * (MAX_WIDTH / width));
+            width = MAX_WIDTH;
+          }
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Export as highly compressed WebP (fixes vanishing images!)
+          this.receiptBase64 = canvas.toDataURL('image/webp', 0.6); 
+          this.$zoneStatus.innerText = `✓ Receipt Attached`;
+          this.$zoneStatus.classList.add('text-accent-500');
+          this.$uploadZone.classList.add('border-accent-500', 'bg-accent-50');
+        };
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     });
@@ -462,6 +466,10 @@ export class ExpenseForm {
     const baseAmount = this.calculator.total || 0;
     const normalizedTotal = baseAmount * this.exchangeMultiplier;
     
+    // Update Modal Display internally to mirror main display
+    if(this.$modalCalcExpr) this.$modalCalcExpr.innerText = this.calculator.expression || '0';
+    if(this.$modalCalcVal) this.$modalCalcVal.innerText = baseAmount.toFixed(2);
+
     if (this.exchangeMultiplier !== 1.0) {
       this.$convertedValue.innerText = `≈ ${normalizedTotal.toFixed(2)} INR`;
     }
@@ -495,7 +503,6 @@ export class ExpenseForm {
         let autoFilledMember = null;
         let remainder = 0;
         
-        // N-1 PLACEHOLDER MAGIC
         if (untouchedInputs.length === 1 && runningSum <= normalizedTotal) {
           remainder = normalizedTotal - runningSum;
           untouchedInputs[0].placeholder = `Auto: ${remainder.toFixed(2)}`;
@@ -590,8 +597,6 @@ export class ExpenseForm {
       payload.category = "Financial";
       payload.override_actor_identity = this.$loanLender.value;
       payload.target_peer_identity = this.$loanBorrower.value;
-      payload.interest_type = this.$loanInterestType.value;
-      payload.interest_rate = parseFloat(this.$loanInterestRate.value) || 0;
     }
 
     try {
@@ -644,14 +649,6 @@ export class ExpenseForm {
           }
           
           this.renderItemizedInputs();
-        } else if (this.activeTab === 'TRANSFER') {
-          this.$transferSender.value = eventNode.actor_identity;
-          this.$transferReceiver.value = payload.target_peer_identity;
-        } else if (this.activeTab === 'LOAN') {
-          this.$loanLender.value = eventNode.actor_identity;
-          this.$loanBorrower.value = payload.target_peer_identity;
-          this.$loanInterestType.value = payload.interest_type || 'NONE';
-          this.$loanInterestRate.value = payload.interest_rate || 0;
         }
       }, 50);
   }
