@@ -4,14 +4,14 @@ import { computeLedgerState, optimizeDebts } from '../engine.js';
 import { LedgerService } from '../services/LedgerService.js';
 import { AppRouter } from '../router.js';
 import { InsightsService } from '../services/InsightsService.js';
-import { CanvasCharts } from '../utils/charts.js'
+import { CanvasCharts } from '../utils/charts.js';
 
 export class GroupDetail {
   constructor(containerElement) {
     this.container = containerElement;
     this.activeTab = 'feed'; // 'feed' | 'insights'
+    this.insightScope = 'group'; // 'group' | 'you'
     
-    // Subscribe to global state changes
     this.unsubscribe = store.subscribe((state) => this.onStateChange(state));
     
     this.renderSkeleton();
@@ -74,6 +74,18 @@ export class GroupDetail {
             <button id="btn-scope-you" class="flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 transition-all">Your Share</button>
           </div>
 
+          <!-- Total & Your Share Cards -->
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl shadow-2xs">
+              <span class="block text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Group Spend</span>
+              <span id="gd-insight-total" class="block text-lg font-black text-slate-700 dark:text-slate-200 mt-1 font-mono">0.00</span>
+            </div>
+            <div class="bg-accent-50 dark:bg-accent-900/20 border border-accent-100 dark:border-accent-800/40 p-3.5 rounded-xl shadow-2xs">
+              <span class="block text-[9px] text-accent-500 uppercase font-bold tracking-wider">Your Personal Share</span>
+              <span id="gd-insight-yours" class="block text-lg font-black text-accent-700 dark:text-accent-400 mt-1 font-mono">0.00</span>
+            </div>
+          </div>
+
           <!-- Pie Chart Breakdown -->
           <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-2xs">
             <h4 id="gd-insight-title" class="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700 pb-2 mb-3">Group Category Spend</h4>
@@ -82,6 +94,8 @@ export class GroupDetail {
               <div id="gd-category-legend" class="flex-grow space-y-2"></div>
             </div>
           </div>
+
+          <!-- Settle Up Plan -->
           <div class="bg-amber-500/5 border border-amber-500/20 p-4 rounded-2xl shadow-2xs mt-4">
             <h4 class="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-wider border-b border-amber-500/20 pb-2 mb-3">Suggested Settle Up Plan</h4>
             <div id="gd-insight-settlements" class="space-y-2"></div>
@@ -98,18 +112,15 @@ export class GroupDetail {
     this.$balancesGrid = this.container.querySelector('#gd-balances-grid');
     this.$rosterTags = this.container.querySelector('#gd-roster-tags');
     
-    // Tabs & Views
     this.$tabFeedBtn = this.container.querySelector('#gd-tab-feed');
     this.$tabInsightsBtn = this.container.querySelector('#gd-tab-insights');
     this.$viewFeed = this.container.querySelector('#gd-view-feed');
     this.$viewInsights = this.container.querySelector('#gd-view-insights');
     
-    // Feed Elements
     this.$ledgerFeed = this.container.querySelector('#gd-ledger-feed');
     this.$btnInvite = this.container.querySelector('#gd-btn-invite');
     this.$inviteText = this.container.querySelector('#gd-invite-text');
 
-    // Insight Elements
     this.$insightTotal = this.container.querySelector('#gd-insight-total');
     this.$insightYours = this.container.querySelector('#gd-insight-yours');
     this.$insightCategories = this.container.querySelector('#gd-insight-categories');
@@ -119,15 +130,12 @@ export class GroupDetail {
     this.$pieCanvas = this.container.querySelector('#gd-pie-canvas');
     this.$categoryLegend = this.container.querySelector('#gd-category-legend');
     this.$insightTitle = this.container.querySelector('#gd-insight-title');
-    this.insightScope = 'group';
   }
 
   attachListeners() {
     // 1. Tab Navigation
     const switchTab = (target) => {
       this.activeTab = target;
-      
-      // Update Button Styles
       const activeClass = ['border-accent-500', 'text-accent-600', 'dark:text-accent-400'];
       const inactiveClass = ['border-transparent', 'text-slate-400'];
       
@@ -136,7 +144,6 @@ export class GroupDetail {
         this.$tabFeedBtn.classList.remove(...inactiveClass);
         this.$tabInsightsBtn.classList.add(...inactiveClass);
         this.$tabInsightsBtn.classList.remove(...activeClass);
-        
         this.$viewFeed.classList.remove('hidden');
         this.$viewInsights.classList.add('hidden');
       } else {
@@ -144,7 +151,6 @@ export class GroupDetail {
         this.$tabInsightsBtn.classList.remove(...inactiveClass);
         this.$tabFeedBtn.classList.add(...inactiveClass);
         this.$tabFeedBtn.classList.remove(...activeClass);
-        
         this.$viewInsights.classList.remove('hidden');
         this.$viewFeed.classList.add('hidden');
       }
@@ -153,6 +159,7 @@ export class GroupDetail {
     this.$tabFeedBtn.addEventListener('click', () => switchTab('feed'));
     this.$tabInsightsBtn.addEventListener('click', () => switchTab('insights'));
 
+    // 2. Scope Toggle
     const setScope = (scope) => {
       this.insightScope = scope;
       if (scope === 'group') {
@@ -168,46 +175,38 @@ export class GroupDetail {
         this.$btnScopeGroup.classList.add('text-slate-500');
         this.$insightTitle.innerText = "Your Personal Share";
       }
-      this.updateUI(store.getState()); // Re-render charts
+      this.updateUI(store.getState()); 
     };
 
     this.$btnScopeGroup.addEventListener('click', () => setScope('group'));
     this.$btnScopeYou.addEventListener('click', () => setScope('you'));
 
-    // 2. Invite Link Generation
+    // 3. Invite Generation
     this.$btnInvite.addEventListener('click', async () => {
       const state = store.getState();
       if (!state.activeGroupId) return;
-
       try {
         this.$inviteText.innerText = "Sharing...";
         this.$btnInvite.disabled = true;
-
         await LedgerService.enableLedgerPublicLinkSharing(state.activeGroupId);
         const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${state.activeGroupId}&name=${encodeURIComponent(state.activeGroupName)}`;
-        
         await navigator.clipboard.writeText(inviteUrl);
         this.$inviteText.innerText = "Copied!";
       } catch (err) {
         alert(`Invite generation failed: ${err.message}`);
         this.$inviteText.innerText = "Error";
       } finally {
-        setTimeout(() => { 
-          this.$inviteText.innerText = "Invite"; 
-          this.$btnInvite.disabled = false;
-        }, 2000);
+        setTimeout(() => { this.$inviteText.innerText = "Invite"; this.$btnInvite.disabled = false; }, 2000);
       }
     });
 
-    // 3. Feed Item Click Delegation
+    // 4. Feed Click Delegation
     this.$ledgerFeed.addEventListener('click', (e) => {
       const itemRow = e.target.closest('[data-event-id]');
       if (!itemRow) return;
-
       const eventId = itemRow.getAttribute('data-event-id');
       const state = store.getState();
       const selectedEvent = state.groupEvents.find(ev => (ev.eventId || ev.event_id) === eventId);
-      
       if (selectedEvent) {
         store.setState({ selectedExpenseDetails: selectedEvent });
         AppRouter.navigate('expense-detail');
@@ -221,7 +220,7 @@ export class GroupDetail {
       return `<img src="${p.picture}" alt="${p.name}" class="${sizeClass} rounded-full border-2 border-white dark:border-slate-800 object-cover shadow-sm">`;
     }
     const initial = p && p.name ? p.name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase();
-    return `<div class="${sizeClass} rounded-full bg-gradient-to-br from-accent-500 to-accent-600 border-2 border-white dark:border-slate-800 flex items-center justify-center text-white font-bold text-xs shadow-sm">${initial}</div>`;
+    return `<div class="${sizeClass} rounded-full bg-gradient-to-br from-accent-500 to-accent-600 border-2 border-white dark:border-slate-800 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">${initial}</div>`;
   }
 
   updateUI(state) {
@@ -233,138 +232,120 @@ export class GroupDetail {
     const computedLedger = computeLedgerState(state.groupEvents);
     const userEmail = state.userProfile?.email || '';
 
-    // 1. Render Balances Grid
-    this.$balancesGrid.innerHTML = '';
-    Object.keys(computedLedger.members).forEach(member => {
+    // 1. Render Enhanced Avatar Balances Grid
+    this.$balancesGrid.innerHTML = Object.keys(computedLedger.members).map(member => {
       const data = computedLedger.members[member];
+      const profile = computedLedger.profiles[member];
+      const name = member === userEmail ? 'You' : (profile?.name || member.split('@')[0]);
       const isPositive = data.netBalance >= 0;
       const textColor = isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
       
-      this.$balancesGrid.innerHTML += `
-        <div class="p-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 rounded-xl flex flex-col justify-between">
-          <span class="text-[10px] text-slate-400 font-medium truncate">${member === userEmail ? 'You' : member}</span>
-          <span class="text-sm font-black tracking-tight ${textColor} mt-1">${isPositive ? '+' : ''}${data.netBalance.toFixed(2)}</span>
+      return `
+        <div class="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 rounded-xl flex justify-between items-center shadow-2xs">
+          <div class="flex items-center space-x-2 truncate pr-2">
+            ${this.getAvatar(member, computedLedger.profiles, "w-6 h-6 shrink-0")}
+            <span class="text-[10px] text-slate-600 dark:text-slate-300 font-medium truncate">${name}</span>
+          </div>
+          <span class="text-xs font-black tracking-tight ${textColor} shrink-0">${isPositive ? '+' : ''}${data.netBalance.toFixed(2)}</span>
         </div>`;
-    });
+    }).join('');
 
-    // 2. Render Roster Tags
-    this.$rosterTags.innerHTML = '';
-    Object.keys(computedLedger.members).forEach(memberEmail => {
-      this.$rosterTags.innerHTML += `
-        <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-mono text-[10px] px-2.5 py-1 rounded-md max-w-[160px] truncate">
-          👤 ${memberEmail === userEmail ? 'You' : memberEmail.split('@')[0]}
+    // 2. Render Avatar Roster Tags
+    this.$rosterTags.innerHTML = Object.keys(computedLedger.members).map(memberEmail => {
+      const profile = computedLedger.profiles[memberEmail];
+      const name = memberEmail === userEmail ? 'You' : (profile?.name || memberEmail.split('@')[0]);
+      return `
+        <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium text-[10px] px-2 py-1 rounded-md max-w-[160px] truncate flex items-center space-x-1.5 shadow-2xs">
+          ${this.getAvatar(memberEmail, computedLedger.profiles, "w-3.5 h-3.5 border border-white dark:border-slate-700")}
+          <span>${name}</span>
         </span>`;
-    });
+    }).join('');
 
-    // 3. Render Transaction Feed
+    // 3. Render Rich Ledger Feed
     if (computedLedger.expenses.length === 0) {
       this.$ledgerFeed.innerHTML = `<div class="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4 w-full"><p class="text-xs text-slate-400">No transactions recorded yet.</p></div>`;
-      this.renderInsights([], userEmail,computedLedger.members, computedLedger.profiles);
-      return;
-    }
+    } else {
+      this.$ledgerFeed.innerHTML = [...computedLedger.expenses].reverse().map(expense => {
+        const payload = expense.rawPayload;
+        let badgeColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
+        let contextPersonalDebtString = "";
+        
+        // Payer Name Resolution
+        const payerProfile = computedLedger.profiles[expense.payer];
+        const payerName = expense.payer === userEmail ? 'You' : (payerProfile?.name || expense.payer.split('@')[0]);
 
-    this.$ledgerFeed.innerHTML = '';
-    [...computedLedger.expenses].reverse().forEach(expense => {
-      const payload = expense.rawPayload;
-      let badgeColor = "bg-slate-100 dark:bg-slate-900 text-slate-500";
-      let contextPersonalDebtString = "";
+        if (expense.type === 'EXPENSE_ADD') {
+          const allAllocations = payload.allocations || [];
+          const userShareMeta = allAllocations.find(a => a.user === userEmail);
+          const userOwesAmount = userShareMeta ? parseFloat(userShareMeta.value) || 0 : 0;
 
-      if (expense.type === 'EXPENSE_ADD') {
-        const allAllocations = payload.allocations || [];
-        const userShareMeta = allAllocations.find(a => a.user === userEmail);
-        const userOwesAmount = userShareMeta ? parseFloat(userShareMeta.value) || 0 : 0;
-
-        if (expense.payer === userEmail) {
-          const totalOwedToMe = expense.amount - userOwesAmount;
-          contextPersonalDebtString = totalOwedToMe > 0 
-            ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold">You are owed INR ${totalOwedToMe.toFixed(2)}</span>`
-            : `<span class="text-slate-400">You covered your exact share</span>`;
-        } else {
-          contextPersonalDebtString = userOwesAmount > 0
-            ? `<span class="text-rose-600 dark:text-rose-400 font-bold">You owe INR ${userOwesAmount.toFixed(2)}</span>`
-            : `<span class="text-slate-400">You aren't in this split</span>`;
+          if (expense.payer === userEmail) {
+            const totalOwedToMe = expense.amount - userOwesAmount;
+            contextPersonalDebtString = totalOwedToMe > 0 
+              ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold">You are owed INR ${totalOwedToMe.toFixed(2)}</span>`
+              : `<span class="text-slate-400">You covered your exact share</span>`;
+          } else {
+            contextPersonalDebtString = userOwesAmount > 0
+              ? `<span class="text-rose-600 dark:text-rose-400 font-bold">You owe INR ${userOwesAmount.toFixed(2)}</span>`
+              : `<span class="text-slate-400">You aren't in this split</span>`;
+          }
+        } else if (expense.type === 'TRANSFER') {
+          badgeColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+          if (expense.payer === userEmail) contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Sent payment</span>`;
+          else if (expense.target === userEmail) contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Received payment</span>`;
+          else contextPersonalDebtString = `<span class="text-slate-400">Peer settlement</span>`;
+        } else if (expense.type === 'LOAN') {
+          badgeColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
+          if (expense.payer === userEmail) contextPersonalDebtString = `<span class="text-emerald-600 font-bold">Lent asset</span>`;
+          else if (expense.target === userEmail) contextPersonalDebtString = `<span class="text-rose-600 font-bold">Borrowed asset</span>`;
+          else contextPersonalDebtString = `<span class="text-slate-400">Peer loan</span>`;
         }
-      } else if (expense.type === 'TRANSFER') {
-        badgeColor = "bg-amber-500/10 text-amber-500 border border-amber-500/20";
-        if (expense.payer === userEmail) contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Sent payment</span>`;
-        else if (expense.target === userEmail) contextPersonalDebtString = `<span class="text-emerald-500 font-semibold">Received payment</span>`;
-        else contextPersonalDebtString = `<span class="text-slate-400">Peer settlement</span>`;
-      } else if (expense.type === 'LOAN') {
-        badgeColor = "bg-violet-500/10 text-violet-500 border border-violet-500/20";
-        if (expense.payer === userEmail) contextPersonalDebtString = `<span class="text-emerald-600 font-bold">Lent asset</span>`;
-        else if (expense.target === userEmail) contextPersonalDebtString = `<span class="text-rose-600 font-bold">Borrowed asset</span>`;
-        else contextPersonalDebtString = `<span class="text-slate-400">Peer loan</span>`;
-      }
 
-      this.$ledgerFeed.innerHTML += `
-        <div data-event-id="${expense.eventId}" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex justify-between items-center text-xs shadow-2xs cursor-pointer hover:border-accent-500/30 transition-colors">
-          <div class="space-y-1 max-w-[65%]">
-            <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${expense.title}</div>
-            <div class="text-[10px] block font-medium">${contextPersonalDebtString}</div>
-            <div class="flex items-center space-x-1.5 text-[9px] text-slate-400 pt-0.5">
-              <span class="px-1.5 py-0.2 rounded font-bold text-[8px] uppercase tracking-wide ${badgeColor}">${expense.category || 'General'}</span>
-              <span>&bull;</span>
-              <span class="truncate">By: ${expense.payer === userEmail ? 'You' : expense.payer.split('@')[0]}</span>
+        return `
+          <div data-event-id="${expense.eventId}" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-800 p-3.5 rounded-xl flex justify-between items-center text-xs shadow-2xs cursor-pointer hover:border-accent-500/30 transition-colors">
+            <div class="space-y-1 max-w-[65%]">
+              <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${expense.title}</div>
+              <div class="text-[10px] block font-medium">${contextPersonalDebtString}</div>
+              <div class="flex items-center space-x-1.5 text-[9px] text-slate-400 pt-0.5">
+                <span class="px-1.5 py-0.2 rounded font-bold text-[8px] uppercase tracking-wide ${badgeColor}">${expense.category || 'General'}</span>
+                <span>&bull;</span>
+                <span class="truncate flex items-center space-x-1">
+                  <span>By ${payerName}</span>
+                </span>
+              </div>
             </div>
-          </div>
-          <div class="text-right space-y-0.5 font-mono shrink-0">
-            <div class="font-black text-slate-900 dark:text-slate-100">INR ${expense.amount.toFixed(2)}</div>
-            <div class="text-[9px] text-slate-400">${new Date(expense.timestamp).toLocaleDateString()}</div>
-          </div>
-        </div>`;
-    });
+            <div class="text-right space-y-0.5 font-mono shrink-0">
+              <div class="font-black text-slate-900 dark:text-slate-100">INR ${expense.amount.toFixed(2)}</div>
+              <div class="text-[9px] text-slate-400">${new Date(expense.timestamp).toLocaleDateString()}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
 
     // 4. Render Group Insights Math
     this.renderInsights(computedLedger.expenses, userEmail, computedLedger.members, computedLedger.profiles);
   }
 
   renderInsights(expenses, userEmail, membersMap, profiles) {
+    if (!this.$insightSettlements || !this.$insightTotal) return;
+
     let totalGroupSpend = 0;
     let totalUserShare = 0;
-    let categories = {};
-
+    
     expenses.forEach(exp => {
-      // We only analyze pure expenses, not balance transfers or loans
       if (exp.type === 'EXPENSE_ADD') {
         totalGroupSpend += exp.amount;
-        
-        const cat = exp.category || 'General';
-        categories[cat] = (categories[cat] || 0) + exp.amount;
-
         const allAllocations = exp.rawPayload.allocations || [];
         const userAlloc = allAllocations.find(a => a.user === userEmail);
-        if (userAlloc) {
-          totalUserShare += (parseFloat(userAlloc.value) || 0);
-        }
+        if (userAlloc) totalUserShare += (parseFloat(userAlloc.value) || 0);
       }
     });
 
-    // this.$insightTotal.innerText = totalGroupSpend.toFixed(2);
-    // this.$insightYours.innerText = totalUserShare.toFixed(2);
+    this.$insightTotal.innerText = totalGroupSpend.toFixed(2);
+    this.$insightYours.innerText = totalUserShare.toFixed(2);
 
-    const sortedCategories = Object.entries(categories).sort((a, b) => b[1] - a[1]);
-    const maxVal = sortedCategories.length > 0 ? sortedCategories[0][1] : 0;
-
-    // this.$insightCategories.innerHTML = sortedCategories.length > 0
-    //   ? sortedCategories.map(([cat, val]) => {
-    //       const percentage = maxVal > 0 ? (val / maxVal) * 100 : 0;
-    //       return `
-    //         <div class="space-y-1">
-    //           <div class="flex justify-between text-xs font-medium">
-    //             <span class="text-slate-600 dark:text-slate-300 truncate pr-2">${cat}</span>
-    //             <span class="font-mono text-slate-800 dark:text-slate-100">INR ${val.toFixed(2)}</span>
-    //           </div>
-    //           <div class="w-full bg-slate-100 dark:bg-slate-900 rounded-full h-1.5 overflow-hidden">
-    //             <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-700" style="width: ${percentage}%"></div>
-    //           </div>
-    //         </div>`;
-    //     }).join('')
-    //   : '<p class="text-[10px] text-slate-400 text-center py-2">No category data available yet.</p>';
-
-    // Render Optimized Debt Settlements
-   const simplifiedDebts = optimizeDebts(membersMap);
+    const simplifiedDebts = optimizeDebts(membersMap);
     
-    // Render the beautiful Avatar-based Settlement Cards
     if (simplifiedDebts.length === 0) {
       this.$insightSettlements.innerHTML = `<p class="text-[10px] text-emerald-600 dark:text-emerald-500 text-center py-3 font-bold bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">✨ Everyone is perfectly settled up!</p>`;
     } else {
@@ -394,7 +375,7 @@ export class GroupDetail {
     }
 
     const targetEmail = this.insightScope === 'you' ? userEmail : null;
-    const analytics = InsightsService.processAnalytics(expenses, targetEmail, 365); // Default to 1 year inside the group view
+    const analytics = InsightsService.processAnalytics(expenses, targetEmail, 365);
     
     setTimeout(() => CanvasCharts.drawPie(this.$pieCanvas, analytics.categories), 50);
 
@@ -410,7 +391,6 @@ export class GroupDetail {
         <span class="font-mono text-slate-800 dark:text-slate-200">INR ${val.toFixed(0)}</span>
       </div>
     `).join('') : '<p class="text-[10px] text-slate-400">No data</p>';
-
   }
 
   destroy() {
