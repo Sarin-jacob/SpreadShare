@@ -4,25 +4,17 @@ import { getAllFromStore } from '../db.js';
 const roundMoney = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 
 class GlobalInsightsService {
-  
-  /**
-   * Processes a raw array of events based on time and user constraints
-   * @param {Array} events - The ledger events
-   * @param {string|null} targetEmail - If set, only calculates this user's specific share. If null, calculates total group size.
-   * @param {number} days - Time window in days (e.g., 7, 30, 365)
-   */
   processAnalytics(events, targetEmail = null, days = 30) {
     const data = {
       total: 0,
       categories: {},
       dayOfWeek: { 'Sun': 0, 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0 },
-      trendLine: [] // Array of chronological totals for line charts
+      trendLine: []
     };
 
     const now = new Date();
     const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     
-    // Group events chronologically by date string for trendlines
     const dateBuckets = {};
     for (let i = 0; i < days; i++) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -47,16 +39,13 @@ class GlobalInsightsService {
       const payload = typeof event.payload_json === 'string' ? JSON.parse(event.payload_json) : event.payload_json;
       const eventDate = new Date(payload.custom_timestamp || event.timestamp);
       
-      // Ignore events outside the time window
       if (eventDate < cutoffDate) continue;
 
       let validAmount = 0;
       if (targetEmail) {
-        // Individual focus: Extract user's exact share
         const alloc = (payload.allocations || []).find(a => a.user === targetEmail);
         if (alloc) validAmount = parseFloat(alloc.value) || 0;
       } else {
-        // Group focus: Extract entire expense value
         validAmount = parseFloat(payload.evaluated_amount) || 0;
       }
 
@@ -77,9 +66,7 @@ class GlobalInsightsService {
       }
     }
 
-    // Convert date buckets into a flat array sorted chronologically
     data.trendLine = Object.keys(dateBuckets).sort().map(k => dateBuckets[k]);
-
     return data;
   }
 
