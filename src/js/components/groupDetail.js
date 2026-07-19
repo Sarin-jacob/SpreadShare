@@ -246,7 +246,7 @@ export class GroupDetail {
         <div class="p-2.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800/60 rounded-xl flex justify-between items-center shadow-2xs">
           <div class="flex items-center space-x-2 truncate pr-2">
             ${this.getAvatar(member, computedLedger.profiles, "w-6 h-6 shrink-0")}
-            <span class="text-[10px] text-slate-600 dark:text-slate-300 font-medium truncate">${name}</span>
+            <span class="text-[0.625rem] text-slate-600 dark:text-slate-300 font-medium truncate">${name}</span>
           </div>
           <span class="text-xs font-black tracking-tight ${textColor} shrink-0">${sign}${data.netBalance.toFixed(2)}</span>
         </div>`;
@@ -256,8 +256,8 @@ export class GroupDetail {
       const profile = computedLedger.profiles[memberEmail];
       const name = memberEmail === userEmail ? 'You' : (profile?.name || memberEmail.split('@')[0]);
       return `
-        <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium text-[10px] px-2 py-1 rounded-md flex items-center space-x-1.5 shadow-2xs">
-          ${this.getAvatar(memberEmail, computedLedger.profiles, "w-3.5 h-3.5 border border-white dark:border-slate-700")}
+        <span class="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium text-[0.625rem] px-2 py-1 rounded-md flex items-center space-x-1.5 shadow-2xs">
+          ${this.getAvatar(memberEmail, computedLedger.profiles, "w-4 h-4 border border-white dark:border-slate-700")}
           <span>${name}</span>
         </span>`;
     }).join('');
