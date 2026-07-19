@@ -6,6 +6,18 @@ import { Calculator } from '../calculator.js';
 import { AppRouter } from '../router.js';
 import { CurrencyService } from '../services/CurrencyService.js';
 
+// Safe inline arithmetic parser for split boxes
+const evaluateInlineMath = (str) => {
+  try {
+    const clean = (str || '').replace(/[^0-9+\-*/.()]/g, '');
+    if (!clean) return 0;
+    const result = new Function('return ' + clean)();
+    return isNaN(result) || !isFinite(result) ? 0 : result;
+  } catch (e) {
+    return 0;
+  }
+};
+
 export class ExpenseForm {
   constructor(containerElement) {
     this.container = containerElement;
@@ -39,7 +51,7 @@ export class ExpenseForm {
     const localISOTime = now.toISOString().slice(0, 16);
 
     this.container.innerHTML = `
-      <div class="space-y-5 animate-fade-in pb-12 max-w-lg mx-auto">
+      <div class="space-y-5 animate-fade-in pb-12 max-w-lg mx-auto relative">
         <!-- Header -->
         <div class="flex items-center justify-between">
           <button type="button" data-route="group-detail" class="text-slate-400 hover:text-slate-800 dark:hover:text-white p-2 -ml-2 rounded-full transition-colors cursor-pointer">
@@ -58,15 +70,13 @@ export class ExpenseForm {
 
         <form id="comp-expense-form" class="space-y-4" onsubmit="return false;">
           
-          <!-- HYBRID CALCULATOR DISPLAY -->
-          <div class="relative bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl shadow-sm focus-within:border-accent-500 focus-within:ring-4 focus-within:ring-accent-500/20 transition-all group overflow-hidden">
+          <!-- HYBRID CALCULATOR DISPLAY (Clickable on Mobile) -->
+          <div id="calc-display-zone" class="relative bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 p-5 rounded-3xl shadow-sm focus-within:border-accent-500 focus-within:ring-4 focus-within:ring-accent-500/20 transition-all group overflow-hidden cursor-pointer md:cursor-default">
             <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent-400 to-emerald-400 opacity-50"></div>
             
             <div class="flex justify-between items-start mb-2">
               <span class="text-[9px] text-slate-400 uppercase font-bold tracking-wider">Total Amount</span>
-              
-              <!-- Currency Selector -->
-              <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 cursor-pointer hover:bg-slate-200 transition-colors">
+              <div class="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 cursor-pointer hover:bg-slate-200 transition-colors pointer-events-auto">
                 <select id="comp-currency" class="bg-transparent text-xs font-bold text-accent-600 dark:text-accent-400 focus:outline-none appearance-none cursor-pointer">
                   <option value="INR">INR</option>
                   <option value="USD">USD</option>
@@ -85,6 +95,7 @@ export class ExpenseForm {
             </div>
             
             <p class="hidden md:block text-[9px] text-slate-400 text-center mt-3 font-medium">✨ Type numbers directly on your keyboard</p>
+            <p class="md:hidden text-[9px] text-accent-500 text-center mt-3 font-bold uppercase tracking-wider animate-pulse">Tap to open Calculator</p>
           </div>
 
           <!-- COMMON FIELDS -->
@@ -99,7 +110,7 @@ export class ExpenseForm {
             </div>
           </div>
 
-          <!-- TAB 1: EXPENSE SPECIFIC -->
+          <!-- TAB 1: EXPENSE -->
           <div id="section-expense" class="space-y-4 animate-fade-in">
             <div class="bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/50 p-4 rounded-2xl shadow-2xs space-y-3">
               <div class="flex justify-between items-center">
@@ -140,9 +151,9 @@ export class ExpenseForm {
             <div id="comp-advanced-split-block" class="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-500/20 p-4 rounded-2xl space-y-3 hidden">
               <h4 id="comp-split-hint" class="text-[9px] font-bold text-indigo-500 uppercase tracking-wider">Allocation Parameters</h4>
               <div id="comp-split-members-list" class="space-y-2 max-h-40 overflow-y-auto pr-1"></div>
+              <p class="text-[9px] text-indigo-400/80 font-medium pt-1">💡 You can type math equations directly (e.g. 100/3)</p>
             </div>
 
-            <!-- PREVIEW BOX -->
             <div class="bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
               <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between mb-2">
                 <span>Final Output Preview</span>
@@ -151,7 +162,6 @@ export class ExpenseForm {
               <div id="comp-live-calculation-preview" class="grid grid-cols-2 gap-2 text-[11px]"></div>
             </div>
 
-            <!-- RECEIPT UPLOAD -->
             <div id="receipt-upload-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-accent-500 dark:hover:border-accent-500 rounded-2xl p-4 text-center cursor-pointer bg-white/40 dark:bg-slate-900/40 transition-colors group">
               <input type="file" id="receipt-file-input" class="hidden" accept="image/*">
               <div class="flex flex-col items-center justify-center space-y-1 text-slate-400 group-hover:text-accent-500 transition-colors">
@@ -208,22 +218,30 @@ export class ExpenseForm {
             </div>
           </div>
 
-          <!-- KEYPAD (HIDDEN ON DESKTOP) -->
-          <div class="grid md:hidden grid-cols-4 gap-2 bg-slate-100 dark:bg-slate-800/80 p-2 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-inner">
-            ${['C', '(', ')', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '0', '.', 'DEL'].map(char => `
-              <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-2xl font-bold shadow-sm cursor-pointer active:scale-90 active:bg-slate-50 transition-all" data-val="${char}">${char}</button>
-            `).join('')}
-            <button type="submit" id="comp-btn-submit-mobile" class="bg-accent-600 text-white font-black rounded-2xl text-lg cursor-pointer active:scale-90 transition-all shadow-md flex items-center justify-center">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
-            </button>
-          </div>
-
           <!-- DESKTOP SUBMIT -->
-          <button type="submit" id="comp-btn-submit-desktop" class="hidden md:block w-full bg-accent-600 hover:bg-accent-700 text-white font-black rounded-xl text-sm py-4 cursor-pointer transition-colors shadow-sm tracking-wide uppercase">
+          <button type="submit" id="comp-btn-submit-desktop" class="w-full bg-accent-600 hover:bg-accent-700 text-white font-black rounded-2xl text-sm py-4 cursor-pointer transition-colors shadow-sm tracking-wide uppercase active:scale-[0.98]">
             Save Transaction
           </button>
-
         </form>
+
+        <!-- ─── MOBILE CALCULATOR MODAL (BOTTOM SHEET) ─── -->
+        <div id="mobile-calc-modal" class="fixed inset-0 z-[100] hidden bg-slate-900/60 backdrop-blur-sm flex flex-col justify-end animate-fade-in md:hidden">
+          <div class="bg-slate-100 dark:bg-slate-900 rounded-t-3xl p-5 pb-8 shadow-2xl transform transition-transform border-t border-slate-200 dark:border-slate-800">
+            <div class="flex justify-between items-center mb-4">
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Amount Input</span>
+              <button type="button" id="close-calc-modal" class="bg-accent-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-all">Done</button>
+            </div>
+            
+            <div class="grid grid-cols-4 gap-2">
+              ${['C', '(', ')', '/', '7', '8', '9', '*', '4', '5', '6', '-', '1', '2', '3', '+', '0', '.', 'DEL'].map(char => `
+                <button type="button" class="calc-btn h-14 text-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl font-bold shadow-sm active:scale-95 transition-all border border-slate-200 dark:border-slate-700" data-val="${char}">${char}</button>
+              `).join('')}
+              <button type="button" id="comp-btn-submit-mobile" class="bg-accent-600 text-white font-black rounded-2xl text-lg active:scale-95 transition-all shadow-md flex items-center justify-center">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -242,6 +260,10 @@ export class ExpenseForm {
 
     this.$currency = this.container.querySelector('#comp-currency');
     this.$convertedValue = this.container.querySelector('#calc-converted-value');
+    this.$displayZone = this.container.querySelector('#calc-display-zone');
+    this.$calcModal = this.container.querySelector('#mobile-calc-modal');
+    this.$closeCalcModal = this.container.querySelector('#close-calc-modal');
+    this.$mobileSubmit = this.container.querySelector('#comp-btn-submit-mobile');
 
     this.$payerMode = this.container.querySelector('#comp-payer-mode');
     this.$singleSlot = this.container.querySelector('#comp-payer-single-slot');
@@ -269,16 +291,13 @@ export class ExpenseForm {
   }
 
   attachDesktopKeyboardSupport() {
-    // Allows typing directly to the calculator if you aren't in a text input!
     window.addEventListener('keydown', this._handleKeydown = (e) => {
       if (store.getState().currentView !== 'add-expense') return;
-      
       const activeTag = document.activeElement.tagName.toLowerCase();
-      if (['input', 'textarea', 'select'].includes(activeTag)) return; // Don't hijack normal typing
-
+      if (['input', 'textarea', 'select'].includes(activeTag)) return; 
       const validKeys = ['0','1','2','3','4','5','6','7','8','9','.','+','-','*','/','(',')','Backspace'];
       if (validKeys.includes(e.key)) {
-        e.preventDefault(); // Stop page scrolling on space/etc
+        e.preventDefault();
         if (e.key === 'Backspace') this.calculator.handleInput('DEL');
         else this.calculator.handleInput(e.key);
       }
@@ -312,7 +331,7 @@ export class ExpenseForm {
       return `
         <div class="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-100 dark:border-slate-700">
           <span class="truncate max-w-[65%] font-semibold text-xs text-slate-600 dark:text-slate-300 ml-1">${name} paid</span>
-          <input type="number" step="any" data-payer-share="${member}" placeholder="0.00" class="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1.5 text-right font-mono rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500/30 text-xs transition-all">
+          <input type="text" inputmode="text" data-payer-share="${member}" placeholder="0.00" class="w-24 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-1.5 text-right font-mono rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500/30 text-xs transition-all">
         </div>
       `;
     }).join('');
@@ -321,6 +340,23 @@ export class ExpenseForm {
   }
 
   attachListeners() {
+    // Modal logic
+    this.$displayZone.addEventListener('click', (e) => {
+      if(e.target.closest('#comp-currency')) return;
+      if (window.innerWidth < 768) {
+        this.$calcModal.classList.remove('hidden');
+      }
+    });
+
+    this.$closeCalcModal.addEventListener('click', () => {
+      this.$calcModal.classList.add('hidden');
+    });
+
+    this.$mobileSubmit.addEventListener('click', () => {
+      this.$calcModal.classList.add('hidden');
+      this.handleSubmit();
+    });
+
     this.$tabButtons.forEach(btn => {
       btn.addEventListener('click', (e) => {
         this.activeTab = e.target.getAttribute('data-tab');
@@ -334,12 +370,6 @@ export class ExpenseForm {
         this.$sectionExpense.classList.toggle('hidden', this.activeTab !== 'EXPENSE_ADD');
         this.$sectionTransfer.classList.toggle('hidden', this.activeTab !== 'TRANSFER');
         this.$sectionLoan.classList.toggle('hidden', this.activeTab !== 'LOAN');
-        
-        if (!this.editingEventId) {
-          if (this.activeTab === 'TRANSFER') this.$title.placeholder = "Settled up / Sent Cash...";
-          else if (this.activeTab === 'LOAN') this.$title.placeholder = "Borrowed for rent...";
-          else this.$title.placeholder = "What was this for?";
-        }
       });
     });
 
@@ -368,6 +398,13 @@ export class ExpenseForm {
         this.calculateLiveOutputPreview();
       }
     });
+    this.container.addEventListener('blur', (e) => {
+       if (e.target.matches('[data-member-allocation], [data-payer-share]')) {
+         if (e.target.value.trim() !== '') {
+           e.target.value = evaluateInlineMath(e.target.value);
+         }
+       }
+    }, true);
 
     this.$uploadZone.addEventListener('click', () => this.$fileInput.click());
     this.$fileInput.addEventListener('change', (e) => {
@@ -399,7 +436,6 @@ export class ExpenseForm {
     }
     
     this.$splitBlock.classList.remove('hidden');
-    
     const state = store.getState();
     const profiles = computeLedgerState(state.groupEvents).profiles;
 
@@ -408,7 +444,7 @@ export class ExpenseForm {
       return `
         <div class="flex justify-between items-center bg-white dark:bg-slate-900 p-2 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
           <span class="font-semibold text-xs text-slate-600 dark:text-slate-300 truncate ml-1">${name}</span>
-          <input type="number" step="any" data-member-allocation="${member}" placeholder="${strategy === 'SHARES' ? '1' : '0.00'}" class="w-24 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 p-1.5 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-accent-500/40 text-xs transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600">
+          <input type="text" inputmode="text" data-member-allocation="${member}" placeholder="${strategy === 'SHARES' ? '1' : '0.00'}" class="w-24 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 p-1.5 rounded-lg text-right font-mono focus:outline-none focus:ring-2 focus:ring-accent-500/40 text-xs transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600">
         </div>
       `;
     }).join('');
@@ -443,21 +479,23 @@ export class ExpenseForm {
     } else {
       const inputs = Array.from(this.container.querySelectorAll('[data-member-allocation]'));
       
-      // ─── THE N-1 PLACEHOLDER MAGIC ───
       if (strategy === 'EXACT') {
         let runningSum = 0;
         let untouchedInputs = [];
 
         inputs.forEach(i => {
-          i.placeholder = "0.00"; // reset visually
-          if (i.value === "") untouchedInputs.push(i);
-          else runningSum += parseFloat(i.value) || 0;
+          i.placeholder = "0.00"; 
+          if (i.value.trim() === "") {
+            untouchedInputs.push(i);
+          } else {
+            runningSum += evaluateInlineMath(i.value);
+          }
         });
 
         let autoFilledMember = null;
         let remainder = 0;
         
-        // If exactly 1 box is empty, put the remainder in its placeholder visually!
+        // N-1 PLACEHOLDER MAGIC
         if (untouchedInputs.length === 1 && runningSum <= normalizedTotal) {
           remainder = normalizedTotal - runningSum;
           untouchedInputs[0].placeholder = `Auto: ${remainder.toFixed(2)}`;
@@ -467,7 +505,7 @@ export class ExpenseForm {
 
         this.activeRoster.forEach(m => { 
           const inputElement = this.container.querySelector(`[data-member-allocation="${m}"]`);
-          allocations[m] = (m === autoFilledMember) ? remainder : (parseFloat(inputElement?.value) || 0); 
+          allocations[m] = (m === autoFilledMember) ? remainder : evaluateInlineMath(inputElement?.value); 
         });
 
         if (Math.abs(runningSum - normalizedTotal) > 0.01) {
@@ -475,9 +513,8 @@ export class ExpenseForm {
         }
       } 
       else {
-        // Normal parsing for Shares / Adjustments
         let values = {};
-        inputs.forEach(i => values[i.getAttribute('data-member-allocation')] = parseFloat(i.value) || 0);
+        inputs.forEach(i => values[i.getAttribute('data-member-allocation')] = evaluateInlineMath(i.value));
 
         if (strategy === 'SHARES') {
           let sumWeights = Object.values(values).reduce((a, b) => a + b, 0);
@@ -534,7 +571,7 @@ export class ExpenseForm {
         let runSum = 0;
         this.container.querySelectorAll('[data-payer-share]').forEach(input => {
           const user = input.getAttribute('data-payer-share');
-          const v = parseFloat(input.value) || 0; // Notice: Payers don't have N-1 auto fill!
+          const v = evaluateInlineMath(input.value);
           runSum += v;
           if (v > 0) payload.payers.push({ user, value: v });
         });
@@ -570,9 +607,7 @@ export class ExpenseForm {
     }
   }
 
-  // ... (loadExpenseForEdit remains the same, omitted for brevity but keeps your editing logic) ...
   loadExpenseForEdit(eventNode) {
-      // KEEP YOUR EXISTING loadExpenseForEdit LOGIC HERE
       this.editingEventId = eventNode.eventId || eventNode.event_id;
       const payload = eventNode.rawPayload || (typeof eventNode.payload_json === 'string' ? JSON.parse(eventNode.payload_json) : eventNode.payload_json);
       
