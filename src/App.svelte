@@ -1,8 +1,10 @@
 <script>
-  import { app, openGroup, login } from './lib/app.svelte.js';
+  import { app, openGroup, login, pendingIds } from './lib/app.svelte.js';
+  import { setBadge } from './lib/pwa.svelte.js';
   import { route } from './lib/router.svelte.js';
   import { toast } from './lib/toast.svelte.js';
   import Icon from './components/Icon.svelte';
+  import Logo from './components/Logo.svelte';
   import Toasts from './components/Toasts.svelte';
   import SyncStatus from './components/SyncStatus.svelte';
   import Login from './views/Login.svelte';
@@ -20,6 +22,8 @@
   $effect(() => {
     if (app.user && groupId) openGroup(groupId);
   });
+
+  $effect(() => setBadge(pendingIds.size));
 
   const NAV = [
     { href: '#/', label: 'Groups', icon: 'groups', match: (s) => !s[0] || s[0] === 'g' },
@@ -52,7 +56,7 @@
     <!-- Desktop sidebar -->
     <aside class="hidden md:flex md:w-60 shrink-0 flex-col gap-8 p-6 border-r border-slate-200 dark:border-slate-800 sticky top-0 h-dvh">
       <a href="#/" class="flex items-center gap-2.5">
-        <img src="./assets/icon-192.png" alt="" class="w-8 h-8 rounded-lg" />
+        <Logo class="w-8 h-8" />
         <span class="text-lg font-black tracking-tight">SpreadShare</span>
       </a>
       <nav class="space-y-1">
@@ -74,7 +78,7 @@
     <div class="flex-1 min-w-0 flex flex-col">
       <header class="md:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-slate-50/85 dark:bg-slate-900/85 backdrop-blur border-b border-slate-200/70 dark:border-slate-800">
         <a href="#/" class="flex items-center gap-2">
-          <img src="./assets/icon-192.png" alt="" class="w-6 h-6 rounded-md" />
+          <Logo class="w-7 h-7" />
           <span class="font-black tracking-tight">SpreadShare</span>
         </a>
         <SyncStatus />

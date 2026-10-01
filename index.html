@@ -5,23 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>SpreadShare</title>
   <meta name="description" content="Serverless group expense splitting backed by your own Google Sheets.">
-  <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SpreadShare">
-  <link rel="icon" type="image/png" href="./assets/icon-192.png">
-  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+  <!-- Icons & manifest are generated per accent by build/brand-icons.js; the script below picks the saved one -->
+  <link id="ss-manifest" rel="manifest" href="./manifest.webmanifest">
+  <link id="ss-icon-svg" rel="icon" type="image/svg+xml" href="./icons/indigo.svg">
+  <link id="ss-icon-png" rel="icon" type="image/png" sizes="192x192" href="./icons/indigo-192.png">
+  <link id="ss-icon-apple" rel="apple-touch-icon" href="./icons/indigo-180.png">
   <script>
-    // Apply saved theme before first paint to avoid a light/dark flash
+    // Apply saved theme + accent before first paint to avoid a flash
     (function () {
       try {
         var d = document.documentElement;
         var dark = localStorage.getItem('ss_cfg_dark');
         if (dark === null ? matchMedia('(prefers-color-scheme: dark)').matches : dark === 'true') d.classList.add('dark');
         if (localStorage.getItem('ss_cfg_oled') === 'true') d.classList.add('oled');
-        d.dataset.accent = localStorage.getItem('ss_active_accent') || 'indigo';
+        var accent = localStorage.getItem('ss_active_accent') || 'indigo';
+        d.dataset.accent = accent;
         d.style.fontSize = localStorage.getItem('ss_ui_scale') || '16px';
+        if (/^\w+$/.test(accent) && accent !== 'indigo') {
+          document.getElementById('ss-manifest').href = './manifest-' + accent + '.webmanifest';
+          document.getElementById('ss-icon-svg').href = './icons/' + accent + '.svg';
+          document.getElementById('ss-icon-png').href = './icons/' + accent + '-192.png';
+          document.getElementById('ss-icon-apple').href = './icons/' + accent + '-180.png';
+        }
       } catch (e) {}
     })();
   </script>
