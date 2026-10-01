@@ -1,0 +1,532 @@
+<script>
+  import { untrack } from 'svelte';
+  import { app, appendEvent } from '../lib/app.svelte.js';
+  import { ledger } from '../lib/ledger.svelte.js';
+  import { displayName, parsePayload } from '../lib/engine.js';
+  import { CONFIG } from '../lib/config.js';
+  import { CATEGORIES } from '../lib/categories.js';
+  import { CURRENCIES, getMultiplier } from '../lib/currency.js';
+  import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
+  import { compressImage } from '../lib/image.js';
+  import { money, toLocalInput } from '../lib/format.js';
+  import { go, replace } from '../lib/router.svelte.js';
+  import { toast } from '../lib/toast.svelte.js';
+  import Icon from '../components/Icon.svelte';
+  import Avatar from '../components/Avatar.svelte';
+
+  let { groupId, editId = null, prefill = {} } = $props();
+
+  const BASE = CONFIG.DEFAULT_CURRENCY;
+  const me = app.user.email;
+  const L = $derived(ledger.current);
+  const members = $derived([...new Set([me, ...Object.keys(L.members)])]);
+  const name = (email) => displayName(email, L.profiles, me);
+
+  // ─── Form state ───
+  let type = $state('EXPENSE_ADD');
+  let title = $state('');
+  let when = $state(toLocalInput());
+  let amountExpr = $state('');
+  let currency = $state(BASE);
+  let rateExpr = $state('1');
+  let rateLoading = $state(false);
+  let categoryValue = $state('Food');
+  let payerMode = $state('SINGLE');
+  let payer = $state(me);
+  let payerInputs = $state({});
+  let strategy = $state('EQUALLY');
+  let excluded = $state({}); // email → true when left out of an equal split
+  let splitInputs = $state({});
+  let from = $state(me);
+  let to = $state('');
+  let interestExpr = $state('');
+  let receipt = $state(null);
+  let compressing = $state(false);
+  let saving = $state(false);
+  let ready = $state(false);
+
+  const source = $derived(editId ? app.events.find((e) => e.eventId === editId) : null);
+
+  // Initialise once the data we need is available (events load asynchronously).
+  $effect(() => {
+    if (ready) return;
+    if (editId && !source) return;
+    untrack(() => {
+      if (source) loadFrom(source);
+      else applyPrefill();
+      ready = true;
+    });
+  });
+
+  function applyPrefill() {
+    if (prefill.type === 'TRANSFER' || prefill.type === 'LOAN') {
+      type = prefill.type;
+      from = prefill.from || me;
+      to = prefill.to || '';
+      title = prefill.type === 'TRANSFER' ? 'Settle up' : '';
+    }
+    if (prefill.amount) amountExpr = prefill.amount;
+  }
+
+  function loadFrom(ev) {
+    const p = parsePayload(ev);
+    type = ev.event_type;
+    title = p.title || '';
+    when = toLocalInput(p.custom_timestamp || ev.timestamp);
+    currency = p.foreign_currency || BASE;
+    rateExpr = String(p.exchange_rate || 1);
+    amountExpr = p.raw_amount_string || String(p.foreign_amount ?? p.evaluated_amount ?? '');
+    receipt = p.receipt_local_url || null;
+
+    if (type === 'EXPENSE_ADD') {
+      categoryValue = p.category || 'General';
+      const payers = p.payers || [];
+      if (payers.length > 1) {
+        payerMode = 'MULTIPLE';
+        payerInputs = Object.fromEntries(payers.map((x) => [x.user, String(round2(x.value))]));
+      } else {
+        payer = payers[0]?.user || ev.actor_identity;
+      }
+      const allocs = p.allocations || [];
+      strategy = p.split_strategy || 'EQUALLY';
+      if (strategy === 'EQUALLY') {
+        const inSplit = new Set(p.split_members || allocs.filter((a) => a.value > 0).map((a) => a.user));
+        excluded = Object.fromEntries(members.filter((m) => !inSplit.has(m)).map((m) => [m, true]));
+      } else if (p.split_inputs) {
+        splitInputs = { ...p.split_inputs };
+      } else {
+        // Older entries only stored the resulting amounts; reproduce them exactly.
+        strategy = 'EXACT';
+        splitInputs = Object.fromEntries(allocs.map((a) => [a.user, String(round2(a.value))]));
+      }
+    } else {
+      from = ev.actor_identity;
+      to = p.target_peer_identity || '';
+      interestExpr = p.interest_rate ? String(p.interest_rate) : '';
+    }
+  }
+
+  // ─── Derived amounts ───
+  const amount = $derived(evaluateLoose(amountExpr) ?? 0);
+  const rate = $derived(currency === BASE ? 1 : evaluate(rateExpr) ?? 0);
+  const total = $derived(round2(amount * rate));
+  const hasOperator = $derived(/[+\-*/×÷]/.test(amountExpr.replace(/^-/, '')));
+
+  /** Splits `total` across weights in whole cents (remainders go to the largest fractions). */
+  function distribute(weights) {
+    const entries = Object.entries(weights).filter(([, w]) => w > 0);
+    const sumW = entries.reduce((s, [, w]) => s + w, 0);
+    if (!sumW) return null;
+    const cents = Math.round(total * 100);
+    const parts = entries.map(([user, w]) => {
+      const raw = (cents * w) / sumW;
+      return { user, cents: Math.floor(raw), frac: raw - Math.floor(raw) };
+    });
+    let left = cents - parts.reduce((s, x) => s + x.cents, 0);
+    [...parts].sort((a, b) => b.frac - a.frac).forEach((x) => {
+      if (left-- > 0) x.cents++;
+    });
+    return Object.fromEntries(parts.map((x) => [x.user, x.cents / 100]));
+  }
+
+  /** Handles "one blank field gets the remainder" for exact-amount inputs. */
+  function exactWithRemainder(inputs, list) {
+    const vals = {};
+    const blanks = [];
+    for (const m of list) {
+      const raw = (inputs[m] ?? '').trim();
+      if (!raw) blanks.push(m);
+      else {
+        const v = evaluate(raw);
+        if (v === null) return { error: `Check the amount for ${name(m)}` };
+        vals[m] = round2(v);
+      }
+    }
+    const sum = round2(Object.values(vals).reduce((s, v) => s + v, 0));
+    let auto = null;
+    if (blanks.length === 1 && sum <= total) {
+      auto = blanks[0];
+      vals[auto] = round2(total - sum);
+    }
+    const final = round2(Object.values(vals).reduce((s, v) => s + v, 0));
+    if (Math.abs(final - total) > 0.009) {
+      const diff = round2(total - final);
+      return { vals, auto, error: diff > 0 ? `${money(diff)} left to assign` : `Over by ${money(-diff)}` };
+    }
+    return { vals, auto };
+  }
+
+  const split = $derived.by(() => {
+    if (type !== 'EXPENSE_ADD') return { alloc: {} };
+    if (strategy === 'EQUALLY') {
+      const inSplit = members.filter((m) => !excluded[m]);
+      if (!inSplit.length) return { alloc: {}, error: 'Pick at least one person' };
+      return { alloc: distribute(Object.fromEntries(inSplit.map((m) => [m, 1]))) || {} };
+    }
+    if (strategy === 'SHARES') {
+      const w = {};
+      for (const m of members) {
+        const raw = (splitInputs[m] ?? '').trim();
+        const v = raw === '' ? 1 : evaluate(raw);
+        if (v === null || v < 0) return { alloc: {}, error: `Check the shares for ${name(m)}` };
+        w[m] = v;
+      }
+      const alloc = distribute(w);
+      return alloc ? { alloc } : { alloc: {}, error: 'Shares add up to zero' };
+    }
+    if (strategy === 'EXACT') {
+      const r = exactWithRemainder(splitInputs, members);
+      return { alloc: r.vals || {}, auto: r.auto, error: r.error };
+    }
+    // ADJUSTMENT: equal split of what's left after +/- adjustments
+    const adj = {};
+    for (const m of members) {
+      const raw = (splitInputs[m] ?? '').trim();
+      const v = raw === '' ? 0 : evaluate(raw);
+      if (v === null) return { alloc: {}, error: `Check the adjustment for ${name(m)}` };
+      adj[m] = v;
+    }
+    const sumAdj = Object.values(adj).reduce((s, v) => s + v, 0);
+    const base = (total - sumAdj) / members.length;
+    const raw = Object.fromEntries(members.map((m) => [m, base + adj[m]]));
+    if (Object.values(raw).some((v) => v < -0.009)) return { alloc: raw, error: 'Adjustments exceed the total' };
+    const alloc = distribute(raw) || {};
+    return { alloc };
+  });
+
+  const payers = $derived.by(() => {
+    if (payerMode === 'SINGLE') return { list: [{ user: payer, value: total }] };
+    const r = exactWithRemainder(payerInputs, members);
+    const list = Object.entries(r.vals || {}).filter(([, v]) => v > 0).map(([user, value]) => ({ user, value }));
+    return { list, auto: r.auto, error: r.error && `Payers: ${r.error}` };
+  });
+
+  const error = $derived.by(() => {
+    if (!(total > 0)) return 'Enter an amount';
+    if (currency !== BASE && !(rate > 0)) return 'Enter an exchange rate';
+    if (type === 'EXPENSE_ADD') {
+      if (!title.trim()) return 'Add a description';
+      return payers.error || split.error || null;
+    }
+    if (!to) return `Choose who ${type === 'LOAN' ? 'borrowed' : 'received'} it`;
+    if (from === to) return 'Pick two different people';
+    if (interestExpr.trim() && evaluate(interestExpr) === null) return 'Check the interest rate';
+    return null;
+  });
+
+  // ─── Actions ───
+  async function onCurrencyChange() {
+    if (currency === BASE) return (rateExpr = '1');
+    rateLoading = true;
+    const r = await getMultiplier(currency, BASE);
+    rateLoading = false;
+    if (r) rateExpr = String(round4(r));
+    else toast('Couldn’t fetch the exchange rate — enter it manually', 'info');
+  }
+  const round4 = (n) => Math.round(n * 10000) / 10000;
+
+  function insert(op) {
+    amountExpr = (amountExpr || '') + op;
+  }
+  function collapse() {
+    const v = evaluate(amountExpr);
+    if (v !== null) amountExpr = String(round2(v));
+  }
+
+  async function onFile(e) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (!file) return;
+    compressing = true;
+    try {
+      receipt = await compressImage(file);
+    } catch {
+      toast('Couldn’t read that image', 'error');
+    } finally {
+      compressing = false;
+    }
+  }
+
+  async function save(e) {
+    e?.preventDefault();
+    if (error || saving) return;
+    saving = true;
+
+    const payload = {
+      title: title.trim() || (type === 'TRANSFER' ? 'Payment' : 'Loan'),
+      raw_amount_string: amountExpr,
+      evaluated_amount: total,
+      foreign_amount: round2(amount),
+      foreign_currency: currency,
+      exchange_rate: rate,
+      currency: BASE,
+      custom_timestamp: new Date(when).toISOString(),
+    };
+    let actor;
+
+    if (type === 'EXPENSE_ADD') {
+      Object.assign(payload, {
+        category: categoryValue,
+        split_strategy: strategy,
+        allocations: Object.entries(split.alloc).filter(([, v]) => v > 0).map(([user, value]) => ({ user, value })),
+        payers: payers.list,
+      });
+      if (strategy === 'EQUALLY') payload.split_members = members.filter((m) => !excluded[m]);
+      else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
+      if (receipt) payload.receipt_local_url = receipt;
+    } else {
+      payload.category = 'Financial';
+      payload.target_peer_identity = to;
+      actor = from;
+      const interest = evaluate(interestExpr);
+      if (type === 'LOAN' && interest > 0) {
+        payload.interest_type = 'SIMPLE';
+        payload.interest_rate = interest;
+      }
+    }
+
+    try {
+      if (editId) await appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: editId });
+      await appendEvent(groupId, type, payload, { actor });
+      toast(editId ? 'Changes saved' : 'Saved');
+      replace(`/g/${groupId}`);
+    } catch (err) {
+      toast(`Couldn’t save: ${err.message}`, 'error');
+      saving = false;
+    }
+  }
+
+  const TYPES = [
+    { value: 'EXPENSE_ADD', label: 'Expense' },
+    { value: 'TRANSFER', label: 'Payment' },
+    { value: 'LOAN', label: 'Loan' },
+  ];
+  const STRATEGIES = [
+    { value: 'EQUALLY', label: 'Equally' },
+    { value: 'SHARES', label: 'Shares' },
+    { value: 'EXACT', label: 'Exact' },
+    { value: 'ADJUSTMENT', label: '+/−' },
+  ];
+  const HINTS = {
+    SHARES: 'Weights per person (blank = 1, 0 = not included)',
+    EXACT: 'Exact amounts — leave one blank to give it the remainder',
+    ADJUSTMENT: 'Extra (+) or less (−) than an equal share',
+  };
+</script>
+
+{#if !ready}
+  <div class="py-20 text-center text-slate-400 text-sm">{editId ? 'Loading entry…' : ''}</div>
+{:else}
+  <form class="space-y-5" onsubmit={save}>
+    <div class="flex items-center gap-2">
+      <button type="button" class="btn btn-ghost !p-2 -ml-2" aria-label="Back" onclick={() => history.back()}><Icon name="back" /></button>
+      <h1 class="text-xl font-black tracking-tight flex-1">{editId ? 'Edit entry' : 'New entry'}</h1>
+    </div>
+
+    {#if !editId}
+      <div class="seg">
+        {#each TYPES as t}
+          <button type="button" aria-pressed={type === t.value} onclick={() => (type = t.value)}>{t.label}</button>
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Amount -->
+    <div class="card p-4 space-y-3">
+      <div class="flex items-center gap-2">
+        <select class="field !w-auto !py-2 font-bold" bind:value={currency} onchange={onCurrencyChange} aria-label="Currency">
+          {#each CURRENCIES as c}<option value={c}>{c}</option>{/each}
+        </select>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          class="flex-1 min-w-0 bg-transparent text-right text-4xl font-black tracking-tight tabular-nums focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
+          bind:value={amountExpr}
+          onblur={() => !hasOperator || collapse()}
+          inputmode="decimal"
+          placeholder="0.00"
+          aria-label="Amount"
+          autocomplete="off"
+          autofocus={!editId}
+        />
+      </div>
+      <div class="flex items-center gap-1.5">
+        {#each ['+', '−', '×', '÷'] as op}
+          <button type="button" class="btn btn-soft !px-0 !py-1 w-9 text-base" onclick={() => insert(op === '−' ? '-' : op === '×' ? '*' : op === '÷' ? '/' : op)}>{op}</button>
+        {/each}
+        <span class="flex-1 text-right text-sm text-slate-500 dark:text-slate-400 tabular-nums truncate">
+          {#if hasOperator}= {money(amount, currency)}{/if}
+        </span>
+      </div>
+      {#if currency !== BASE}
+        <div class="flex items-center gap-2 text-sm border-t border-slate-100 dark:border-slate-700/60 pt-3">
+          <span class="text-slate-500 shrink-0">1 {currency} =</span>
+          <input class="field !py-1 !w-28 text-right tabular-nums" bind:value={rateExpr} inputmode="decimal" aria-label="Exchange rate" />
+          <span class="text-slate-500">{BASE}</span>
+          <span class="flex-1 text-right font-bold tabular-nums">{rateLoading ? '…' : money(total)}</span>
+        </div>
+      {/if}
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="label" for="f-title">Description</label>
+        <input id="f-title" class="field" bind:value={title} maxlength="120" placeholder={type === 'EXPENSE_ADD' ? 'Dinner, cab, groceries…' : 'Optional note'} />
+      </div>
+      <div>
+        <label class="label" for="f-when">Date</label>
+        <input id="f-when" class="field" type="datetime-local" bind:value={when} />
+      </div>
+    </div>
+
+    {#if type === 'EXPENSE_ADD'}
+      <div>
+        <span class="label">Category</span>
+        <div class="flex flex-wrap gap-1.5">
+          {#each CATEGORIES as c}
+            <button
+              type="button"
+              class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                {categoryValue === c.value ? 'border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"
+              onclick={() => (categoryValue = c.value)}
+            >
+              {c.icon} {c.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Paid by -->
+      <div class="card p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="label !mb-0">Paid by</span>
+          <button type="button" class="text-xs font-semibold text-accent-600 dark:text-accent-400" onclick={() => (payerMode = payerMode === 'SINGLE' ? 'MULTIPLE' : 'SINGLE')}>
+            {payerMode === 'SINGLE' ? 'Multiple people' : 'One person'}
+          </button>
+        </div>
+        {#if payerMode === 'SINGLE'}
+          <div class="flex flex-wrap gap-2">
+            {#each members as m (m)}
+              <button
+                type="button"
+                class="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border text-sm font-medium transition
+                  {payer === m ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700'}"
+                onclick={() => (payer = m)}
+              >
+                <Avatar email={m} profile={L.profiles[m]} size="w-6 h-6" />
+                {name(m)}
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <ul class="space-y-2">
+            {#each members as m (m)}
+              <li class="flex items-center gap-2">
+                <Avatar email={m} profile={L.profiles[m]} size="w-7 h-7" />
+                <span class="flex-1 text-sm truncate">{name(m)}</span>
+                <input
+                  class="field !w-28 !py-1.5 text-right tabular-nums"
+                  inputmode="decimal"
+                  bind:value={payerInputs[m]}
+                  placeholder={payers.auto === m ? String(payers.list.find((p) => p.user === m)?.value ?? '0') : '0'}
+                />
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+
+      <!-- Split -->
+      <div class="card p-4 space-y-3">
+        <div class="flex items-center justify-between gap-3">
+          <span class="label !mb-0">Split</span>
+          <div class="seg !p-0.5 flex-1 max-w-xs">
+            {#each STRATEGIES as s}
+              <button type="button" aria-pressed={strategy === s.value} onclick={() => (strategy = s.value)}>{s.label}</button>
+            {/each}
+          </div>
+        </div>
+        {#if HINTS[strategy]}<p class="text-xs text-slate-400">{HINTS[strategy]}</p>{/if}
+        <ul class="space-y-2">
+          {#each members as m (m)}
+            {@const share = split.alloc[m] ?? 0}
+            <li class="flex items-center gap-2">
+              {#if strategy === 'EQUALLY'}
+                <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                  <input type="checkbox" class="w-4 h-4 accent-[var(--accent-500)]" checked={!excluded[m]} onchange={(e) => (excluded[m] = !e.currentTarget.checked)} />
+                  <Avatar email={m} profile={L.profiles[m]} size="w-7 h-7" />
+                  <span class="text-sm truncate {excluded[m] ? 'text-slate-400 line-through' : ''}">{name(m)}</span>
+                </label>
+              {:else}
+                <Avatar email={m} profile={L.profiles[m]} size="w-7 h-7" />
+                <span class="flex-1 text-sm truncate">{name(m)}</span>
+                <input
+                  class="field !w-24 !py-1.5 text-right tabular-nums"
+                  inputmode="decimal"
+                  bind:value={splitInputs[m]}
+                  placeholder={strategy === 'SHARES' ? '1' : strategy === 'EXACT' && split.auto === m ? String(share) : '0'}
+                />
+              {/if}
+              <span class="w-24 text-right text-sm font-semibold tabular-nums {share > 0 ? '' : 'text-slate-400'}">{money(share)}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+
+      <!-- Receipt -->
+      <div class="card p-4">
+        {#if receipt}
+          <div class="flex items-center gap-3">
+            <img src={receipt} alt="Receipt" referrerpolicy="no-referrer" class="w-16 h-16 rounded-lg object-cover" />
+            <span class="flex-1 text-sm font-medium">Receipt attached</span>
+            <button type="button" class="btn btn-ghost !p-2" aria-label="Remove receipt" onclick={() => (receipt = null)}><Icon name="x" /></button>
+          </div>
+        {:else}
+          <label class="flex items-center gap-3 cursor-pointer text-sm text-slate-500 dark:text-slate-400">
+            <span class="w-10 h-10 rounded-lg grid place-items-center bg-slate-100 dark:bg-slate-700"><Icon name="camera" /></span>
+            {compressing ? 'Processing…' : 'Attach a receipt (optional)'}
+            <input type="file" accept="image/*" class="hidden" onchange={onFile} />
+          </label>
+        {/if}
+      </div>
+    {:else}
+      <div class="card p-4 space-y-4">
+        {#each [{ label: type === 'LOAN' ? 'Lender' : 'Paid by', get: () => from, set: (v) => (from = v) }, { label: type === 'LOAN' ? 'Borrower' : 'Paid to', get: () => to, set: (v) => (to = v) }] as row, i}
+          <div>
+            <span class="label">{row.label}</span>
+            <div class="flex flex-wrap gap-2">
+              {#each members as m (m)}
+                {@const selected = row.get() === m}
+                <button
+                  type="button"
+                  disabled={i === 1 && m === from}
+                  class="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border text-sm font-medium transition disabled:opacity-30
+                    {selected ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700'}"
+                  onclick={() => { row.set(m); if (i === 0 && to === m) to = ''; }}
+                >
+                  <Avatar email={m} profile={L.profiles[m]} size="w-6 h-6" />
+                  {name(m)}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/each}
+        {#if type === 'LOAN'}
+          <div class="flex items-center gap-2">
+            <label class="label !mb-0 flex-1" for="f-interest">Simple interest (optional)</label>
+            <input id="f-interest" class="field !w-24 !py-1.5 text-right" inputmode="decimal" bind:value={interestExpr} placeholder="0" />
+            <span class="text-sm text-slate-500">%</span>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="sticky bottom-0 -mx-4 px-4 py-3 md:static md:mx-0 md:px-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur md:bg-transparent md:backdrop-blur-none pb-safe">
+      {#if error && amountExpr}
+        <p class="text-xs text-rose-500 font-medium mb-2 text-center">{error}</p>
+      {/if}
+      <button class="btn btn-primary w-full !py-3.5 text-base" disabled={!!error || saving}>
+        {saving ? 'Saving…' : editId ? 'Save changes' : `Save ${money(total)}`}
+      </button>
+    </div>
+  </form>
+{/if}

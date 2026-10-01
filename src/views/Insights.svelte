@@ -1,0 +1,101 @@
+<script>
+  import { app } from '../lib/app.svelte.js';
+  import { getAll, STORES } from '../lib/db.js';
+  import { processAnalytics } from '../lib/insights.js';
+  import { money } from '../lib/format.js';
+  import Donut from '../components/Donut.svelte';
+  import TrendChart from '../components/TrendChart.svelte';
+
+  let days = $state(30);
+  let events = $state.raw([]);
+  let loaded = $state(false);
+
+  $effect(() => {
+    app.events; // reload when the active group changes
+    getAll(STORES.events).then((all) => {
+      events = all;
+      loaded = true;
+    });
+  });
+
+  const me = app.user.email;
+  const data = $derived(processAnalytics(events, me, days));
+  const maxDay = $derived(Math.max(1, ...Object.values(data.dayOfWeek)));
+  const avg = $derived(data.total / days);
+
+  const byGroup = $derived.by(() => {
+    const out = {};
+    for (const g of app.directory) {
+      const gEvents = events.filter((e) => e.spreadsheetId === g.id);
+      const t = processAnalytics(gEvents, me, days).total;
+      if (t > 0) out[g.id] = { name: g.name, total: t };
+    }
+    return Object.values(out).sort((a, b) => b.total - a.total);
+  });
+
+  const RANGES = [
+    { value: 7, label: '7 days' },
+    { value: 30, label: '30 days' },
+    { value: 90, label: '90 days' },
+    { value: 365, label: '1 year' },
+  ];
+</script>
+
+<div class="space-y-5">
+  <div>
+    <h1 class="text-2xl font-black tracking-tight">Insights</h1>
+    <p class="text-sm text-slate-500 dark:text-slate-400">Your share of spending across all groups.</p>
+  </div>
+
+  <div class="seg">
+    {#each RANGES as r}
+      <button aria-pressed={days === r.value} onclick={() => (days = r.value)}>{r.label}</button>
+    {/each}
+  </div>
+
+  <div class="rounded-2xl p-5 text-white bg-gradient-to-br from-slate-800 to-accent-900 overflow-hidden">
+    <div class="text-xs font-semibold uppercase tracking-wider text-white/60">You spent</div>
+    <div class="text-3xl font-black tabular-nums mt-1">{money(data.total)}</div>
+    <div class="text-sm text-white/70">{data.count} expenses · ~{money(avg, undefined, { decimals: 0 })}/day</div>
+    <div class="mt-4 -mx-1"><TrendChart points={data.trend} /></div>
+  </div>
+
+  {#if loaded && data.count === 0}
+    <p class="text-sm text-center text-slate-400 py-4">
+      Nothing here yet. Insights use groups you've opened on this device.
+    </p>
+  {/if}
+
+  <div class="card p-4">
+    <h2 class="label">By category</h2>
+    <Donut data={data.categories} />
+  </div>
+
+  {#if byGroup.length > 1}
+    <div class="card p-4 space-y-2">
+      <h2 class="label">By group</h2>
+      {#each byGroup as g (g.name)}
+        <div class="flex items-center gap-3 text-sm">
+          <span class="flex-1 truncate">{g.name}</span>
+          <div class="w-1/3 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+            <div class="h-full bg-accent-500 rounded-full" style="width:{(g.total / data.total) * 100}%"></div>
+          </div>
+          <span class="w-20 text-right font-semibold tabular-nums">{money(g.total, undefined, { decimals: 0 })}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="card p-4 space-y-2">
+    <h2 class="label">By weekday</h2>
+    {#each Object.entries(data.dayOfWeek) as [day, v] (day)}
+      <div class="flex items-center gap-3 text-sm">
+        <span class="w-9 text-slate-400 font-semibold">{day}</span>
+        <div class="flex-1 h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+          <div class="h-full bg-accent-500 rounded-full transition-[width] duration-500" style="width:{(v / maxDay) * 100}%"></div>
+        </div>
+        <span class="w-20 text-right font-semibold tabular-nums">{money(v, undefined, { decimals: 0 })}</span>
+      </div>
+    {/each}
+  </div>
+</div>

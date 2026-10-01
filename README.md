@@ -11,16 +11,16 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Optimized Settlements:** Utilizes a greedy algorithm to calculate the most efficient path to settle complex group debts, minimizing the total number of required transactions.
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
-*   **Personal Analytics:** Interactive HTML5 Canvas visualizations providing day-of-the-week spending velocity, category breakdowns, and historical trendlines.
+*   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
 *   **Deep Customization:** Built-in settings for Dark mode, OLED pure-black mode, 12 dynamic accent palettes, and global UI scaling.
 
 ## Technical Stack
 
-*   **Frontend:** Vanilla JavaScript (ES6 Modules), HTML5, Tailwind CSS
-*   **Authentication:** Google Identity Services (GSI) / OAuth 2.0 with background silent token refreshing
+*   **Frontend:** Svelte 5 (runes), Vite, Tailwind CSS v4
+*   **Authentication:** Google Identity Services (GSI) / OAuth 2.0 token model
 *   **Database / Storage:** Google Sheets API v4, Google Drive API v3
-*   **Local Caching:** IndexedDB (via custom wrapper), LocalStorage API
-*   **Visualization:** Native HTML5 Canvas API
+*   **Local Caching:** IndexedDB (events cache + outbound queue), LocalStorage (profile, preferences)
+*   **Visualization:** Inline SVG
 
 ## System Architecture
 
@@ -48,7 +48,29 @@ Because SpreadShare has no backend, deployment consists entirely of serving stat
 3. An OAuth 2.0 Client ID configured for "Web application".
 4. Add your deployment domain (e.g., `https://sarin-jacob.github.io`) or `http://localhost` for development to the Authorized JavaScript origins.
 
-### Installation
-1. Clone the repository to your local machine.
-2. Navigate to the `src/js/config.js` file (create one if it does not exist) and add your Google OAuth Client ID.
-3. Serve the directory using any static file server. Note: Google Identity Services requires the app to be served over `http://localhost` or a secure `https://` domain.
+### Development
+1. Clone the repository and run `npm install`.
+2. Put your Google OAuth Client ID in `src/lib/config.js`.
+3. `npm run dev` starts the app at `http://localhost:8080` (add that origin to your OAuth client).
+4. `npm run check` type-checks the Svelte components.
+
+### Project layout
+```
+src/
+  App.svelte            app shell + hash routing
+  views/                Groups, Group, ExpenseForm, ExpenseDetail, Insights, Settings, Login
+  components/           Avatar, Donut, TrendChart, SyncStatus, Toasts, ...
+  lib/
+    app.svelte.js       global state, offline queue, sync orchestration
+    google.js           raw Drive / Sheets API calls
+    engine.js           rebuilds balances from the event log, settle-up optimiser
+    insights.js         spending analytics
+    auth.js, db.js, math.js, currency.js, ...
+public/                 manifest, service worker, icons (copied as-is)
+```
+
+### Deploying to GitHub Pages
+```bash
+npm run deploy
+```
+This builds into `dist/` and publishes it to the `gh-pages` branch (via the `gh-pages` package), with a `.nojekyll` marker. The build uses relative asset paths, so it works under `https://<user>.github.io/SpreadShare/` without extra config.
