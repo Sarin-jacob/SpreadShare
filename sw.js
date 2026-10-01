@@ -1,5 +1,5 @@
 // SpreadShare service worker.
-// - Content-hashed build output (assets/, icons/): cache-first — a new deploy means new URLs.
+// - Content-hashed build output (assets/, icons/): cache-first , a new deploy means new URLs.
 // - Everything else on this origin (index.html, manifests): network-first, cache as offline fallback.
 // - Receipt reader (PaddleOCR code, ONNX runtime, OCR models): cache-first in its own cache so the
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
