@@ -59,13 +59,42 @@ export function exactWithRemainder(total, inputs, members, nameOf = (m) => m) {
 }
 
 /**
- * Computes allocations for one of the four split strategies.
- * @param strategy 'EQUALLY' | 'SHARES' | 'EXACT' | 'ADJUSTMENT'
+ * Item-wise split: each item is shared equally by the people who had it, then the bill
+ * total (tax, service, discounts, rounding included) is spread in proportion to each
+ * person's item subtotal.
+ * @param items [{ name, amount: string|number, members: string[] }]
+ * @returns {{ alloc: Record<string,number>, itemsTotal?: number, extras?: number, error?: string }}
+ */
+export function splitByItems(total, items, nameOf = (m) => m) {
+  if (!items.length) return { alloc: {}, error: 'Add at least one item' };
+  const perMember = {};
+  for (const [i, it] of items.entries()) {
+    const label = it.name?.trim() || `item ${i + 1}`;
+    const v = typeof it.amount === 'number' ? it.amount : evaluate(it.amount);
+    if (v === null) return { alloc: {}, error: `Check the price of ${label}` };
+    if (!it.members?.length) return { alloc: {}, error: `Pick who had ${label}` };
+    const parts = distribute(Math.abs(v), Object.fromEntries(it.members.map((m) => [m, 1]))) || {};
+    for (const [m, share] of Object.entries(parts)) perMember[m] = round2((perMember[m] || 0) + Math.sign(v) * share);
+  }
+  const itemsTotal = round2(sum(Object.values(perMember)));
+  if (!(itemsTotal > 0)) return { alloc: {}, error: 'Items add up to zero' };
+  const negative = Object.entries(perMember).find(([, v]) => v < -0.009);
+  if (negative) return { alloc: {}, error: `${nameOf(negative[0])}'s items come to less than zero` };
+  const alloc = distribute(total, perMember) || {};
+  return { alloc, itemsTotal, extras: round2(total - itemsTotal) };
+}
+
+/**
+ * Computes allocations for one of the split strategies.
+ * @param strategy 'EQUALLY' | 'SHARES' | 'EXACT' | 'ADJUSTMENT' | 'ITEMS'
  * @param opts.excluded member → true when left out of an equal split
  * @param opts.inputs member → raw input string (shares / amounts / adjustments)
- * @returns {{ alloc: Record<string,number>, auto?: string|null, error?: string }}
+ * @param opts.items receipt items for 'ITEMS' (see splitByItems)
+ * @returns {{ alloc: Record<string,number>, auto?: string|null, error?: string, itemsTotal?: number, extras?: number }}
  */
-export function computeSplit(strategy, total, members, { excluded = {}, inputs = {}, nameOf = (m) => m } = {}) {
+export function computeSplit(strategy, total, members, { excluded = {}, inputs = {}, items = [], nameOf = (m) => m } = {}) {
+  if (strategy === 'ITEMS') return splitByItems(total, items, nameOf);
+
   if (strategy === 'EQUALLY') {
     const inSplit = members.filter((m) => !excluded[m]);
     if (!inSplit.length) return { alloc: {}, error: 'Pick at least one person' };

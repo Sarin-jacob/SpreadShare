@@ -27,6 +27,11 @@
       : x ? [{ user: x.target, value: x.amount }] : []
   );
 
+  // Item prices are stored in the bill's own currency, like foreign_amount.
+  const itemCur = $derived(p.foreign_currency || undefined);
+  const billTotal = $derived(p.foreign_amount ?? x?.amount ?? 0);
+  const itemsTotal = $derived((p.receipt_items || []).reduce((sum, it) => sum + (it.amount || 0), 0));
+
   let zoom = $state(false);
 
   async function del() {
@@ -108,6 +113,39 @@
         </div>
       {/each}
     </section>
+
+    {#if p.receipt_items?.length}
+      <section class="card p-4 space-y-2">
+        <h3 class="label">Items</h3>
+        {#each p.receipt_items as it, i (i)}
+          <div class="flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate">{it.name}</div>
+              <div class="flex -space-x-1.5 mt-1">
+                {#each it.members as m (m)}<Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />{/each}
+              </div>
+            </div>
+            <span class="text-sm tabular-nums">{money(it.amount, itemCur)}</span>
+          </div>
+        {/each}
+        {#if Math.abs(billTotal - itemsTotal) >= 0.05}
+          <p class="text-xs text-slate-500 border-t border-slate-100 dark:border-slate-700/60 pt-2">
+            {billTotal > itemsTotal ? 'Tax & extras' : 'Discounts'} of {money(Math.abs(billTotal - itemsTotal), itemCur)} shared in proportion to each person's items.
+          </p>
+        {/if}
+      </section>
+    {:else if p.receipt_scan?.items?.length}
+      <section class="card p-4 space-y-1.5">
+        <h3 class="label">Receipt items</h3>
+        {#each p.receipt_scan.items as it, i (i)}
+          <div class="flex items-center gap-3 text-sm">
+            <span class="flex-1 min-w-0 truncate">{it.name}</span>
+            {#if it.qty && it.qty !== 1}<span class="text-xs text-slate-400">×{it.qty}</span>{/if}
+            <span class="tabular-nums">{money(it.total, p.receipt_scan.currency || undefined)}</span>
+          </div>
+        {/each}
+      </section>
+    {/if}
 
     {#if x.receiptUrl}
       <section class="card p-4 space-y-2">

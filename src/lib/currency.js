@@ -4,7 +4,8 @@
 const CACHE_KEY = 'ss_fx_cache';
 const TTL = 12 * 60 * 60 * 1000;
 
-export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'JPY', 'AUD', 'CAD', 'THB'];
+// Includes every currency the receipt scanner can detect (INR, USD, EUR, GBP, MYR, PKR, CHF).
+export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD', 'MYR', 'THB', 'JPY', 'AUD', 'CAD', 'CHF', 'PKR'];
 
 function readCache(base) {
   try {

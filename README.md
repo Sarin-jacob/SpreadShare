@@ -11,6 +11,8 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Optimized Settlements:** Utilizes a greedy algorithm to calculate the most efficient path to settle complex group debts, minimizing the total number of required transactions.
 *   **Fast Everyday Use:** Search and filter group activity, duplicate an entry, undo a delete, nudge friends who owe you with a share-sheet reminder, and use the keyboard shortcuts `n` (new entry) and `/` (search).
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
+*   **Receipt Scanning (on-device):** Snap a bill and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server; the ~31 MB reader downloads once on first use.
+*   **Item-Wise Splitting:** Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
 *   **Deep Customization:** Light / dark / auto themes, OLED pure-black mode, 12 accent palettes, and global UI scaling.
@@ -37,9 +39,9 @@ SpreadShare operates on a double-entry ledger system. Every action (Expense, Tra
 
 Upcoming features focused on bringing privacy-first, on-device AI to expense management via small client-side models running entirely in the browser:
 
-- [ ] **Smart Auto-Categorization:** Context-aware prediction of expense categories based on the transaction title and description.
-- [ ] **Receipt Auto-Parsing:** On-device Optical Character Recognition (OCR) to automatically extract totals, dates, and merchant names from uploaded images.
-- [ ] **Item-Wise Bill Splitting:** Granular line-item extraction from scanned receipts, allowing users to assign specific items to specific members rather than splitting the grand total.
+- [ ] **Smart Auto-Categorization:** Context-aware prediction of expense categories based on the transaction title and description (scanned receipts already get a keyword-based guess).
+- [x] **Receipt Auto-Parsing:** On-device OCR extracts totals, dates, merchant names, items and taxes from photos.
+- [x] **Item-Wise Bill Splitting:** Assign line items from a scanned receipt to specific members instead of splitting the grand total.
 
 ## Setup & Deployment
 
@@ -69,12 +71,24 @@ src/
     google.js           raw Drive / Sheets API calls
     engine.js           rebuilds balances from the event log, settle-up optimiser
     insights.js         spending analytics
+    split.js            split strategies (equal, shares, exact, +/-, items)
+    receipt/            receipt scanner — see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css
 public/                 service worker (copied as-is)
 ```
 
 The app icon lives in `src/lib/brandIcon.js`. At build time, `build/brand-icons.js` reads the accent palettes from `src/app.css` and emits `icons/<accent>.svg`, `icons/<accent>-{180,192,512,maskable-512}.png` and `manifest-<accent>.webmanifest`. In dev, it serves the same files. Adding a palette to `app.css` automatically gives it an icon set.
+
+### Receipt parser
+`src/lib/receipt/` runs entirely in the browser and is code-split, so it only loads when someone taps **Scan a receipt**:
+
+- `ocr.js`, `preprocess.js`, `solver.js`, `datetime.js`, `schema.js`, `audit.js` are **vendored unchanged** from the receipt_test bench (commit noted in each file header). Improve the parser there, measure it on the bench, then copy the files back.
+- `image.js` holds the scanner's photo handling (auto corners, perspective flattening, brightness / contrast).
+- `draft.js` maps a parsed receipt onto expense fields (amount, date, merchant, category guess, items).
+- `index.js` is the entry point the UI imports lazily.
+
+PaddleOCR is loaded from jsDelivr (pinned version) and its model files are cached by the browser after the first scan. Unit tests feed synthetic OCR boxes through the real solver (`tests/receipt.test.js`); the CDN import is stubbed in `vitest.config.js`.
 
 ### Deploying to GitHub Pages
 ```bash

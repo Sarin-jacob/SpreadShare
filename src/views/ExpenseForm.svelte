@@ -14,6 +14,7 @@
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
+  import ReceiptScanner from '../components/ReceiptScanner.svelte';
 
   let { groupId, editId = null, prefill = {} } = $props();
 
@@ -42,6 +43,9 @@
   let to = $state('');
   let interestExpr = $state('');
   let receipt = $state(null);
+  let receiptItems = $state([]); // [{ name, amount: string, members: string[] }] for the 'ITEMS' split
+  let receiptScan = $state(null); // compact copy of a scanned receipt, kept on the expense
+  let scanFile = $state(null);
   let compressing = $state(false);
   let saving = $state(false);
   let ready = $state(false);
@@ -87,6 +91,7 @@
 
     if (type === 'EXPENSE_ADD') {
       categoryValue = p.category || 'General';
+      receiptScan = p.receipt_scan || null;
       const payers = p.payers || [];
       if (payers.length > 1) {
         payerMode = 'MULTIPLE';
@@ -99,6 +104,8 @@
       if (strategy === 'EQUALLY') {
         const inSplit = new Set(p.split_members || allocs.filter((a) => a.value > 0).map((a) => a.user));
         excluded = Object.fromEntries(members.filter((m) => !inSplit.has(m)).map((m) => [m, true]));
+      } else if (strategy === 'ITEMS' && p.receipt_items?.length) {
+        receiptItems = p.receipt_items.map((i) => ({ name: i.name, amount: String(i.amount), members: [...i.members] }));
       } else if (p.split_inputs) {
         splitInputs = { ...p.split_inputs };
       } else {
@@ -119,9 +126,17 @@
   const total = $derived(round2(amount * rate));
   const hasOperator = $derived(/[+\-*/×÷]/.test(amountExpr.replace(/^-/, '')));
 
+  // Item prices are typed in the bill's currency; convert them like the total before splitting.
+  const itemsInBase = $derived(
+    receiptItems.map((i) => {
+      const v = evaluate(i.amount);
+      return { ...i, amount: v === null ? i.amount : v * rate };
+    })
+  );
+
   const split = $derived(
     type === 'EXPENSE_ADD'
-      ? computeSplit(strategy, total, members, { excluded, inputs: splitInputs, nameOf: name })
+      ? computeSplit(strategy, total, members, { excluded, inputs: splitInputs, items: itemsInBase, nameOf: name })
       : { alloc: {} }
   );
 
@@ -178,6 +193,46 @@
     }
   }
 
+  // ─── Receipt scanning ───
+  function onScanFile(e) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (file) scanFile = file;
+  }
+
+  function applyScan({ draft, image, mode, compact }) {
+    scanFile = null;
+    if (draft.amount != null) amountExpr = String(draft.amount);
+    if (draft.currency && draft.currency !== currency && CURRENCIES.includes(draft.currency)) {
+      currency = draft.currency;
+      onCurrencyChange();
+    }
+    if (draft.title && !title.trim()) title = draft.title;
+    if (draft.when) when = draft.when;
+    if (draft.category) categoryValue = draft.category;
+    receipt = image;
+    receiptScan = compact;
+
+    const everyone = members.filter((m) => !excluded[m]);
+    if (draft.items.length) {
+      receiptItems = draft.items.map((i) => ({ name: i.name, amount: String(i.total), members: [...everyone] }));
+    }
+    if (mode === 'items') strategy = 'ITEMS';
+
+    if (draft.amount == null) toast('No total found on the receipt — enter the amount', 'info');
+    else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read — check the details', 'info');
+  }
+
+  function addItem() {
+    receiptItems.push({ name: '', amount: '', members: members.filter((m) => !excluded[m]) });
+  }
+
+  function toggleItemMember(item, m) {
+    const i = item.members.indexOf(m);
+    if (i === -1) item.members.push(m);
+    else item.members.splice(i, 1);
+  }
+
   async function save(e) {
     e?.preventDefault();
     if (error || saving) return;
@@ -203,8 +258,11 @@
         payers: payers.list,
       });
       if (strategy === 'EQUALLY') payload.split_members = members.filter((m) => !excluded[m]);
-      else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
+      else if (strategy === 'ITEMS') {
+        payload.receipt_items = receiptItems.map((i) => ({ name: i.name.trim() || 'Item', amount: round2(evaluate(i.amount) ?? 0), members: [...i.members] }));
+      } else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
       if (receipt) payload.receipt_local_url = receipt;
+      if (receiptScan) payload.receipt_scan = $state.snapshot(receiptScan);
     } else {
       payload.category = 'Financial';
       payload.target_peer_identity = to;
@@ -237,11 +295,13 @@
     { value: 'SHARES', label: 'Shares' },
     { value: 'EXACT', label: 'Exact' },
     { value: 'ADJUSTMENT', label: '+/−' },
+    { value: 'ITEMS', label: 'Items' },
   ];
   const HINTS = {
     SHARES: 'Weights per person (blank = 1, 0 = not included)',
     EXACT: 'Exact amounts — leave one blank to give it the remainder',
     ADJUSTMENT: 'Extra (+) or less (−) than an equal share',
+    ITEMS: 'Tap who had each item. Tax, service and discounts are shared in proportion.',
   };
 </script>
 
@@ -260,6 +320,17 @@
           <button type="button" aria-pressed={type === t.value} onclick={() => (type = t.value)}>{t.label}</button>
         {/each}
       </div>
+    {/if}
+
+    {#if type === 'EXPENSE_ADD'}
+      <label class="flex items-center gap-3 rounded-2xl border border-dashed border-accent-500/50 bg-accent-500/5 px-4 py-3 cursor-pointer hover:bg-accent-500/10 transition">
+        <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/15 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</span>
+          <span class="block text-xs text-slate-500 dark:text-slate-400">Fills in the amount, date, shop and items — read on this device</span>
+        </span>
+        <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
+      </label>
     {/if}
 
     <!-- Amount -->
@@ -377,11 +448,57 @@
           </div>
         </div>
         {#if HINTS[strategy]}<p class="text-xs text-slate-400">{HINTS[strategy]}</p>{/if}
-        <ul class="space-y-2">
+        {#if strategy === 'ITEMS'}
+          {#if receiptItems.length === 0}
+            <p class="text-sm text-slate-500 text-center py-3">Scan a receipt above, or add items by hand.</p>
+          {/if}
+          <ul class="space-y-3">
+            {#each receiptItems as item, idx (item)}
+              <li class="rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 space-y-2">
+                <div class="flex items-center gap-2">
+                  <input class="field !py-1.5 flex-1 min-w-0" bind:value={item.name} placeholder="Item {idx + 1}" aria-label="Item name" />
+                  <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={item.amount} inputmode="decimal" placeholder="0" aria-label="Item price" />
+                  <button type="button" class="btn btn-ghost !p-1.5 shrink-0" aria-label="Remove item" onclick={() => receiptItems.splice(idx, 1)}><Icon name="x" class="w-4 h-4" /></button>
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each members as m (m)}
+                    {@const on = item.members.includes(m)}
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      class="flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full border text-xs font-medium transition
+                        {on ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 opacity-50'}"
+                      onclick={() => toggleItemMember(item, m)}
+                    >
+                      <Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />
+                      {name(m)}
+                    </button>
+                  {/each}
+                </div>
+              </li>
+            {/each}
+          </ul>
+          <button type="button" class="btn btn-soft w-full !py-2 text-xs" onclick={addItem}><Icon name="plus" class="w-4 h-4" /> Add item</button>
+          {#if split.itemsTotal != null}
+            <p class="text-xs text-slate-500 text-center">
+              Items {money(split.itemsTotal)}
+              {#if Math.abs(split.extras) >= 0.05}
+                · {split.extras > 0 ? 'tax & extras' : 'discounts'} {money(Math.abs(split.extras))} shared in proportion
+              {/if}
+            </p>
+            {#if Math.abs(split.extras) > split.itemsTotal * 0.35}
+              <p class="text-xs text-amber-600 dark:text-amber-400 text-center">Items and total are quite far apart — check for missing or misread items.</p>
+            {/if}
+          {/if}
+        {/if}
+        <ul class="space-y-2 {strategy === 'ITEMS' ? 'border-t border-slate-100 dark:border-slate-700/60 pt-3' : ''}">
           {#each members as m (m)}
             {@const share = split.alloc[m] ?? 0}
             <li class="flex items-center gap-2">
-              {#if strategy === 'EQUALLY'}
+              {#if strategy === 'ITEMS'}
+                <Avatar email={m} profile={L.profiles[m]} size="w-7 h-7" />
+                <span class="flex-1 text-sm truncate">{name(m)}</span>
+              {:else if strategy === 'EQUALLY'}
                 <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
                   <input type="checkbox" class="w-4 h-4 accent-[var(--accent-500)]" checked={!excluded[m]} onchange={(e) => (excluded[m] = !e.currentTarget.checked)} />
                   <Avatar email={m} profile={L.profiles[m]} size="w-7 h-7" />
@@ -460,4 +577,8 @@
       </button>
     </div>
   </form>
+{/if}
+
+{#if scanFile}
+  <ReceiptScanner file={scanFile} onapply={applyScan} onclose={() => (scanFile = null)} />
 {/if}
