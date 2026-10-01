@@ -289,14 +289,18 @@
         <p class="text-xs text-slate-400">Read on this device in {(result.ms / 1000).toFixed(1)}s</p>
       </div>
 
-      <div class="grid gap-2 {draft?.items.length ? 'sm:grid-cols-2' : ''}">
-        <button class="btn btn-primary !py-3" onclick={() => apply('total')} disabled={r.total == null && !draft?.items.length}>
+      {#if draft?.items.length}
+        <div class="grid gap-2 sm:grid-cols-[2fr_1fr]">
+          <button class="btn btn-primary !py-3" onclick={() => apply('items')}>
+            <Icon name="check" class="w-4 h-4" /> Split by items ({draft.items.length})
+          </button>
+          <button class="btn btn-soft !py-3" onclick={() => apply('total')} disabled={r.total == null}>Just the total</button>
+        </div>
+      {:else}
+        <button class="btn btn-primary w-full !py-3" onclick={() => apply('total')} disabled={r.total == null}>
           <Icon name="check" class="w-4 h-4" /> Use these details
         </button>
-        {#if draft?.items.length}
-          <button class="btn btn-soft !py-3" onclick={() => apply('items')}>Split by items ({draft.items.length})</button>
-        {/if}
-      </div>
+      {/if}
       <div class="flex gap-2">
         <button class="btn btn-ghost flex-1" onclick={() => (step = 'edit')}>Adjust crop &amp; rescan</button>
         <button class="btn btn-ghost flex-1" onclick={onclose}>Cancel</button>

@@ -1,25 +1,10 @@
 // src/lib/receipt/draft.js
 // Turns a parsed receipt (see schema.js normalize()) into expense-form values. Pure — no OCR or DOM.
+import { keywordCategory } from '../categorize.js';
 
-const CATEGORY_RULES = [
-  ['Groceries', /grocer|supermarket|hypermarket|\bmart\b|blinkit|zepto|bigbasket|instamart|dmart|reliance\s*(fresh|smart)|more\s*retail|kirana|provision|walmart|costco|aldi|lidl|tesco|sainsbury|whole\s*foods|trader\s*joe|fairprice|giant|\bvegetables?\b|\bmilk\b/i],
-  ['Food', /restaurant|\bcaf[eé]\b|coffee|kitchen|dhaba|bakery|pizza|burger|biryani|swiggy|zomato|\bbar\b|\bpub\b|eatery|\bfoods?\b|starbucks|mcdonald|\bkfc\b|domino|subway|chai|\btea\b|dine|bistro|grill|canteen|mess\b/i],
-  ['Health', /pharma|chemist|medical|hospital|clinic|apollo|medplus|1mg|netmeds|\bdrug|diagnostic|\blab\b|dental/i],
-  ['Travel', /\buber\b|\bola\b|rapido|\bfuel\b|petrol|diesel|\bhpcl\b|\bbpcl\b|indian\s*oil|\bshell\b|parking|\btoll\b|\bmetro\b|railway|irctc|airline|airways|\bcab\b|taxi/i],
-  ['Stay', /\bhotel\b|resort|\binn\b|hostel|lodge|\boyo\b|airbnb|homestay|\brent\b/i],
-  ['Utilities', /electric|\bpower\b|water\s*(board|bill)|broadband|recharge|airtel|\bjio\b|vodafone|bsnl|\bgas\b|\bbill\s*pay/i],
-  ['Entertainment', /cinema|\bpvr\b|\binox\b|movie|theatre|theater|bookmyshow|netflix|gaming|bowling|amusement/i],
-  ['Shopping', /fashion|apparel|clothing|footwear|electronics|amazon|flipkart|myntra|decathlon|ikea|\bmall\b|lifestyle|pantaloons|zara|h\s*&\s*m/i],
-];
-
-/** Best-guess category value from the merchant name, then item names. */
+/** Best-guess category value from the merchant name, then item names (keyword rules only). */
 export function guessCategory(receipt) {
-  const texts = [receipt?.merchant || '', (receipt?.items || []).map((i) => i.name).join(' ')];
-  for (const text of texts) {
-    if (!text) continue;
-    for (const [value, re] of CATEGORY_RULES) if (re.test(text)) return value;
-  }
-  return null;
+  return keywordCategory(receipt?.merchant) ?? keywordCategory((receipt?.items || []).map((i) => i.name).join(' '));
 }
 
 const pad = (n) => String(n).padStart(2, '0');

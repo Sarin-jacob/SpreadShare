@@ -12,7 +12,8 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Fast Everyday Use:** Search and filter group activity, duplicate an entry, undo a delete, nudge friends who owe you with a share-sheet reminder, and use the keyboard shortcuts `n` (new entry) and `/` (search).
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **Receipt Scanning (on-device):** Snap a bill and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
-*   **Item-Wise Splitting:** Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
+*   **Auto-Categorization (on-device):** As you type a description or scan a receipt, SpreadShare picks the category. A small Naive Bayes model learns from your own past expenses (so "Toit" → Food, or your Instamart runs → Groceries), and built-in keyword rules cover everything else. It never overrides a category you picked yourself.
+*   **Item-Wise Splitting:** Scanned receipts default to splitting by items. Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
 *   **Deep Customization:** Light / dark / auto themes, OLED pure-black mode, 12 accent palettes, and global UI scaling.
@@ -39,7 +40,7 @@ SpreadShare operates on a double-entry ledger system. Every action (Expense, Tra
 
 Upcoming features focused on bringing privacy-first, on-device AI to expense management via small client-side models running entirely in the browser:
 
-- [ ] **Smart Auto-Categorization:** Context-aware prediction of expense categories based on the transaction title and description (scanned receipts already get a keyword-based guess).
+- [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback.
 - [x] **Receipt Auto-Parsing:** On-device OCR extracts totals, dates, merchant names, items and taxes from photos.
 - [x] **Item-Wise Bill Splitting:** Assign line items from a scanned receipt to specific members instead of splitting the grand total.
 
@@ -72,6 +73,7 @@ src/
     engine.js           rebuilds balances from the event log, settle-up optimiser
     insights.js         spending analytics
     split.js            split strategies (equal, shares, exact, +/-, items)
+    categorize.js       category suggestions: personal Naive Bayes model + keyword rules
     receipt/            receipt scanner — see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css

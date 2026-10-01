@@ -8,6 +8,8 @@
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
   import { computeSplit, exactWithRemainder } from '../lib/split.js';
+  import { suggestCategory, expenseText } from '../lib/categorize.js';
+  import { getCategoryModel } from '../lib/categoryModel.svelte.js';
   import { compressImage } from '../lib/image.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
@@ -32,7 +34,11 @@
   let currency = $state(BASE);
   let rateExpr = $state('1');
   let rateLoading = $state(false);
-  let categoryValue = $state('Food');
+  let categoryValue = $state('General');
+  let categoryTouched = $state(false); // the user picked a category → never auto-change it
+  let autoCategory = $state(null); // { category, source } when the current category was suggested
+  let categoryModel = $state.raw(null);
+  getCategoryModel().then((m) => (categoryModel = m));
   let payerMode = $state('SINGLE');
   let payer = $state(me);
   let payerInputs = $state({});
@@ -91,6 +97,7 @@
 
     if (type === 'EXPENSE_ADD') {
       categoryValue = p.category || 'General';
+      categoryTouched = true;
       receiptScan = p.receipt_scan || null;
       const payers = p.payers || [];
       if (payers.length > 1) {
@@ -139,6 +146,23 @@
       ? computeSplit(strategy, total, members, { excluded, inputs: splitInputs, items: itemsInBase, nameOf: name })
       : { alloc: {} }
   );
+
+  // Suggest a category from the description, scanned shop and item names as they change.
+  $effect(() => {
+    if (type !== 'EXPENSE_ADD' || categoryTouched) return;
+    const text = expenseText({ title, receipt_scan: receiptScan, receipt_items: receiptItems });
+    const s = suggestCategory(text, categoryModel);
+    untrack(() => {
+      autoCategory = s;
+      categoryValue = s?.category ?? 'General';
+    });
+  });
+
+  function pickCategory(value) {
+    categoryValue = value;
+    categoryTouched = true;
+    autoCategory = null;
+  }
 
   const payers = $derived.by(() => {
     if (payerMode === 'SINGLE') return { list: [{ user: payer, value: total }] };
@@ -209,7 +233,7 @@
     }
     if (draft.title && !title.trim()) title = draft.title;
     if (draft.when) when = draft.when;
-    if (draft.category) categoryValue = draft.category;
+    // Category: picked up by the auto-categorise effect from the shop and item names.
     receipt = image;
     receiptScan = compact;
 
@@ -382,14 +406,21 @@
 
     {#if type === 'EXPENSE_ADD'}
       <div>
-        <span class="label">Category</span>
+        <div class="flex items-center justify-between gap-2">
+          <span class="label">Category</span>
+          {#if autoCategory && !categoryTouched}
+            <span class="text-[11px] font-medium text-accent-600 dark:text-accent-400 mb-1.5" title="Tap a category to choose it yourself">
+              ✨ Auto · {autoCategory.source === 'history' ? 'learned from your expenses' : 'matched keywords'}
+            </span>
+          {/if}
+        </div>
         <div class="flex flex-wrap gap-1.5">
           {#each CATEGORIES as c}
             <button
               type="button"
               class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
                 {categoryValue === c.value ? 'border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"
-              onclick={() => (categoryValue = c.value)}
+              onclick={() => pickCategory(c.value)}
             >
               {c.icon} {c.label}
             </button>
