@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/audit.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/audit.js. Keep in sync with that repo; avoid local edits.
 // Engine-agnostic arithmetic checks on a normalized result. These need no
 // ground truth, so the same checks can gate results in the real app.
 const close = (a, b, tol = 0.02) => a != null && b != null && Math.abs(a - b) <= tol;

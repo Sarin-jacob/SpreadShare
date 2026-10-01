@@ -74,7 +74,7 @@ src/
     insights.js         spending analytics
     split.js            split strategies (equal, shares, exact, +/-, items)
     categorize.js       category suggestions: personal Naive Bayes model + keyword rules
-    receipt/            receipt scanner — see "Receipt parser" below
+    receipt/            receipt scanner , see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css
 public/                 service worker (copied as-is)

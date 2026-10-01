@@ -1,5 +1,5 @@
 // src/lib/receipt/draft.js
-// Turns a parsed receipt (see schema.js normalize()) into expense-form values. Pure — no OCR or DOM.
+// Turns a parsed receipt (see schema.js normalize()) into expense-form values. Pure , no OCR or DOM.
 import { keywordCategory } from '../categorize.js';
 
 /** Best-guess category value from the merchant name, then item names (keyword rules only). */

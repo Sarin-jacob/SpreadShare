@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
 // Receipt structure from OCR boxes without a generative model.
 // 1. group boxes into lines, pull money values out of each line
 // 2. tag lines (total / subtotal / tax / discount / charge / payment / item)
@@ -31,7 +31,7 @@ const SUMMARY_TAGS =['total', 'subtotal', 'tax', 'charge', 'discount', 'payment'
 
 const CUR = String.raw`(?:US\$|USD\$?|CHF|EUR|GBP|INR|PKR|MYR|RM|Rs\.?|₹|\$|€|£|¥)`;
 const CUR_RE = new RegExp(CUR, 'g');
-// Money: optional currency, digit groups, 2-decimal part (or 1 decimal, "800.0") —
+// Money: optional currency, digit groups, 2-decimal part (or 1 decimal, "800.0") ,
 // or a bare integer right after a currency symbol (₹424), or Indian "120/-".
 const MONEY_RE = new RegExp(String.raw`(-\s*)?(${CUR}\s*)?(\d{1,3}(?:[,.']\d{3})+|\d+)([.,]\d{2}|\.\d(?![\d.,]))(?!\d)(\s*-(?!\d))?|(-\s*)?(${CUR})\s*(\d{1,3}(?:[.,]\d{3})+|\d+)(?![\d.,])|(?<![\d.,])(\d{1,6})\s*\/-`, 'g');
 

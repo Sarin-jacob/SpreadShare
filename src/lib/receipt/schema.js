@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/schema.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/schema.js. Keep in sync with that repo; avoid local edits.
 // The output shape every engine must return, plus helpers to coerce
 // whatever a model produced into it.
 

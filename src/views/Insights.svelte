@@ -64,7 +64,7 @@
 
   {#if missing > 0}
     <p class="text-xs text-center text-slate-500 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2">
-      {app.sync.progress ? `Downloading groups… ${app.sync.progress.done}/${app.sync.progress.total}` : `${missing} group${missing > 1 ? 's' : ''} not downloaded yet — reconnect or tap sync.`}
+      {app.sync.progress ? `Downloading groups… ${app.sync.progress.done}/${app.sync.progress.total}` : `${missing} group${missing > 1 ? 's' : ''} not downloaded yet , reconnect or tap sync.`}
     </p>
   {:else if loaded && data.count === 0}
     <p class="text-sm text-center text-slate-400 py-4">No expenses in this period.</p>

@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/datetime.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/datetime.js. Keep in sync with that repo; avoid local edits.
 // Date and time of a receipt from its OCR lines.
 //
 // Every date/time-looking string becomes a candidate; candidates are scored by
@@ -47,7 +47,7 @@ function dateCandidates(text) {
     // October 14, 2022 / Jul 14 2024
     [new RegExp(String.raw`\b${MON}[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)`, 'gi'), m => ({ y: +m[3], m: MONTHS[m[1].slice(0, 3).toLowerCase()], d: +m[2] })],
     // 21/07/24, 1.8.23, 06/01/2016, 21-7-2024
-    // (a ":" before is fine — "Date:21-7-2024" — unless it follows a digit, i.e. a time)
+    // (a ":" before is fine , "Date:21-7-2024" , unless it follows a digit, i.e. a time)
     [/(?<!\d)(?<!\d[./-])(?<!\d:)(\d{1,2})\s?([-/.])\s?(\d{1,2})\2\s?(\d{4}|\d{2})(?![\d:]|\.\d)/g, m => ({ a: +m[1], b: +m[3], y: fullYear(+m[4]), numeric: true })],
     // Handwritten mixes separators ("27-09.2026"); only trusted with a full 19xx/20xx year.
     [/(?<!\d)(?<!\d[./-])(?<!\d:)(\d{1,2})\s?([-/.])\s?(\d{1,2})(?!\2)[-/.]\s?((?:19|20)\d{2})(?![\d:])/g, m => ({ a: +m[1], b: +m[3], y: +m[4], numeric: true })],

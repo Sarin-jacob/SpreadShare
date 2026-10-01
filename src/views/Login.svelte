@@ -30,7 +30,7 @@
     <div class="text-center space-y-3">
       <Logo class="w-20 h-20 mx-auto drop-shadow-xl" />
       <h1 class="text-3xl font-black tracking-tight">SpreadShare</h1>
-      <p class="text-slate-500 dark:text-slate-400">Split expenses with friends. No servers, no accounts — just your Google Drive.</p>
+      <p class="text-slate-500 dark:text-slate-400">Split expenses with friends. No servers, no accounts , just your Google Drive.</p>
     </div>
 
     <ul class="card p-4 space-y-3">

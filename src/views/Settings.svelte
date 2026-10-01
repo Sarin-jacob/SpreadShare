@@ -22,7 +22,7 @@
   const mb = (bytes) => `${Math.round(bytes / 1048576)} MB`;
 
   async function getReader() {
-    if (await downloadOcr()) toast('Receipt reader saved — scanning now works offline');
+    if (await downloadOcr()) toast('Receipt reader saved , scanning now works offline');
     else if (ocrOffline.error) toast(`Download failed: ${ocrOffline.error}`, 'error');
   }
 
@@ -105,7 +105,7 @@
       <div class="flex-1 min-w-0">
         <div class="text-sm font-bold">Install SpreadShare</div>
         <div class="text-xs text-slate-500">
-          {pwa.canPrompt ? 'Add it to your home screen — works offline.' : 'Tap Share, then “Add to Home Screen”.'}
+          {pwa.canPrompt ? 'Add it to your home screen , works offline.' : 'Tap Share, then “Add to Home Screen”.'}
         </div>
       </div>
       {#if pwa.canPrompt}

@@ -1,7 +1,7 @@
 // src/lib/brandIcon.js
 // The SpreadShare app icon as a parametric SVG: a spreadsheet with a ₹ coin, tinted by the accent.
 // Shared by the in-app <Logo> (CSS variables) and the build-time icon generator (hex colours).
-// Everything is drawn with paths — no text — so it rasterises identically without fonts.
+// Everything is drawn with paths , no text , so it rasterises identically without fonts.
 
 /**
  * @param {Record<number,string>} c accent shades keyed 100..800 (hex or `var(--accent-500)`)

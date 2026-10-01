@@ -191,7 +191,7 @@
     const r = await getMultiplier(currency, BASE);
     rateLoading = false;
     if (r) rateExpr = String(round4(r));
-    else toast('Couldn’t fetch the exchange rate — enter it manually', 'info');
+    else toast('Couldn’t fetch the exchange rate , enter it manually', 'info');
   }
   const round4 = (n) => Math.round(n * 10000) / 10000;
 
@@ -243,8 +243,8 @@
     }
     if (mode === 'items') strategy = 'ITEMS';
 
-    if (draft.amount == null) toast('No total found on the receipt — enter the amount', 'info');
-    else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read — check the details', 'info');
+    if (draft.amount == null) toast('No total found on the receipt , enter the amount', 'info');
+    else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read , check the details', 'info');
   }
 
   function addItem() {
@@ -323,7 +323,7 @@
   ];
   const HINTS = {
     SHARES: 'Weights per person (blank = 1, 0 = not included)',
-    EXACT: 'Exact amounts — leave one blank to give it the remainder',
+    EXACT: 'Exact amounts , leave one blank to give it the remainder',
     ADJUSTMENT: 'Extra (+) or less (−) than an equal share',
     ITEMS: 'Tap who had each item. Tax, service and discounts are shared in proportion.',
   };
@@ -351,7 +351,7 @@
         <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/15 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
         <span class="flex-1 min-w-0">
           <span class="block text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</span>
-          <span class="block text-xs text-slate-500 dark:text-slate-400">Fills in the amount, date, shop and items — read on this device</span>
+          <span class="block text-xs text-slate-500 dark:text-slate-400">Fills in the amount, date, shop and items , read on this device</span>
         </span>
         <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
       </label>
@@ -518,7 +518,7 @@
               {/if}
             </p>
             {#if Math.abs(split.extras) > split.itemsTotal * 0.35}
-              <p class="text-xs text-amber-600 dark:text-amber-400 text-center">Items and total are quite far apart — check for missing or misread items.</p>
+              <p class="text-xs text-amber-600 dark:text-amber-400 text-center">Items and total are quite far apart : check for missing or misread items.</p>
             {/if}
           {/if}
         {/if}

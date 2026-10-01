@@ -133,7 +133,7 @@
       if (navigator.share) await navigator.share({ text });
       else {
         await navigator.clipboard.writeText(text);
-        toast('Reminder copied — paste it in your chat');
+        toast('Reminder copied , paste it in your chat');
       }
     } catch {
       /* share sheet dismissed */

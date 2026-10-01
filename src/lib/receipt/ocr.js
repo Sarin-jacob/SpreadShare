@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/ocr.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/ocr.js. Keep in sync with that repo; avoid local edits.
 // PaddleOCR wrapper + conversion of OCR boxes into layout-preserving text,
 // which is what the text LLM engines read.
 import { PaddleOCR } from 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';

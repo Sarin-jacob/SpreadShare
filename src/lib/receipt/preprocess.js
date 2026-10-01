@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 — bench/lib/preprocess.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@8125280 , bench/lib/preprocess.js. Keep in sync with that repo; avoid local edits.
 // Image preprocessing for phone photos of receipts. Everything here is plain
 // canvas work (no extra downloads).
 import { runOcr } from './ocr.js';

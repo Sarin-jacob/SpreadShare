@@ -1,5 +1,5 @@
 // src/lib/google.js
-// Raw Google Drive / Sheets calls. No app state here — see app.svelte.js for orchestration.
+// Raw Google Drive / Sheets calls. No app state here , see app.svelte.js for orchestration.
 import { CONFIG } from './config.js';
 import { AuthService, AuthRequiredError } from './auth.js';
 
@@ -83,7 +83,7 @@ export async function createGroupSpreadsheet(groupName) {
   return id;
 }
 
-/** Anyone with the link can edit — this is how invited members get access to the ledger. */
+/** Anyone with the link can edit , this is how invited members get access to the ledger. */
 export const shareWithLink = (fileId, role = 'writer') =>
   gfetch(`${DRIVE}/${fileId}/permissions`, {
     method: 'POST',
