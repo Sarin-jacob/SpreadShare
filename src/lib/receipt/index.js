@@ -2,7 +2,9 @@
 // On-device receipt scanning: PaddleOCR (PP-OCRv6 small) + an arithmetic line solver.
 // This module is imported lazily by the scanner so the OCR code and model download only
 // happen when someone actually scans. Parser modules are vendored from receipt_test@8125280.
-import { getOcr } from './ocr.js';
+// Same specifier as ocr.js, so both share one module instance.
+import { PaddleOCR } from 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
+import { getOcr, OCR_MODELS } from './ocr.js';
 import { ocrPhoto } from './preprocess.js';
 import { solveReceipt } from './solver.js';
 import { normalize } from './schema.js';
@@ -12,7 +14,8 @@ export * from './image.js';
 export * from './draft.js';
 
 export const OCR_MODEL = 'v6-small';
-export const OCR_DOWNLOAD_MB = 31;
+/** One-time download: OCR models (~30 MB) + OpenCV and the ONNX runtime (~37 MB). */
+export const OCR_DOWNLOAD_MB = 67;
 
 let ready = false;
 
@@ -25,6 +28,30 @@ export function preloadOcr() {
 }
 
 export const isOcrReady = () => ready;
+
+/**
+ * Downloads every file the reader needs (through the service worker, which keeps them for
+ * offline use) by starting a throwaway instance with the same options a scan uses, then
+ * releases it so a background download doesn't hold ~100 MB of memory.
+ */
+export async function warmUp() {
+  if (ready) return; // a scan already loaded (and the service worker cached) everything
+  const ocr = await PaddleOCR.create({
+    ...OCR_MODELS[OCR_MODEL].opts,
+    ortOptions: { backend: 'auto', numThreads: Math.min(4, navigator.hardwareConcurrency || 2) },
+  });
+  try {
+    // The ONNX runtime initialises lazily; one tiny recognition forces every file to load.
+    const blank = document.createElement('canvas');
+    blank.width = blank.height = 64;
+    const g = blank.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, 64, 64);
+    await ocr.predict(blank);
+  } finally {
+    await ocr.dispose?.();
+  }
+}
 
 /**
  * Reads a flattened receipt image.

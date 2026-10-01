@@ -2,6 +2,7 @@
   import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory } from '../lib/app.svelte.js';
   import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
   import { pwa, promptInstall } from '../lib/pwa.svelte.js';
+  import { ocrOffline, downloadOcr, removeOcr } from '../lib/ocrOffline.svelte.js';
   import Logo from '../components/Logo.svelte';
   import { toast } from '../lib/toast.svelte.js';
   import Avatar from '../components/Avatar.svelte';
@@ -16,6 +17,19 @@
     await syncAll();
     busy = false;
     toast(pendingIds.size ? `${pendingIds.size} entries still waiting` : 'Everything is synced', pendingIds.size ? 'info' : 'success');
+  }
+
+  const mb = (bytes) => `${Math.round(bytes / 1048576)} MB`;
+
+  async function getReader() {
+    if (await downloadOcr()) toast('Receipt reader saved — scanning now works offline');
+    else if (ocrOffline.error) toast(`Download failed: ${ocrOffline.error}`, 'error');
+  }
+
+  async function dropReader() {
+    if (!confirm('Remove the receipt reader from this device? It will download again the next time you scan.')) return;
+    await removeOcr();
+    toast('Receipt reader removed', 'info');
   }
 
   async function signOut() {
@@ -96,6 +110,42 @@
       </div>
       {#if pwa.canPrompt}
         <button class="btn btn-primary !py-2 shrink-0" onclick={promptInstall}>Install</button>
+      {/if}
+    </section>
+  {/if}
+
+  {#if ocrOffline.status !== 'unsupported'}
+    <section class="card p-4 space-y-3">
+      <div class="flex items-center gap-4">
+        <span class="w-11 h-11 rounded-xl grid place-items-center bg-accent-500/10 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-bold">Receipt reader</div>
+          <div class="text-xs text-slate-500">
+            {#if ocrOffline.status === 'ready'}
+              ✓ On this device{ocrOffline.bytes ? ` · ${mb(ocrOffline.bytes)}` : ''} · scanning works offline
+            {:else if ocrOffline.status === 'downloading'}
+              Downloading… {Math.round(ocrOffline.progress * 100)}%
+            {:else if ocrOffline.status === 'error'}
+              <span class="text-rose-500">{ocrOffline.error}</span>
+            {:else if ocrOffline.status === 'checking'}
+              Checking…
+            {:else}
+              Download once (~67 MB) to scan receipts offline{pwa.installed ? '' : '. Installed apps get it automatically'}
+            {/if}
+          </div>
+        </div>
+        {#if ocrOffline.status === 'ready'}
+          <button class="btn btn-ghost !py-2 shrink-0 text-xs" onclick={dropReader}>Remove</button>
+        {:else if ocrOffline.status === 'missing' || ocrOffline.status === 'error'}
+          <button class="btn btn-soft !py-2 shrink-0" onclick={getReader} disabled={!app.sync.online}>
+            <Icon name="download" class="w-4 h-4" /> {ocrOffline.status === 'error' ? 'Retry' : 'Download'}
+          </button>
+        {/if}
+      </div>
+      {#if ocrOffline.status === 'downloading'}
+        <div class="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+          <div class="h-full bg-accent-500 rounded-full transition-[width] duration-300" style="width:{Math.max(3, ocrOffline.progress * 100)}%"></div>
+        </div>
       {/if}
     </section>
   {/if}

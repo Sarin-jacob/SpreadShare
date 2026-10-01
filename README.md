@@ -11,7 +11,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Optimized Settlements:** Utilizes a greedy algorithm to calculate the most efficient path to settle complex group debts, minimizing the total number of required transactions.
 *   **Fast Everyday Use:** Search and filter group activity, duplicate an entry, undo a delete, nudge friends who owe you with a share-sheet reminder, and use the keyboard shortcuts `n` (new entry) and `/` (search).
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
-*   **Receipt Scanning (on-device):** Snap a bill and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server; the ~31 MB reader downloads once on first use.
+*   **Receipt Scanning (on-device):** Snap a bill and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
 *   **Item-Wise Splitting:** Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
@@ -88,7 +88,7 @@ The app icon lives in `src/lib/brandIcon.js`. At build time, `build/brand-icons.
 - `draft.js` maps a parsed receipt onto expense fields (amount, date, merchant, category guess, items).
 - `index.js` is the entry point the UI imports lazily.
 
-PaddleOCR is loaded from jsDelivr (pinned version) and its model files are cached by the browser after the first scan. Unit tests feed synthetic OCR boxes through the real solver (`tests/receipt.test.js`); the CDN import is stubbed in `vitest.config.js`.
+PaddleOCR is loaded from jsDelivr (pinned version). The service worker keeps PaddleOCR, OpenCV, the ONNX runtime and both models in a dedicated `spreadshare-ocr-…` cache that survives app updates; `src/lib/ocrOffline.svelte.js` downloads it in the background when the app is installed and powers the Settings row. Bump the cache name in `public/sw.js` and `ocrOffline.svelte.js` together if the PaddleOCR version changes. Unit tests feed synthetic OCR boxes through the real solver (`tests/receipt.test.js`); the CDN import is stubbed in `vitest.config.js`.
 
 ### Deploying to GitHub Pages
 ```bash

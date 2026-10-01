@@ -3,6 +3,7 @@
   // brightness / contrast / B&W → on-device OCR → review → hand results to the form.
   import { onMount } from 'svelte';
   import { money } from '../lib/format.js';
+  import { ocrOffline, checkOcrOffline, keepAfterScan } from '../lib/ocrOffline.svelte.js';
   import Icon from './Icon.svelte';
 
   /**
@@ -17,7 +18,7 @@
   let source = $state.raw(null);
   let quad = $state([]);
   let adj = $state({ bright: 0, contrast: 0, gray: false, autoLevels: true });
-  let model = $state('idle'); // idle | downloading | ready | failed
+  let model = $state('idle'); // idle | loading (from offline copy) | downloading | ready | failed
   let result = $state.raw(null);
   let image = $state(null);
   let elapsed = $state(0);
@@ -40,9 +41,14 @@
       source = await R.loadPhoto(file);
       quad = R.autoQuad(source);
       step = 'edit';
-      // Fetch the OCR model while the user adjusts the crop.
+      // Fetch (or load from the offline copy) the OCR model while the user adjusts the crop.
+      await checkOcrOffline();
+      if (!navigator.onLine && !R.isOcrReady() && ocrOffline.status !== 'ready') {
+        throw new Error('offline-no-reader');
+      }
       if (!R.isOcrReady()) {
-        model = 'downloading';
+        // Already on the device → just starting it up; otherwise this is the one-time download.
+        model = ocrOffline.status === 'ready' ? 'loading' : 'downloading';
         R.preloadOcr().then(() => (model = 'ready'), () => (model = 'failed'));
       } else {
         model = 'ready';
@@ -54,7 +60,9 @@
 
   function fail(e) {
     console.error(e);
-    error = /fetch|network|load/i.test(e?.message || '')
+    error = e?.message === 'offline-no-reader'
+      ? 'You’re offline and the receipt reader isn’t on this device yet. Connect once (or download it in Settings) and scanning will work offline from then on.'
+      : /fetch|network|load/i.test(e?.message || '')
       ? 'Couldn’t download the receipt reader. Check your connection and try again.'
       : e?.message || 'Couldn’t read this photo.';
     step = 'error';
@@ -106,6 +114,7 @@
       image = R.canvasToDataUrl(flat);
       result = await R.scanReceipt(flat);
       model = 'ready';
+      keepAfterScan();
       step = 'review';
     } catch (e) {
       fail(e);
@@ -145,8 +154,10 @@
     <div class="flex items-center gap-2">
       <button class="btn btn-ghost !p-2 -ml-2" aria-label="Close scanner" onclick={onclose}><Icon name="x" /></button>
       <h2 class="text-lg font-black tracking-tight flex-1">Scan receipt</h2>
-      {#if model === 'downloading'}
-        <span class="text-xs text-slate-500 animate-pulse">Downloading reader (~31 MB, once)…</span>
+      {#if model === 'loading'}
+        <span class="text-xs text-slate-500 animate-pulse">Starting reader…</span>
+      {:else if model === 'downloading'}
+        <span class="text-xs text-slate-500 animate-pulse">Downloading reader (~67 MB, once)…</span>
       {:else if model === 'ready' && step === 'edit'}
         <span class="text-xs text-emerald-600 dark:text-emerald-400">Reader ready</span>
       {/if}
@@ -222,7 +233,7 @@
 
       <button class="btn btn-primary w-full !py-3.5 text-base" onclick={scan} disabled={step === 'scanning' || model === 'failed'}>
         {#if step === 'scanning'}
-          {model === 'ready' ? `Reading… ${elapsed}s` : 'Downloading reader…'}
+          {model === 'ready' ? `Reading… ${elapsed}s` : model === 'loading' ? 'Starting reader…' : 'Downloading reader…'}
         {:else}
           Scan receipt
         {/if}
