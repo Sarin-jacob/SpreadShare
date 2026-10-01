@@ -1,6 +1,6 @@
 <script>
   import { app } from '../lib/app.svelte.js';
-  import { getAll, STORES } from '../lib/db.js';
+  import { loadAllEvents } from '../lib/cache.svelte.js';
   import { processAnalytics } from '../lib/insights.js';
   import { money } from '../lib/format.js';
   import Donut from '../components/Donut.svelte';
@@ -11,12 +11,14 @@
   let loaded = $state(false);
 
   $effect(() => {
-    app.events; // reload when the active group changes
-    getAll(STORES.events).then((all) => {
+    app.cacheVersion; // re-read whenever any group's cache changes
+    loadAllEvents().then((all) => {
       events = all;
       loaded = true;
     });
   });
+
+  const missing = $derived(app.directory.filter((g) => !app.groupSyncedAt[g.id] && !events.some((e) => e.spreadsheetId === g.id)).length);
 
   const me = app.user.email;
   const data = $derived(processAnalytics(events, me, days));
@@ -60,10 +62,12 @@
     <div class="mt-4 -mx-1"><TrendChart points={data.trend} /></div>
   </div>
 
-  {#if loaded && data.count === 0}
-    <p class="text-sm text-center text-slate-400 py-4">
-      Nothing here yet. Insights use groups you've opened on this device.
+  {#if missing > 0}
+    <p class="text-xs text-center text-slate-500 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2">
+      {app.sync.progress ? `Downloading groups… ${app.sync.progress.done}/${app.sync.progress.total}` : `${missing} group${missing > 1 ? 's' : ''} not downloaded yet — reconnect or tap sync.`}
     </p>
+  {:else if loaded && data.count === 0}
+    <p class="text-sm text-center text-slate-400 py-4">No expenses in this period.</p>
   {/if}
 
   <div class="card p-4">

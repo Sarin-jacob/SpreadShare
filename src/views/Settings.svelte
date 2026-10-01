@@ -1,5 +1,5 @@
 <script>
-  import { app, pendingIds, logout, processQueue, rebuildCache, loadDirectory } from '../lib/app.svelte.js';
+  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory } from '../lib/app.svelte.js';
   import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
   import { pwa, promptInstall } from '../lib/pwa.svelte.js';
   import Logo from '../components/Logo.svelte';
@@ -13,7 +13,7 @@
   async function syncNow() {
     busy = true;
     await loadDirectory();
-    await processQueue();
+    await syncAll();
     busy = false;
     toast(pendingIds.size ? `${pendingIds.size} entries still waiting` : 'Everything is synced', pendingIds.size ? 'info' : 'success');
   }

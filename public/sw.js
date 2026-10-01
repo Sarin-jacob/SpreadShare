@@ -1,9 +1,10 @@
 // SpreadShare service worker.
-// - Navigations: network-first, falling back to the cached app shell when offline.
-// - Same-origin static assets: cache-first (Vite emits content-hashed filenames).
+// - Content-hashed build output (assets/, icons/): cache-first — a new deploy means new URLs.
+// - Everything else on this origin (index.html, manifests): network-first, cache as offline fallback.
 // - Cross-origin requests (Google APIs, exchange rates) are never intercepted.
-const CACHE = 'spreadshare-v3';
+const CACHE = 'spreadshare-v4';
 const SHELL = ['./', './index.html'];
+const IMMUTABLE = /\/(assets|icons)\//;
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -18,6 +19,28 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+async function networkFirst(req, cacheKey = req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(cacheKey, res.clone());
+    return res;
+  } catch (err) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+    throw err;
+  }
+}
+
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(req);
+  if (cached) return cached;
+  const res = await fetch(req);
+  if (res.ok) cache.put(req, res.clone());
+  return res;
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -25,28 +48,11 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./index.html', copy));
-          return res;
-        })
-        .catch(() => caches.match('./index.html'))
-    );
-    return;
+    // Invite links carry ?invite=…; serve the same cached shell for any navigation.
+    event.respondWith(networkFirst(req, './index.html'));
+  } else if (IMMUTABLE.test(url.pathname)) {
+    event.respondWith(cacheFirst(req));
+  } else {
+    event.respondWith(networkFirst(req));
   }
-
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
-        if (res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
-        }
-        return res;
-      });
-    })
-  );
 });

@@ -7,6 +7,7 @@
   import { CATEGORIES } from '../lib/categories.js';
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
+  import { computeSplit, exactWithRemainder } from '../lib/split.js';
   import { compressImage } from '../lib/image.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
@@ -45,15 +46,21 @@
   let saving = $state(false);
   let ready = $state(false);
 
-  const source = $derived(editId ? app.events.find((e) => e.eventId === editId) : null);
+  // Editing an entry, or duplicating one (?copy=<eventId>) as a starting point
+  const sourceId = $derived(editId || prefill.copy || null);
+  const source = $derived(sourceId ? app.events.find((e) => e.eventId === sourceId) : null);
 
   // Initialise once the data we need is available (events load asynchronously).
   $effect(() => {
     if (ready) return;
-    if (editId && !source) return;
+    if (sourceId && !source && (app.groupLoading || !app.events.length)) return;
     untrack(() => {
-      if (source) loadFrom(source);
-      else applyPrefill();
+      if (source) {
+        loadFrom(source);
+        if (!editId) when = toLocalInput(); // a duplicate happens now
+      } else {
+        applyPrefill();
+      }
       ready = true;
     });
   });
@@ -112,91 +119,15 @@
   const total = $derived(round2(amount * rate));
   const hasOperator = $derived(/[+\-*/×÷]/.test(amountExpr.replace(/^-/, '')));
 
-  /** Splits `total` across weights in whole cents (remainders go to the largest fractions). */
-  function distribute(weights) {
-    const entries = Object.entries(weights).filter(([, w]) => w > 0);
-    const sumW = entries.reduce((s, [, w]) => s + w, 0);
-    if (!sumW) return null;
-    const cents = Math.round(total * 100);
-    const parts = entries.map(([user, w]) => {
-      const raw = (cents * w) / sumW;
-      return { user, cents: Math.floor(raw), frac: raw - Math.floor(raw) };
-    });
-    let left = cents - parts.reduce((s, x) => s + x.cents, 0);
-    [...parts].sort((a, b) => b.frac - a.frac).forEach((x) => {
-      if (left-- > 0) x.cents++;
-    });
-    return Object.fromEntries(parts.map((x) => [x.user, x.cents / 100]));
-  }
-
-  /** Handles "one blank field gets the remainder" for exact-amount inputs. */
-  function exactWithRemainder(inputs, list) {
-    const vals = {};
-    const blanks = [];
-    for (const m of list) {
-      const raw = (inputs[m] ?? '').trim();
-      if (!raw) blanks.push(m);
-      else {
-        const v = evaluate(raw);
-        if (v === null) return { error: `Check the amount for ${name(m)}` };
-        vals[m] = round2(v);
-      }
-    }
-    const sum = round2(Object.values(vals).reduce((s, v) => s + v, 0));
-    let auto = null;
-    if (blanks.length === 1 && sum <= total) {
-      auto = blanks[0];
-      vals[auto] = round2(total - sum);
-    }
-    const final = round2(Object.values(vals).reduce((s, v) => s + v, 0));
-    if (Math.abs(final - total) > 0.009) {
-      const diff = round2(total - final);
-      return { vals, auto, error: diff > 0 ? `${money(diff)} left to assign` : `Over by ${money(-diff)}` };
-    }
-    return { vals, auto };
-  }
-
-  const split = $derived.by(() => {
-    if (type !== 'EXPENSE_ADD') return { alloc: {} };
-    if (strategy === 'EQUALLY') {
-      const inSplit = members.filter((m) => !excluded[m]);
-      if (!inSplit.length) return { alloc: {}, error: 'Pick at least one person' };
-      return { alloc: distribute(Object.fromEntries(inSplit.map((m) => [m, 1]))) || {} };
-    }
-    if (strategy === 'SHARES') {
-      const w = {};
-      for (const m of members) {
-        const raw = (splitInputs[m] ?? '').trim();
-        const v = raw === '' ? 1 : evaluate(raw);
-        if (v === null || v < 0) return { alloc: {}, error: `Check the shares for ${name(m)}` };
-        w[m] = v;
-      }
-      const alloc = distribute(w);
-      return alloc ? { alloc } : { alloc: {}, error: 'Shares add up to zero' };
-    }
-    if (strategy === 'EXACT') {
-      const r = exactWithRemainder(splitInputs, members);
-      return { alloc: r.vals || {}, auto: r.auto, error: r.error };
-    }
-    // ADJUSTMENT: equal split of what's left after +/- adjustments
-    const adj = {};
-    for (const m of members) {
-      const raw = (splitInputs[m] ?? '').trim();
-      const v = raw === '' ? 0 : evaluate(raw);
-      if (v === null) return { alloc: {}, error: `Check the adjustment for ${name(m)}` };
-      adj[m] = v;
-    }
-    const sumAdj = Object.values(adj).reduce((s, v) => s + v, 0);
-    const base = (total - sumAdj) / members.length;
-    const raw = Object.fromEntries(members.map((m) => [m, base + adj[m]]));
-    if (Object.values(raw).some((v) => v < -0.009)) return { alloc: raw, error: 'Adjustments exceed the total' };
-    const alloc = distribute(raw) || {};
-    return { alloc };
-  });
+  const split = $derived(
+    type === 'EXPENSE_ADD'
+      ? computeSplit(strategy, total, members, { excluded, inputs: splitInputs, nameOf: name })
+      : { alloc: {} }
+  );
 
   const payers = $derived.by(() => {
     if (payerMode === 'SINGLE') return { list: [{ user: payer, value: total }] };
-    const r = exactWithRemainder(payerInputs, members);
+    const r = exactWithRemainder(total, payerInputs, members, name);
     const list = Object.entries(r.vals || {}).filter(([, v]) => v > 0).map(([user, value]) => ({ user, value }));
     return { list, auto: r.auto, error: r.error && `Payers: ${r.error}` };
   });
@@ -320,7 +251,7 @@
   <form class="space-y-5" onsubmit={save}>
     <div class="flex items-center gap-2">
       <button type="button" class="btn btn-ghost !p-2 -ml-2" aria-label="Back" onclick={() => history.back()}><Icon name="back" /></button>
-      <h1 class="text-xl font-black tracking-tight flex-1">{editId ? 'Edit entry' : 'New entry'}</h1>
+      <h1 class="text-xl font-black tracking-tight flex-1">{editId ? 'Edit entry' : prefill.copy ? 'Duplicate entry' : 'New entry'}</h1>
     </div>
 
     {#if !editId}

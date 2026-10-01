@@ -1,5 +1,5 @@
 <script>
-  import { app, appendEvent, pendingIds } from '../lib/app.svelte.js';
+  import { app, appendEvent, pendingIds, restoreEvent } from '../lib/app.svelte.js';
   import { ledger } from '../lib/ledger.svelte.js';
   import { displayName } from '../lib/engine.js';
   import { category } from '../lib/categories.js';
@@ -31,9 +31,18 @@
 
   async function del() {
     if (!confirm('Delete this entry? Balances will be recalculated for everyone.')) return;
+    const original = $state.snapshot(x.event);
     try {
       await appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: eventId });
-      toast('Deleted');
+      toast(`Deleted “${x?.title ?? original.payload_json?.title}”`, 'info', {
+        action: {
+          label: 'Undo',
+          run: async () => {
+            await restoreEvent(groupId, original);
+            toast('Restored');
+          },
+        },
+      });
       replace(`/g/${groupId}`);
     } catch (e) {
       toast(`Delete failed: ${e.message}`, 'error');
@@ -113,8 +122,9 @@
       <p class="text-xs text-slate-400 text-center">Added by {name(p.logged_by)}</p>
     {/if}
 
-    <div class="grid grid-cols-2 gap-3">
+    <div class="grid grid-cols-3 gap-2">
       <button class="btn btn-soft" onclick={() => go(`/g/${groupId}/e/${eventId}/edit`)}><Icon name="edit" class="w-4 h-4" /> Edit</button>
+      <button class="btn btn-soft" onclick={() => go(`/g/${groupId}/add`, { copy: eventId })}><Icon name="copy" class="w-4 h-4" /> Duplicate</button>
       <button class="btn btn-danger" onclick={del}><Icon name="trash" class="w-4 h-4" /> Delete</button>
     </div>
   {/if}

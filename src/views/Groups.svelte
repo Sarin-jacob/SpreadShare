@@ -1,28 +1,40 @@
 <script>
   import { app, createGroup } from '../lib/app.svelte.js';
-  import { getAll, STORES } from '../lib/db.js';
-  import { computeLedgerState } from '../lib/engine.js';
-  import { money } from '../lib/format.js';
+  import { loadAllEvents, summarizeGroups } from '../lib/cache.svelte.js';
+  import { money, shortDate } from '../lib/format.js';
   import { go } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
 
   let name = $state('');
   let creating = $state(false);
-  let balances = $state({}); // groupId → your net balance, from the local cache
+  let summary = $state({}); // groupId → { net, lastActivity, count }
 
   $effect(() => {
-    app.directory.length; // refresh when the list changes
-    getAll(STORES.events).then((all) => {
-      const byGroup = {};
-      for (const e of all) (byGroup[e.spreadsheetId] ??= []).push(e);
-      const out = {};
-      for (const [id, events] of Object.entries(byGroup)) {
-        out[id] = computeLedgerState(events).members[app.user.email]?.netBalance ?? 0;
-      }
-      balances = out;
-    });
+    app.cacheVersion; // re-read whenever any group's cache changes
+    const email = app.user.email;
+    loadAllEvents().then((all) => (summary = summarizeGroups(all, email)));
   });
+
+  const totals = $derived.by(() => {
+    let owed = 0;
+    let owe = 0;
+    for (const g of app.directory) {
+      const net = summary[g.id]?.net ?? 0;
+      if (net > 0) owed += net;
+      else owe -= net;
+    }
+    return { owed, owe, net: owed - owe };
+  });
+
+  /** Most recently active first; never-downloaded groups at the end. */
+  const groups = $derived(
+    [...app.directory].sort((a, b) => {
+      const ta = summary[a.id]?.lastActivity ? new Date(summary[a.id].lastActivity).getTime() : 0;
+      const tb = summary[b.id]?.lastActivity ? new Date(summary[b.id].lastActivity).getTime() : 0;
+      return tb - ta;
+    })
+  );
 
   async function create(e) {
     e.preventDefault();
@@ -50,6 +62,19 @@
     <p class="text-sm text-slate-500 dark:text-slate-400">Your shared expense groups.</p>
   </div>
 
+  {#if app.directory.length > 0}
+    <div class="grid grid-cols-2 gap-3">
+      <div class="card p-4">
+        <div class="label !mb-0.5">You're owed</div>
+        <div class="text-xl font-black tabular-nums text-emerald-600 dark:text-emerald-400">{money(totals.owed)}</div>
+      </div>
+      <div class="card p-4">
+        <div class="label !mb-0.5">You owe</div>
+        <div class="text-xl font-black tabular-nums text-rose-600 dark:text-rose-400">{money(totals.owe)}</div>
+      </div>
+    </div>
+  {/if}
+
   <form class="flex gap-2" onsubmit={create}>
     <input class="field flex-1" bind:value={name} placeholder="New group name, e.g. Goa Trip" maxlength="80" disabled={creating} />
     <button class="btn btn-primary shrink-0" disabled={creating || !name.trim()}>
@@ -66,8 +91,10 @@
     </div>
   {:else}
     <ul class="space-y-2">
-      {#each app.directory as group (group.id)}
-        {@const bal = balances[group.id] ?? 0}
+      {#each groups as group (group.id)}
+        {@const s = summary[group.id]}
+        {@const downloaded = !!s || !!app.groupSyncedAt[group.id]}
+        {@const bal = s?.net ?? 0}
         <li>
           <a href="#/g/{group.id}" class="card p-4 flex items-center gap-3 hover:border-accent-500/50 transition group">
             <span class="w-11 h-11 rounded-xl grid place-items-center bg-accent-500/10 text-accent-600 dark:text-accent-400 font-black text-lg shrink-0">
@@ -75,14 +102,17 @@
             </span>
             <div class="flex-1 min-w-0">
               <div class="font-bold truncate">{group.name}</div>
-              <div class="text-xs mt-0.5">
-                {#if bal > 0.009}
+              <div class="text-xs mt-0.5 truncate">
+                {#if !downloaded}
+                  <span class="text-slate-400 animate-pulse">{app.sync.progress ? 'Downloading…' : 'Not downloaded yet'}</span>
+                {:else if bal > 0.009}
                   <span class="text-emerald-600 dark:text-emerald-400 font-semibold">You're owed {money(bal)}</span>
                 {:else if bal < -0.009}
                   <span class="text-rose-600 dark:text-rose-400 font-semibold">You owe {money(-bal)}</span>
                 {:else}
                   <span class="text-slate-400">Settled up</span>
                 {/if}
+                {#if s?.lastActivity}<span class="text-slate-400"> · {shortDate(s.lastActivity)}</span>{/if}
                 {#if group.unsynced}<span class="text-amber-500"> · not synced</span>{/if}
               </div>
             </div>

@@ -9,6 +9,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Zero-Backend Architecture:** Ledger data is stored as a raw data sequence in Google Sheets. Configuration and receipt images are stored in Google Drive. 
 *   **Advanced Split Engine:** Supports splitting equally, by custom weight shares, by exact amounts, or by relative adjustments (+/-). Inputs support inline mathematical evaluation.
 *   **Optimized Settlements:** Utilizes a greedy algorithm to calculate the most efficient path to settle complex group debts, minimizing the total number of required transactions.
+*   **Fast Everyday Use:** Search and filter group activity, duplicate an entry, undo a delete, nudge friends who owe you with a share-sheet reminder, and use the keyboard shortcuts `n` (new entry) and `/` (search).
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
@@ -54,7 +55,8 @@ Because SpreadShare has no backend, deployment consists entirely of serving stat
 1. Clone the repository and run `npm install`.
 2. Put your Google OAuth Client ID in `src/lib/config.js`.
 3. `npm run dev` starts the app at `http://localhost:8080` (add that origin to your OAuth client).
-4. `npm run check` type-checks the Svelte components.
+4. `npm run check` type-checks the Svelte components; `npm test` runs the unit tests (split maths, ledger engine, analytics).
+5. CI (`.github/workflows/ci.yml`) runs check, tests and build on every push and pull request.
 
 ### Project layout
 ```
@@ -78,4 +80,4 @@ The app icon lives in `src/lib/brandIcon.js`. At build time, `build/brand-icons.
 ```bash
 npm run deploy
 ```
-This builds into `dist/` and publishes it to the `gh-pages` branch (via the `gh-pages` package), with a `.nojekyll` marker. The build uses relative asset paths, so it works under `https://<user>.github.io/SpreadShare/` without extra config.
+This type-checks, runs the tests, builds into `dist/` and publishes it to the `gh-pages` branch (via the `gh-pages` package), with a `.nojekyll` marker. The build uses relative asset paths, so it works under `https://<user>.github.io/SpreadShare/` without extra config.

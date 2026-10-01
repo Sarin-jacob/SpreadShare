@@ -4,7 +4,7 @@
   import { optimizeDebts, displayName } from '../lib/engine.js';
   import { processAnalytics } from '../lib/insights.js';
   import { category } from '../lib/categories.js';
-  import { money, shortDate, monthLabel } from '../lib/format.js';
+  import { money, monthLabel } from '../lib/format.js';
   import { go } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
@@ -17,6 +17,9 @@
   let scope = $state('group');
   let menuOpen = $state(false);
   let sharing = $state(false);
+  let query = $state('');
+  let onlyMine = $state(false);
+  let searchEl = $state();
 
   const me = $derived(app.user.email);
   const L = $derived(ledger.current);
@@ -26,10 +29,32 @@
   const analytics = $derived(processAnalytics(app.events, scope === 'you' ? me : null, 0));
   const name = (email) => displayName(email, L.profiles, me);
 
+  const involvesMe = (x) =>
+    x.payer === me ||
+    x.target === me ||
+    (x.payload.payers || []).some((p) => p.user === me) ||
+    (x.payload.allocations || []).some((a) => a.user === me && a.value > 0);
+
+  /** Entries matching the search box (title, category, people, amount). */
+  const filtered = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    return L.expenses.filter((x) => {
+      if (onlyMine && !involvesMe(x)) return false;
+      if (!q) return true;
+      const people = [x.payer, x.target, ...(x.payload.payers || []).map((p) => p.user), ...(x.payload.allocations || []).map((a) => a.user)]
+        .filter(Boolean)
+        .map((e) => `${e} ${L.profiles[e]?.name || ''}`);
+      const cat = category(x.category);
+      return [x.title, cat.label, cat.value, String(x.amount), ...people].join(' ').toLowerCase().includes(q);
+    });
+  });
+  const filterActive = $derived(!!query.trim() || onlyMine);
+  const filteredTotal = $derived(filtered.filter((x) => x.type === 'EXPENSE_ADD').reduce((s, x) => s + x.amount, 0));
+
   /** Feed grouped by month. */
   const feed = $derived.by(() => {
     const groups = [];
-    for (const x of L.expenses) {
+    for (const x of filtered) {
       const label = monthLabel(x.timestamp);
       if (groups.at(-1)?.label !== label) groups.push({ label, items: [] });
       groups.at(-1).items.push(x);
@@ -99,9 +124,37 @@
   function settle(s) {
     go(`/g/${groupId}/add`, { type: 'TRANSFER', from: s.from, to: s.to, amount: s.amount.toFixed(2) });
   }
+
+  /** Friendly nudge via the OS share sheet (WhatsApp, SMS, …) or the clipboard. */
+  async function remind(s) {
+    const firstName = (L.profiles[s.from]?.name || s.from.split('@')[0]).split(' ')[0];
+    const text = `Hey ${firstName}! Quick reminder from SpreadShare: you owe me ${money(s.amount)} for “${groupName(groupId)}”.`;
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast('Reminder copied — paste it in your chat');
+      }
+    } catch {
+      /* share sheet dismissed */
+    }
+  }
+
+  function onKey(e) {
+    const t = e.target;
+    if (e.ctrlKey || e.metaKey || e.altKey || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if (e.key === 'n') {
+      e.preventDefault();
+      go(`/g/${groupId}/add`);
+    } else if (e.key === '/') {
+      e.preventDefault();
+      tab = 'activity';
+      queueMicrotask(() => searchEl?.focus());
+    }
+  }
 </script>
 
-<svelte:window onclick={() => (menuOpen = false)} />
+<svelte:window onclick={() => (menuOpen = false)} onkeydown={onKey} />
 
 <div class="space-y-5 pb-16">
   <!-- Header -->
@@ -173,6 +226,34 @@
   </div>
 
   {#if tab === 'activity'}
+    {#if L.expenses.length > 0}
+      <div class="flex items-center gap-2">
+        <label class="relative flex-1">
+          <Icon name="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            bind:this={searchEl}
+            bind:value={query}
+            type="search"
+            class="field !pl-9 !py-2"
+            placeholder="Search entries, people, categories"
+            aria-label="Search entries"
+            onkeydown={(e) => e.key === 'Escape' && ((query = ''), e.currentTarget.blur())}
+          />
+        </label>
+        <button
+          class="btn !px-3 !py-2 shrink-0 text-xs border {onlyMine ? 'border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-500'}"
+          aria-pressed={onlyMine}
+          onclick={() => (onlyMine = !onlyMine)}
+        >
+          Involving me
+        </button>
+      </div>
+      {#if filterActive}
+        <p class="text-xs text-slate-500 px-1">
+          {filtered.length} of {L.expenses.length} entries · {money(filteredTotal)} in expenses
+        </p>
+      {/if}
+    {/if}
     {#if app.groupLoading}
       <div class="space-y-2">
         {#each [0, 1, 2] as i (i)}<div class="card h-16 animate-pulse"></div>{/each}
@@ -183,6 +264,8 @@
         <p class="text-sm text-slate-500 dark:text-slate-400">No expenses yet. Add the first one!</p>
         <button class="btn btn-primary" onclick={() => go(`/g/${groupId}/add`)}><Icon name="plus" class="w-4 h-4" /> Add expense</button>
       </div>
+    {:else if filtered.length === 0}
+      <p class="text-sm text-center text-slate-400 py-8">Nothing matches your search.</p>
     {:else}
       <div class="space-y-5">
         {#each feed as month (month.label)}
@@ -240,7 +323,12 @@
                 <span class="font-semibold">{name(s.to)}</span>
                 <div class="font-bold tabular-nums">{money(s.amount)}</div>
               </div>
-              <button class="btn btn-soft !px-3 !py-1.5 text-xs shrink-0" onclick={() => settle(s)}>Record payment</button>
+              <div class="flex flex-col sm:flex-row gap-1.5 shrink-0">
+                {#if s.to === me}
+                  <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => remind(s)}><Icon name="bell" class="w-3.5 h-3.5" /> Remind</button>
+                {/if}
+                <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => settle(s)}>Record payment</button>
+              </div>
             </li>
           {/each}
         </ul>

@@ -14,6 +14,9 @@ import { toast } from './toast.svelte.js';
 
 const PROFILE_KEY = 'ss_profile';
 const DIRECTORY_KEY = 'ss_directory_cache';
+const GROUP_SYNC_KEY = 'ss_group_synced_at';
+const BACKGROUND_REFRESH_MS = 2 * 60 * 1000;
+const SYNC_CONCURRENCY = 3;
 
 const readJson = (key, fallback) => {
   try {
@@ -31,14 +34,21 @@ export const app = $state({
   groupId: null,
   events: [], // raw events for the active group
   groupLoading: false,
+  /** Bumped whenever the IndexedDB events cache changes; views that read the cache depend on it. */
+  cacheVersion: 0,
+  /** groupId → timestamp of the last successful download from Sheets */
+  groupSyncedAt: readJson(GROUP_SYNC_KEY, {}),
   sync: {
     online: navigator.onLine,
     busy: 0,
     authExpired: false,
     error: null,
     lastSyncedAt: null,
+    progress: null, // { done, total } while refreshing all groups
   },
 });
+
+const bumpCache = () => app.cacheVersion++;
 
 /** eventIds that exist locally but haven't reached Google Sheets yet. */
 export const pendingIds = new SvelteSet();
@@ -98,7 +108,7 @@ export async function boot() {
   });
   window.addEventListener('offline', () => (app.sync.online = false));
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') syncAll();
+    if (document.visibilityState === 'visible') syncAll({ staleOnly: true });
   });
   setInterval(() => processQueue(), 20_000);
 }
@@ -143,15 +153,48 @@ async function resetLocalData() {
   await db.clear(db.STORES.queue);
   localStorage.removeItem(DIRECTORY_KEY);
   pendingIds.clear();
+  localStorage.removeItem(GROUP_SYNC_KEY);
+  app.groupSyncedAt = {};
   app.directory = [];
   app.events = [];
   app.groupId = null;
+  bumpCache();
 }
 
-export async function syncAll() {
-  if (!app.user || app.sync.authExpired || !navigator.onLine) return;
-  await processQueue();
-  if (app.groupId) await syncGroup(app.groupId);
+let syncAllRunning = null;
+
+/**
+ * Uploads pending entries, then downloads every group (active one first) so balances and
+ * insights are complete even for groups never opened on this device.
+ * @param staleOnly skip groups refreshed within the last couple of minutes
+ */
+export function syncAll({ staleOnly = false } = {}) {
+  if (!app.user || app.sync.authExpired || !navigator.onLine) return Promise.resolve();
+  syncAllRunning ??= (async () => {
+    try {
+      await processQueue();
+      const now = Date.now();
+      const ids = app.directory
+        .map((g) => g.id)
+        .filter((id) => !staleOnly || now - (app.groupSyncedAt[id] || 0) > BACKGROUND_REFRESH_MS)
+        .sort((a, b) => (a === app.groupId ? -1 : b === app.groupId ? 1 : 0));
+      if (!ids.length) return;
+
+      app.sync.progress = { done: 0, total: ids.length };
+      const queue = [...ids];
+      const worker = async () => {
+        while (queue.length && !app.sync.authExpired) {
+          await syncGroup(queue.shift());
+          app.sync.progress.done++;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(SYNC_CONCURRENCY, ids.length) }, worker));
+    } finally {
+      app.sync.progress = null;
+      syncAllRunning = null;
+    }
+  })();
+  return syncAllRunning;
 }
 
 // ─── Group directory ───
@@ -305,7 +348,10 @@ export async function syncGroup(id) {
 
     if (app.groupId === id) app.events = merged;
     app.sync.lastSyncedAt = Date.now();
+    app.groupSyncedAt[id] = app.sync.lastSyncedAt;
+    writeJson(GROUP_SYNC_KEY, app.groupSyncedAt);
     app.sync.error = null;
+    bumpCache();
   } catch (e) {
     if (e instanceof google.GoogleApiError && (e.status === 403 || e.status === 404)) {
       app.sync.error = 'You no longer have access to this group’s sheet.';
@@ -340,9 +386,17 @@ export async function appendEvent(spreadsheetId, eventType, payload, { actor } =
   await db.put(db.STORES.queue, { action: 'APPEND_ROW', spreadsheetId, payload: record });
   pendingIds.add(record.eventId);
   if (app.groupId === spreadsheetId) app.events = [...app.events, record];
+  bumpCache();
 
   processQueue();
   return record;
+}
+
+/** Re-adds a deleted entry as a new event (backwards compatible with older clients). */
+export function restoreEvent(spreadsheetId, event) {
+  // eslint-disable-next-line no-unused-vars
+  const { logged_by, actor_name, actor_picture, ...payload } = event.payload_json || {};
+  return appendEvent(spreadsheetId, event.event_type, payload, { actor: event.actor_identity });
 }
 
 async function refreshPending() {
@@ -409,7 +463,10 @@ export async function rebuildCache() {
     db.STORES.events,
     all.filter((e) => !queued.has(e.eventId)).map((e) => [e.spreadsheetId, e.eventId])
   );
-  if (app.groupId) await syncGroup(app.groupId);
+  app.groupSyncedAt = {};
+  localStorage.removeItem(GROUP_SYNC_KEY);
+  bumpCache();
+  await syncAll();
   toast('Local cache rebuilt');
 }
 

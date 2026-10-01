@@ -1,6 +1,6 @@
 <script>
   import { fly } from 'svelte/transition';
-  import { toasts } from '../lib/toast.svelte.js';
+  import { toasts, dismissToast } from '../lib/toast.svelte.js';
 
   const COLORS = {
     success: 'bg-emerald-600',
@@ -13,9 +13,17 @@
   {#each toasts as t (t.id)}
     <div
       transition:fly={{ y: 20, duration: 200 }}
-      class="{COLORS[t.type]} text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg max-w-sm text-center"
+      class="{COLORS[t.type]} text-white text-sm font-semibold pl-4 {t.action ? 'pr-1.5' : 'pr-4'} py-1.5 min-h-10 rounded-xl shadow-lg max-w-sm flex items-center gap-3 pointer-events-auto"
     >
-      {t.message}
+      <span class="py-1">{t.message}</span>
+      {#if t.action}
+        <button
+          class="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 font-bold uppercase text-xs tracking-wide"
+          onclick={() => { dismissToast(t.id); t.action.run(); }}
+        >
+          {t.action.label}
+        </button>
+      {/if}
     </div>
   {/each}
 </div>

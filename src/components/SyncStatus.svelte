@@ -6,6 +6,9 @@
     if (!app.sync.online) {
       return { dot: 'bg-slate-400', label: pendingIds.size ? `Offline · ${pendingIds.size} pending` : 'Offline' };
     }
+    if (app.sync.progress) {
+      return { dot: 'bg-accent-500 animate-pulse', label: `Syncing ${app.sync.progress.done}/${app.sync.progress.total}` };
+    }
     if (app.sync.busy > 0) return { dot: 'bg-accent-500 animate-pulse', label: 'Syncing…' };
     if (app.sync.error) return { dot: 'bg-rose-500', label: 'Sync issue' };
     if (pendingIds.size) return { dot: 'bg-amber-500', label: `${pendingIds.size} pending` };
