@@ -2,8 +2,8 @@
 // - Navigations: network-first, falling back to the cached app shell when offline.
 // - Same-origin static assets: cache-first (Vite emits content-hashed filenames).
 // - Cross-origin requests (Google APIs, exchange rates) are never intercepted.
-const CACHE = 'spreadshare-v2';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './assets/icon-192.png'];
+const CACHE = 'spreadshare-v3';
+const SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -1,6 +1,8 @@
 <script>
   import { app, pendingIds, logout, processQueue, rebuildCache, loadDirectory } from '../lib/app.svelte.js';
-  import { settings, setDark, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
+  import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
+  import { pwa, promptInstall } from '../lib/pwa.svelte.js';
+  import Logo from '../components/Logo.svelte';
   import { toast } from '../lib/toast.svelte.js';
   import Avatar from '../components/Avatar.svelte';
   import Icon from '../components/Icon.svelte';
@@ -38,7 +40,13 @@
 
   <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
     <div class="p-4 space-y-3">
-      <h2 class="text-sm font-bold">Accent colour</h2>
+      <div class="flex items-center gap-3">
+        <Logo class="w-12 h-12" />
+        <div>
+          <h2 class="text-sm font-bold">Accent colour</h2>
+          <p class="text-xs text-slate-500">Also recolours the app icon.</p>
+        </div>
+      </div>
       <div class="grid grid-cols-6 gap-3 justify-items-center">
         {#each Object.entries(ACCENTS) as [key, hex] (key)}
           <button
@@ -53,10 +61,12 @@
       </div>
     </div>
     <div class="p-4 flex items-center justify-between gap-4">
-      <div>
-        <div class="text-sm font-bold">Dark mode</div>
+      <div class="text-sm font-bold whitespace-nowrap">Theme</div>
+      <div class="seg w-56">
+        {#each [['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']] as [value, label]}
+          <button aria-pressed={settings.theme === value} onclick={() => setTheme(value)}>{label}</button>
+        {/each}
       </div>
-      <Switch label="Dark mode" checked={settings.dark} onchange={setDark} />
     </div>
     <div class="p-4 flex items-center justify-between gap-4">
       <div>
@@ -66,7 +76,7 @@
       <Switch label="Pure black" checked={settings.oled} disabled={!settings.dark} onchange={setOled} />
     </div>
     <div class="p-4 flex items-center justify-between gap-4">
-      <div class="text-sm font-bold">Text size</div>
+      <div class="text-sm font-bold whitespace-nowrap">Text size</div>
       <div class="seg w-48">
         {#each SCALES as s}
           <button aria-pressed={settings.scale === s.value} onclick={() => setScale(s.value)}>{s.label}</button>
@@ -74,6 +84,21 @@
       </div>
     </div>
   </section>
+
+  {#if !pwa.installed && (pwa.canPrompt || pwa.showIosHint)}
+    <section class="card p-4 flex items-center gap-4">
+      <Logo class="w-11 h-11" />
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-bold">Install SpreadShare</div>
+        <div class="text-xs text-slate-500">
+          {pwa.canPrompt ? 'Add it to your home screen — works offline.' : 'Tap Share, then “Add to Home Screen”.'}
+        </div>
+      </div>
+      {#if pwa.canPrompt}
+        <button class="btn btn-primary !py-2 shrink-0" onclick={promptInstall}>Install</button>
+      {/if}
+    </section>
+  {/if}
 
   <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
     <div class="p-4 flex items-center justify-between gap-4">

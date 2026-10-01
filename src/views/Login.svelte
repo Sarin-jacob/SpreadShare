@@ -1,6 +1,7 @@
 <script>
   import { login } from '../lib/app.svelte.js';
   import Icon from '../components/Icon.svelte';
+  import Logo from '../components/Logo.svelte';
 
   let busy = $state(false);
   let error = $state('');
@@ -27,7 +28,7 @@
 <div class="min-h-dvh grid place-items-center px-4 py-10">
   <div class="w-full max-w-sm space-y-8">
     <div class="text-center space-y-3">
-      <img src="./assets/icon-192.png" alt="" class="w-16 h-16 rounded-2xl mx-auto shadow-lg" />
+      <Logo class="w-20 h-20 mx-auto drop-shadow-xl" />
       <h1 class="text-3xl font-black tracking-tight">SpreadShare</h1>
       <p class="text-slate-500 dark:text-slate-400">Split expenses with friends. No servers, no accounts — just your Google Drive.</p>
     </div>

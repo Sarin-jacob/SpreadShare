@@ -12,7 +12,9 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
-*   **Deep Customization:** Built-in settings for Dark mode, OLED pure-black mode, 12 dynamic accent palettes, and global UI scaling.
+*   **Deep Customization:** Light / dark / auto themes, OLED pure-black mode, 12 accent palettes, and global UI scaling.
+*   **Accent-Tinted App Icon:** The app icon is a parametric SVG. The in-app logo recolours live, and the favicon, home-screen icon and PWA manifest switch to a matching icon set for the chosen accent.
+*   **Installable:** Install prompt in Settings, and the home-screen icon shows a badge with the number of entries waiting to sync (where supported).
 
 ## Technical Stack
 
@@ -66,8 +68,11 @@ src/
     engine.js           rebuilds balances from the event log, settle-up optimiser
     insights.js         spending analytics
     auth.js, db.js, math.js, currency.js, ...
-public/                 manifest, service worker, icons (copied as-is)
+build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css
+public/                 service worker (copied as-is)
 ```
+
+The app icon lives in `src/lib/brandIcon.js`. At build time, `build/brand-icons.js` reads the accent palettes from `src/app.css` and emits `icons/<accent>.svg`, `icons/<accent>-{180,192,512,maskable-512}.png` and `manifest-<accent>.webmanifest`. In dev, it serves the same files. Adding a palette to `app.css` automatically gives it an icon set.
 
 ### Deploying to GitHub Pages
 ```bash
