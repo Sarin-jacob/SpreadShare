@@ -13,6 +13,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **Receipt Scanning (on-device):** Snap a bill with the camera, pick a photo or screenshot from your gallery, or open a PDF bill (drag-and-drop and paste work on desktop), and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
 *   **Auto-Categorization (on-device):** As you type a description or scan a receipt, SpreadShare picks the category. A small Naive Bayes model learns from your own past expenses (so "Toit" → Food, or your Instamart runs → Groceries), and built-in keyword rules cover everything else. It never overrides a category you picked yourself.
+*   **Stay Organised:** Notes and #tags on entries, comment threads, full edit history, cross-group search, monthly budgets with heads-ups, and per-person monthly statements (text, CSV or PDF).
 *   **Payment Messages & Sharing:** Paste a bank SMS, UPI notification or card alert and the amount, payee and date are filled in (balances and limits are ignored). In the installed app, share a receipt image or a payment message from any app straight into SpreadShare.
 *   **Item-Wise Splitting:** Scanned receipts default to splitting by items. Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
@@ -34,6 +35,8 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 ## System Architecture
 
 SpreadShare operates on a double-entry ledger system. Every action (Expense, Transfer, Loan) is recorded as an immutable event node in a Google Sheet. The application fetches these raw events and reconstructs the group's mathematical state on the client side.
+
+Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE` and `COMMENT`. An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
 
 1.  **Authentication:** The user logs in via Google. The app requests scopes exclusively for Sheets and Drive files created by the application itself.
 2.  **Provisioning:** Upon creating a new group, the app provisions a hidden configuration file in Drive and a new Spreadsheet formatted to accept ledger entries.
@@ -68,10 +71,12 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [ ] **Trip currency:** A default currency per group for trips abroad, with totals shown at the trip's rate.
 
 ### Stay organised
-- [ ] **Budgets:** Monthly limits per category with gentle warnings in Insights.
-- [ ] **Notes, comments & history:** Discuss an entry and see every edit (the event log already records them).
-- [ ] **Monthly statements:** A PDF/CSV summary per person, ready to share in the group chat.
-- [ ] **Search everywhere & tags:** Search across all groups and tag entries (#goa, #office).
+- [x] **Budgets:** Monthly limits per category (and overall) on your share, with progress and pacing in Insights and a heads-up when you save something that gets close. Saved to your Drive.
+- [x] **Notes, comments & history:** Notes on any entry, a comment thread everyone in the group sees, and a version history with plain-language changes.
+- [x] **Monthly statements:** Per person (or everyone) for any month or all time: opening balance, every entry's effect, closing balance. Share as text, CSV, or print / save as PDF.
+- [x] **Search everywhere & tags:** Search all groups at once, and tag entries with #goa, #office in a title or note.
+- [ ] **Group budgets:** A shared budget for a trip or a flat, visible to everyone in the group.
+- [ ] **Reminders for recurring bills:** A nudge when rent or a subscription is due.
 
 ### Smarter on-device AI
 - [ ] **Learns from your corrections:** When you fix a scanned total or merchant, remember that shop's receipt layout.
@@ -108,6 +113,10 @@ src/
     insights.js         spending analytics
     split.js            split strategies (equal, shares, exact, +/-, items)
     categorize.js       category suggestions: personal Naive Bayes model + keyword rules
+    history.js          edit chains (payload.replaces) and COMMENT events
+    statement.js        per-person statements (opening → entries → closing)
+    budgets.js, prefs.svelte.js   monthly budgets; prefs synced to .spreadshare_prefs.json in Drive
+    tags.js             #tags in titles and notes
     receipt/            receipt scanner , see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css

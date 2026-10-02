@@ -17,6 +17,8 @@
   import Settings from './views/Settings.svelte';
   import Share from './views/Share.svelte';
   import Quick from './views/Quick.svelte';
+  import Statement from './views/Statement.svelte';
+  import Search from './views/Search.svelte';
 
   const seg = $derived(route.segments);
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
@@ -72,6 +74,7 @@
 
   const NAV = [
     { href: '#/', label: 'Groups', icon: 'groups', match: (s) => !s[0] || s[0] === 'g' },
+    { href: '#/search', label: 'Search', icon: 'search', match: (s) => s[0] === 'search' },
     { href: '#/insights', label: 'Insights', icon: 'chart', match: (s) => s[0] === 'insights' },
     { href: '#/settings', label: 'Settings', icon: 'settings', match: (s) => s[0] === 'settings' },
   ];
@@ -171,6 +174,8 @@
               <ExpenseForm {groupId} editId={seg[3]} />
             {:else if seg[2] === 'e' && seg[3]}
               <ExpenseDetail {groupId} eventId={seg[3]} />
+            {:else if seg[2] === 'statement'}
+              <Statement {groupId} query={route.query} />
             {:else}
               <Group {groupId} />
             {/if}
@@ -179,6 +184,8 @@
           <Insights />
         {:else if seg[0] === 'share'}
           <Share />
+        {:else if seg[0] === 'search'}
+          <Search query={route.query} />
         {:else if seg[0] === 'quick'}
           {#key seg[1]}<Quick action={seg[1] === 'scan' ? 'scan' : 'add'} />{/key}
         {:else if seg[0] === 'settings'}
@@ -196,7 +203,7 @@
       <div class="flex justify-around">
         {#each NAV as item}
           {@const active = item.match(seg)}
-          <a href={item.href} class="flex flex-col items-center gap-0.5 px-6 py-2 text-[11px] font-semibold {active ? 'text-accent-600 dark:text-accent-400' : 'text-slate-400'}">
+          <a href={item.href} class="flex-1 flex flex-col items-center gap-0.5 px-1 py-2 text-[11px] font-semibold {active ? 'text-accent-600 dark:text-accent-400' : 'text-slate-400'}">
             <Icon name={item.icon} />
             {item.label}
           </a>

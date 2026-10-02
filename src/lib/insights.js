@@ -10,7 +10,7 @@ const localKey = (d) =>
  * @param targetEmail when set, counts only that member's allocated share; otherwise full amounts.
  * @param days window size; 0 means all time (trend is then empty).
  */
-export function processAnalytics(events, targetEmail = null, days = 30) {
+export function processAnalytics(events, targetEmail = null, days = 30, now = new Date()) {
   const data = {
     total: 0,
     count: 0,
@@ -19,7 +19,7 @@ export function processAnalytics(events, targetEmail = null, days = 30) {
     trend: [], // [{ date, value }] oldest → newest
   };
 
-  const now = new Date();
+  // `now` is a parameter so budgets and tests can ask "as of" a given moment.
   const start = days > 0 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1)) : new Date(0);
   const buckets = new Map();
   if (days > 0) {

@@ -1,5 +1,7 @@
 <script>
-  import { app, appendEvent, pendingIds, restoreEvent } from '../lib/app.svelte.js';
+  import { app, appendEvent, pendingIds, restoreEvent, addComment, deleteComment } from '../lib/app.svelte.js';
+  import { versionChain, commentsFor, describeChanges, latestVersionId } from '../lib/history.js';
+  import { tagsOf, splitTags } from '../lib/tags.js';
   import { ledger } from '../lib/ledger.svelte.js';
   import { displayName } from '../lib/engine.js';
   import { category } from '../lib/categories.js';
@@ -31,6 +33,45 @@
   const itemCur = $derived(p.foreign_currency || undefined);
   const billTotal = $derived(p.foreign_amount ?? x?.amount ?? 0);
   const itemsTotal = $derived((p.receipt_items || []).reduce((sum, it) => sum + (it.amount || 0), 0));
+
+  // ─── Notes, tags, comments, history ───
+  const tags = $derived(x ? tagsOf(p) : []);
+  const versions = $derived(x ? versionChain(app.events, eventId) : []);
+  const comments = $derived(x ? commentsFor(app.events, eventId) : []);
+  const fmt = {
+    money: (n) => money(n),
+    name: (e) => name(e),
+    date: (d) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    category: (c) => category(c || 'General').label,
+  };
+  const when = (iso) => new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+  // An old link to an entry that has since been edited: jump to the current version.
+  $effect(() => {
+    if (x || app.groupLoading) return;
+    const latest = latestVersionId(app.events, eventId);
+    if (latest !== eventId && L.expenses.some((e) => e.eventId === latest)) replace(`/g/${groupId}/e/${latest}`);
+  });
+
+  let commentText = $state('');
+  let posting = $state(false);
+  async function postComment(e) {
+    e.preventDefault();
+    if (!commentText.trim() || posting) return;
+    posting = true;
+    try {
+      await addComment(groupId, eventId, commentText);
+      commentText = '';
+    } catch (err) {
+      toast(`Couldn’t post: ${err.message}`, 'error');
+    } finally {
+      posting = false;
+    }
+  }
+  async function removeComment(c) {
+    if (!confirm('Delete your comment?')) return;
+    await deleteComment(groupId, c.eventId);
+  }
 
   let zoom = $state(false);
 
@@ -71,12 +112,22 @@
       <div class="flex items-start gap-3">
         <span class="w-12 h-12 rounded-2xl grid place-items-center text-2xl shrink-0" style="background:{cat.color}22">{cat.icon}</span>
         <div class="flex-1 min-w-0">
-          <h2 class="text-lg font-bold leading-tight break-words">{x.title}</h2>
+          <h2 class="text-lg font-bold leading-tight break-words">{splitTags(x.title).text}</h2>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {TYPE_LABEL[x.type]} · {cat.label} · {longDate(x.timestamp)}
           </p>
+          {#if tags.length}
+            <div class="flex flex-wrap gap-1 mt-2">
+              {#each tags as t (t)}
+                <a href="#/search?q={encodeURIComponent('#' + t)}" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-accent-500/10 text-accent-700 dark:text-accent-300">#{t}</a>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
+      {#if p.notes}
+        <p class="text-sm whitespace-pre-wrap break-words rounded-xl bg-slate-50 dark:bg-slate-900/60 px-3 py-2.5 text-slate-700 dark:text-slate-300">{p.notes}</p>
+      {/if}
       <div>
         <div class="text-3xl font-black tabular-nums">{money(x.amount)}</div>
         {#if p.foreign_currency && p.foreign_currency !== (p.currency || CONFIG.DEFAULT_CURRENCY)}
@@ -157,9 +208,57 @@
       </section>
     {/if}
 
-    {#if p.logged_by && p.logged_by !== x.payer}
-      <p class="text-xs text-slate-400 text-center">Added by {name(p.logged_by)}</p>
-    {/if}
+    <!-- Comments -->
+    <section class="card p-4 space-y-3">
+      <h3 class="label !mb-0">Comments{comments.length ? ` · ${comments.length}` : ''}</h3>
+      {#each comments as c (c.eventId)}
+        <div class="flex items-start gap-2.5">
+          <Avatar email={c.by} profile={L.profiles[c.by]} size="w-7 h-7" />
+          <div class="flex-1 min-w-0">
+            <div class="text-xs text-slate-500">
+              <span class="font-semibold text-slate-700 dark:text-slate-200">{name(c.by)}</span> · {when(c.at)}
+              {#if pendingIds.has(c.eventId)}<span class="text-amber-500"> · sending</span>{/if}
+            </div>
+            <p class="text-sm whitespace-pre-wrap break-words">{c.text}</p>
+          </div>
+          {#if c.by === me}
+            <button class="btn btn-ghost !p-1 shrink-0" aria-label="Delete comment" onclick={() => removeComment(c)}><Icon name="x" class="w-3.5 h-3.5" /></button>
+          {/if}
+        </div>
+      {:else}
+        <p class="text-xs text-slate-400">No comments yet. Ask about it or explain a change here; everyone in the group sees it.</p>
+      {/each}
+      <form class="flex gap-2" onsubmit={postComment}>
+        <input class="field !py-2 flex-1" bind:value={commentText} placeholder="Add a comment…" maxlength="1000" aria-label="Add a comment" />
+        <button class="btn btn-primary !py-2 shrink-0" disabled={!commentText.trim() || posting}>Post</button>
+      </form>
+    </section>
+
+    <!-- History -->
+    <details class="card p-4 group">
+      <summary class="flex items-center gap-2 cursor-pointer list-none">
+        <h3 class="label !mb-0 flex-1">History{versions.length > 1 ? ` · edited ${versions.length - 1}×` : ''}</h3>
+        <Icon name="chevron" class="w-4 h-4 text-slate-400 transition-transform group-open:rotate-90" />
+      </summary>
+      <ol class="mt-3 space-y-3 border-l-2 border-slate-100 dark:border-slate-700 pl-4">
+        {#each versions as v, i (v.eventId)}
+          <li class="relative">
+            <span class="absolute -left-[1.4rem] top-1 w-2.5 h-2.5 rounded-full {i === versions.length - 1 ? 'bg-accent-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
+            <div class="text-xs text-slate-500">
+              <span class="font-semibold text-slate-700 dark:text-slate-200">{i === 0 ? 'Added' : 'Edited'} by {name(v.by)}</span> · {when(v.at)}
+            </div>
+            {#if i > 0}
+              <ul class="mt-1 text-sm space-y-0.5">
+                {#each describeChanges(versions[i - 1].payload, v.payload, fmt) as change (change)}<li>{change}</li>{/each}
+              </ul>
+            {/if}
+          </li>
+        {/each}
+      </ol>
+      {#if versions.length === 1 && x.payload.logged_by === undefined}
+        <p class="mt-2 text-xs text-slate-400">Edits made before history was added aren't linked.</p>
+      {/if}
+    </details>
 
     <div class="grid grid-cols-3 gap-2">
       <button class="btn btn-soft" onclick={() => go(`/g/${groupId}/e/${eventId}/edit`)}><Icon name="edit" class="w-4 h-4" /> Edit</button>

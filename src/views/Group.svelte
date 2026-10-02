@@ -10,6 +10,8 @@
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
   import Donut from '../components/Donut.svelte';
+  import { entryMeta } from '../lib/history.js';
+  import { splitTags, tagsOf } from '../lib/tags.js';
 
   let { groupId } = $props();
 
@@ -45,13 +47,16 @@
         .filter(Boolean)
         .map((e) => `${e} ${L.profiles[e]?.name || ''}`);
       const cat = category(x.category);
-      return [x.title, cat.label, cat.value, String(x.amount), ...people].join(' ').toLowerCase().includes(q);
+      return [x.title, x.payload.notes, cat.label, cat.value, String(x.amount), ...people].join(' ').toLowerCase().includes(q);
     });
   });
   const filterActive = $derived(!!query.trim() || onlyMine);
   const filteredTotal = $derived(filtered.filter((x) => x.type === 'EXPENSE_ADD').reduce((s, x) => s + x.amount, 0));
 
   /** Feed grouped by month. */
+  /** Comment counts and "edited" marks for the feed. */
+  const meta = $derived(entryMeta(app.events));
+
   const feed = $derived.by(() => {
     const groups = [];
     for (const x of filtered) {
@@ -183,6 +188,9 @@
           <button class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onclick={refresh}>
             <Icon name="refresh" class="w-4 h-4" /> Refresh
           </button>
+          <a class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" href="#/g/{groupId}/statement">
+            <Icon name="sheet" class="w-4 h-4" /> Monthly statement
+          </a>
           <button class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onclick={() => exportCsv(groupId, app.events)}>
             <Icon name="download" class="w-4 h-4" /> Export CSV
           </button>
@@ -275,6 +283,9 @@
               {#each month.items as x (x.eventId)}
                 {@const cat = x.type === 'EXPENSE_ADD' ? category(x.category) : category('Financial')}
                 {@const imp = impact(x)}
+                {@const shown = splitTags(x.title)}
+                {@const m = meta.get(x.eventId)}
+                {@const allTags = tagsOf(x.payload)}
                 <li>
                   <a href="#/g/{groupId}/e/{x.eventId}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition">
                     <div class="w-8 text-center shrink-0">
@@ -283,12 +294,21 @@
                     </div>
                     <span class="hidden sm:grid w-9 h-9 rounded-xl place-items-center text-lg shrink-0" style="background:{cat.color}22">{cat.icon}</span>
                     <div class="flex-1 min-w-0">
-                      <div class="font-semibold truncate flex items-center gap-1.5">
-                        {x.title}
+                      <div class="font-semibold flex items-center gap-1.5 min-w-0">
+                        <span class="truncate">{shown.text}</span>
                         {#if pendingIds.has(x.eventId)}
                           <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="Waiting to sync"></span>
                         {/if}
+                        {#if m?.comments}
+                          <span class="shrink-0 text-[11px] font-medium text-slate-400 flex items-center gap-0.5" title="{m.comments} comment{m.comments > 1 ? 's' : ''}"><Icon name="message" class="w-3.5 h-3.5" />{m.comments}</span>
+                        {/if}
+                        {#if m?.edited}<span class="shrink-0 text-[10px] font-medium text-slate-400">edited</span>{/if}
                       </div>
+                      {#if allTags.length}
+                        <div class="flex gap-1 mt-0.5 overflow-hidden">
+                          {#each allTags.slice(0, 3) as t (t)}<span class="px-1.5 rounded-full text-[10px] font-semibold bg-accent-500/10 text-accent-700 dark:text-accent-300 shrink-0">#{t}</span>{/each}
+                        </div>
+                      {/if}
                       <div class="text-xs text-slate-500 dark:text-slate-400 truncate"><span class="sm:hidden">{cat.icon} </span>{subtitle(x)} {money(x.amount)}</div>
                     </div>
                     <div class="text-right shrink-0 {imp.cls}">

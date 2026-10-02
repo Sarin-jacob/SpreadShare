@@ -155,3 +155,13 @@ html[data-accent="slate"] {
   50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-500) 35%, transparent); }
 }
 .attention { animation: ss-attention 1.2s ease-in-out 3; }
+
+/* Printing (statements → "Save as PDF"): just the page content, on white. */
+@media print {
+  aside, header, nav, .no-print, [role='status'], [aria-live] { display: none !important; }
+  .print-only { display: block !important; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .card { border-color: #d4d4d8 !important; background: #fff !important; break-inside: avoid; }
+  main { max-width: none !important; padding: 0 !important; }
+  .statement .hidden.sm\:table-cell { display: table-cell !important; }
+}

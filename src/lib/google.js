@@ -123,6 +123,39 @@ export async function writeDirectory(directory) {
   });
 }
 
+// ─── Small per-user JSON files in Drive (e.g. preferences like budgets) ───
+
+const jsonFileIds = new Map();
+async function jsonFileId(name, create) {
+  if (!jsonFileIds.has(name)) jsonFileIds.set(name, await findFile(`name='${escapeQ(name)}' and trashed=false`));
+  let id = jsonFileIds.get(name);
+  if (!id && create) {
+    id = (await gfetch(DRIVE, { method: 'POST', body: { name, mimeType: 'application/json' } })).id;
+    jsonFileIds.set(name, id);
+  }
+  return id;
+}
+
+/** Reads a JSON file this app created in your Drive, or null if it doesn't exist yet. */
+export async function readJsonFile(name) {
+  const id = await jsonFileId(name, false);
+  if (!id) return null;
+  const res = await gfetch(`${DRIVE}/${id}?alt=media`, { raw: true });
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function writeJsonFile(name, data) {
+  const id = await jsonFileId(name, true);
+  await gfetch(`${UPLOAD}/${id}?uploadType=media`, {
+    method: 'PATCH',
+    body: new Blob([JSON.stringify(data)], { type: 'application/json' }),
+  });
+}
+
 // ─── Ledger rows ───
 
 export async function readLedgerRows(spreadsheetId) {

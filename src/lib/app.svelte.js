@@ -11,6 +11,9 @@ import * as db from './db.js';
 import * as google from './google.js';
 import { dataUrlToBlob } from './image.js';
 import { toast } from './toast.svelte.js';
+import { syncPrefs, clearPrefs } from './prefs.svelte.js';
+import { computeLedgerState } from './engine.js';
+import { tagsOf } from './tags.js';
 
 const PROFILE_KEY = 'ss_profile';
 const DIRECTORY_KEY = 'ss_directory_cache';
@@ -133,6 +136,7 @@ export async function login() {
 
 async function onConnected() {
   await loadDirectory();
+  syncPrefs();
   await handlePendingInvite();
   await syncAll();
 }
@@ -149,6 +153,7 @@ export async function logout() {
 async function resetLocalData() {
   await db.clear(db.STORES.events);
   await db.clear(db.STORES.queue);
+  clearPrefs();
   localStorage.removeItem(DIRECTORY_KEY);
   pendingIds.clear();
   localStorage.removeItem(GROUP_SYNC_KEY);
@@ -479,28 +484,35 @@ export async function rebuildCache() {
   toast('Local cache rebuilt');
 }
 
-export function exportCsv(spreadsheetId, events) {
-  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Date', 'Type', 'Title', 'Category', 'Amount', 'Currency', 'Paid by', 'To'].join(',')];
-  [...events]
-    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-    .forEach((e) => {
-      const p = e.payload_json || {};
-      lines.push([
-        new Date(p.custom_timestamp || e.timestamp).toISOString(),
-        e.event_type,
-        p.title,
-        p.category,
-        p.evaluated_amount,
-        p.currency || CONFIG.DEFAULT_CURRENCY,
-        e.actor_identity,
-        p.target_peer_identity,
-      ].map(esc).join(','));
-    });
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+/** Saves text as a file download. */
+export function downloadFile(filename, text, type = 'text/csv') {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${groupName(spreadsheetId).replace(/[^\w-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+export const fileSafe = (s) => String(s).replace(/[^\w-]+/g, '_');
+
+/** The group's current entries (deleted and superseded versions left out), with notes and tags. */
+export function exportCsv(spreadsheetId, events) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Date', 'Type', 'Title', 'Category', 'Amount', 'Currency', 'Paid by', 'To / split between', 'Notes', 'Tags'].join(',')];
+  const { expenses } = computeLedgerState(events);
+  for (const x of [...expenses].reverse()) {
+    const p = x.payload;
+    const between = x.type === 'EXPENSE_ADD' ? (p.allocations || []).filter((a) => a.value > 0).map((a) => `${a.user} ${a.value}`).join('; ') : x.target;
+    const paidBy = p.payers?.length ? p.payers.map((y) => `${y.user} ${y.value}`).join('; ') : x.payer;
+    lines.push([new Date(x.timestamp).toISOString(), x.type, x.title, x.category, x.amount, p.currency || CONFIG.DEFAULT_CURRENCY, paidBy, between, p.notes, tagsOf(p).map((t) => `#${t}`).join(' ')].map(esc).join(','));
+  }
+  downloadFile(`${fileSafe(groupName(spreadsheetId))}_${new Date().toISOString().slice(0, 10)}.csv`, lines.join('\n'));
+}
+
+// ─── Comments ───
+
+export const addComment = (spreadsheetId, targetEventId, text) =>
+  appendEvent(spreadsheetId, 'COMMENT', { target_event_id: targetEventId, text: text.trim().slice(0, 1000) });
+
+/** Deleting reuses EXPENSE_DELETE on the comment's id (older app versions ignore comments anyway). */
+export const deleteComment = (spreadsheetId, commentId) => appendEvent(spreadsheetId, 'EXPENSE_DELETE', { target_event_id: commentId });

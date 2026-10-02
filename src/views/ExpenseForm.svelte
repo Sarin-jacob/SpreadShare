@@ -12,6 +12,10 @@
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
   import { parsePaymentText, looksLikePayment } from '../lib/paymentText.js';
   import { takeShared } from '../lib/share.js';
+  import { prefs } from '../lib/prefs.svelte.js';
+  import { monthToDate, budgetAlert } from '../lib/budgets.js';
+  import { loadAllEvents } from '../lib/cache.svelte.js';
+  import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
@@ -31,6 +35,8 @@
   // ─── Form state ───
   let type = $state('EXPENSE_ADD');
   let title = $state('');
+  let notes = $state('');
+  let notesOpen = $state(false);
   let when = $state(toLocalInput());
   let amountExpr = $state('');
   let currency = $state(BASE);
@@ -113,6 +119,8 @@
     const p = parsePayload(ev);
     type = ev.event_type;
     title = p.title || '';
+    notes = p.notes || '';
+    notesOpen = !!notes;
     when = toLocalInput(p.custom_timestamp || ev.timestamp);
     currency = p.foreign_currency || BASE;
     rateExpr = String(p.exchange_rate || 1);
@@ -366,6 +374,19 @@
     else item.members.splice(i, 1);
   }
 
+  /** After saving: a heads-up when this month's share of a budgeted category is near or over. */
+  async function warnIfOverBudget(cat) {
+    if (!Object.keys(prefs.budgets).length) return;
+    const data = monthToDate(await loadAllEvents(), me);
+    const alert = budgetAlert(prefs.budgets, data, cat);
+    if (!alert) return;
+    const label = alert.category === '*' ? 'Your monthly budget' : `${category(alert.category).label} budget`;
+    const msg = alert.status === 'over'
+      ? `${label}: ${money(alert.spent)} of ${money(alert.limit)} (over by ${money(-alert.left)})`
+      : `${label}: ${money(alert.spent)} of ${money(alert.limit)} used this month`;
+    setTimeout(() => toast(msg, alert.status === 'over' ? 'error' : 'info', { ms: 5000 }), 600);
+  }
+
   async function save(e) {
     e?.preventDefault();
     if (error || saving) return;
@@ -381,6 +402,9 @@
       currency: BASE,
       custom_timestamp: new Date(when).toISOString(),
     };
+    if (notes.trim()) payload.notes = notes.trim().slice(0, 2000);
+    // Links the versions of an edited entry, so history and comments follow it.
+    if (editId) payload.replaces = editId;
     let actor;
 
     if (type === 'EXPENSE_ADD') {
@@ -412,6 +436,7 @@
       await appendEvent(groupId, type, payload, { actor });
       navigator.vibrate?.(12);
       toast(editId ? 'Changes saved' : 'Saved');
+      if (type === 'EXPENSE_ADD') warnIfOverBudget(payload.category);
       replace(`/g/${groupId}`);
     } catch (err) {
       toast(`Couldn’t save: ${err.message}`, 'error');
@@ -578,6 +603,17 @@
         <input id="f-when" class="field" type="datetime-local" bind:value={when} />
       </div>
     </div>
+
+    {#if notesOpen}
+      <div>
+        <label class="label" for="f-notes">Note</label>
+        <textarea id="f-notes" class="field min-h-16" bind:value={notes} maxlength="2000" placeholder="Anything worth remembering. Add #tags to find it later, e.g. #goa"></textarea>
+      </div>
+    {:else}
+      <button type="button" class="-mt-2 text-xs font-semibold text-accent-600 dark:text-accent-400 flex items-center gap-1.5" onclick={() => (notesOpen = true)}>
+        <Icon name="plus" class="w-3.5 h-3.5" /> Add a note or #tags
+      </button>
+    {/if}
 
     {#if type === 'EXPENSE_ADD'}
       <div>

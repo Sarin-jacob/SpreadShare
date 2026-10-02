@@ -1,6 +1,10 @@
 <script>
   import { app } from '../lib/app.svelte.js';
-  import { loadAllEvents } from '../lib/cache.svelte.js';
+  import { loadAllEvents, eventsByGroup } from '../lib/cache.svelte.js';
+  import { computeLedgerState } from '../lib/engine.js';
+  import { memberEffect } from '../lib/statement.js';
+  import { tagsOf } from '../lib/tags.js';
+  import BudgetsCard from '../components/BudgetsCard.svelte';
   import { processAnalytics } from '../lib/insights.js';
   import { money } from '../lib/format.js';
   import Donut from '../components/Donut.svelte';
@@ -35,6 +39,20 @@
     return Object.values(out).sort((a, b) => b.total - a.total);
   });
 
+  /** Your share per #tag in the selected period. */
+  const byTag = $derived.by(() => {
+    const from = Date.now() - days * 86_400_000;
+    const totals = new Map();
+    for (const group of Object.values(eventsByGroup(events))) {
+      for (const x of computeLedgerState(group).expenses) {
+        if (x.type !== 'EXPENSE_ADD' || new Date(x.timestamp).getTime() < from) continue;
+        const share = memberEffect(x, me).share;
+        if (share > 0) for (const t of tagsOf(x.payload)) totals.set(t, (totals.get(t) || 0) + share);
+      }
+    }
+    return [...totals].map(([tag, total]) => ({ tag, total })).sort((a, b) => b.total - a.total).slice(0, 8);
+  });
+
   const RANGES = [
     { value: 7, label: '7 days' },
     { value: 30, label: '30 days' },
@@ -64,16 +82,33 @@
 
   {#if missing > 0}
     <p class="text-xs text-center text-slate-500 rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2">
-      {app.sync.progress ? `Downloading groups… ${app.sync.progress.done}/${app.sync.progress.total}` : `${missing} group${missing > 1 ? 's' : ''} not downloaded yet , reconnect or tap sync.`}
+      {app.sync.progress ? `Downloading groups… ${app.sync.progress.done}/${app.sync.progress.total}` : `${missing} group${missing > 1 ? 's' : ''} not downloaded yet. Reconnect or tap sync.`}
     </p>
   {:else if loaded && data.count === 0}
     <p class="text-sm text-center text-slate-400 py-4">No expenses in this period.</p>
   {/if}
 
+  {#if loaded}<BudgetsCard {events} email={me} />{/if}
+
   <div class="card p-4">
     <h2 class="label">By category</h2>
     <Donut data={data.categories} />
   </div>
+
+  {#if byTag.length}
+    <div class="card p-4 space-y-2">
+      <h2 class="label">By tag</h2>
+      {#each byTag as t (t.tag)}
+        <a href="#/search?q={encodeURIComponent('#' + t.tag)}" class="flex items-center gap-3 text-sm">
+          <span class="flex-1 truncate font-medium text-accent-700 dark:text-accent-300">#{t.tag}</span>
+          <div class="w-1/3 h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+            <div class="h-full bg-accent-500 rounded-full" style="width:{(t.total / byTag[0].total) * 100}%"></div>
+          </div>
+          <span class="w-20 text-right font-semibold tabular-nums">{money(t.total, undefined, { decimals: 0 })}</span>
+        </a>
+      {/each}
+    </div>
+  {/if}
 
   {#if byGroup.length > 1}
     <div class="card p-4 space-y-2">
