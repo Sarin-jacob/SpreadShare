@@ -20,7 +20,9 @@
         {
           "name": "files",
           "accept": [
-            "image/*"
+            "image/*",
+            "application/pdf",
+            ".pdf"
           ]
         }
       ]
