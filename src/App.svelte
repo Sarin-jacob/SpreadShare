@@ -14,10 +14,11 @@
   import ExpenseDetail from './views/ExpenseDetail.svelte';
   import Insights from './views/Insights.svelte';
   import Settings from './views/Settings.svelte';
+  import Share from './views/Share.svelte';
 
   const seg = $derived(route.segments);
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
-  const isSubPage = $derived(seg[0] === 'g' && seg.length > 2);
+  const isSubPage = $derived((seg[0] === 'g' && seg.length > 2) || seg[0] === 'share');
 
   $effect(() => {
     if (app.user && groupId) openGroup(groupId);
@@ -110,6 +111,8 @@
           {/key}
         {:else if seg[0] === 'insights'}
           <Insights />
+        {:else if seg[0] === 'share'}
+          <Share />
         {:else if seg[0] === 'settings'}
           <Settings />
         {:else}

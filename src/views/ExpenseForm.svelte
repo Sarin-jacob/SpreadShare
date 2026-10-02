@@ -10,6 +10,8 @@
   import { computeSplit, exactWithRemainder } from '../lib/split.js';
   import { suggestCategory, expenseText } from '../lib/categorize.js';
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
+  import { parsePaymentText, looksLikePayment } from '../lib/paymentText.js';
+  import { takeShared } from '../lib/share.js';
   import { compressImage } from '../lib/image.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
@@ -246,10 +248,68 @@
   function onPaste(e) {
     if (type !== 'EXPENSE_ADD' || scanFile) return;
     const image = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
-    if (!image) return;
-    e.preventDefault();
-    startScan(image);
+    if (image) {
+      e.preventDefault();
+      startScan(image);
+      return;
+    }
+    // A pasted bank / UPI message: let the paste happen, then offer to fill the form from it.
+    const text = e.clipboardData?.getData('text/plain') || '';
+    if (e.target?.dataset?.messageBox == null && looksLikePayment(text)) {
+      const parsed = parsePaymentText(text);
+      toast(`Looks like a payment of ${money(parsed.amount, parsed.currency || undefined)}`, 'info', {
+        action: { label: 'Fill in', run: () => applyPayment(parsed, { replaceTitle: true }) },
+      });
+    }
   }
+
+  // ─── Payment messages (bank SMS, UPI / card alerts, payment emails) ───
+  let messageOpen = $state(false);
+  let messageText = $state('');
+  const messageParsed = $derived(messageText.trim() ? parsePaymentText(messageText) : null);
+
+  /** Fills the form from a parsed payment message. */
+  function applyPayment(p, { replaceTitle = false } = {}) {
+    amountExpr = String(p.amount);
+    if (p.currency && p.currency !== currency && CURRENCIES.includes(p.currency)) {
+      currency = p.currency;
+      onCurrencyChange();
+    }
+    if (replaceTitle || !title.trim()) title = p.merchant || (p.direction === 'in' ? 'Money received' : 'Payment');
+    if (p.when) when = p.when;
+    messageOpen = false;
+    messageText = '';
+    if (p.direction === 'in') toast('That message is money you received. Check it belongs here as an expense.', 'info', { ms: 5000 });
+    else toast('Filled in from the message. Check the split.', 'info');
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      messageText = await navigator.clipboard.readText();
+    } catch {
+      toast('Couldn’t read the clipboard. Long-press the box and paste instead.', 'info');
+    }
+  }
+
+  // Something shared into the app from another app (see #/share): use it once the form is ready.
+  let sharedTaken = false;
+  $effect(() => {
+    if (!ready || sharedTaken || !prefill.shared) return;
+    sharedTaken = true;
+    takeShared().then((shared) => {
+      if (!shared) return;
+      const file = shared.files.find((f) => f.type.startsWith('image/'));
+      if (file) return startScan(file);
+      const parsed = parsePaymentText(shared.text);
+      if (parsed) applyPayment(parsed, { replaceTitle: true });
+      else {
+        // Not a payment message: keep the text in the box so it can be edited.
+        messageText = shared.text;
+        messageOpen = true;
+        toast('Couldn’t find an amount in what was shared. Check the message below.', 'info');
+      }
+    });
+  });
 
   function applyScan({ draft, image, mode, compact }) {
     scanFile = null;
@@ -405,6 +465,42 @@
             <Icon name="image" class="w-4 h-4" /> {touch ? 'Gallery' : 'Choose image'}
             <input type="file" accept="image/*" class="hidden" onchange={onScanFile} />
           </label>
+        </div>
+        <div class="border-t border-accent-500/20 mt-3 pt-2.5">
+          <button
+            type="button"
+            class="w-full flex items-center gap-2 text-left text-xs font-semibold text-accent-700 dark:text-accent-300"
+            aria-expanded={messageOpen}
+            onclick={() => (messageOpen = !messageOpen)}
+          >
+            <Icon name="message" class="w-4 h-4" />
+            <span class="flex-1">Paste a bank / UPI message instead</span>
+            <Icon name="chevron" class="w-3.5 h-3.5 transition-transform {messageOpen ? 'rotate-90' : ''}" />
+          </button>
+          {#if messageOpen}
+            <div class="mt-2.5 space-y-2">
+              <textarea
+                class="field !text-xs font-mono min-h-24"
+                bind:value={messageText}
+                data-message-box
+                placeholder="e.g. Sent Rs.450.00 from HDFC Bank A/C *1234 to SWIGGY on 01/10/26…"
+                aria-label="Payment message"
+              ></textarea>
+              <div class="flex items-center gap-2">
+                {#if navigator.clipboard?.readText}
+                  <button type="button" class="btn btn-soft !py-1.5 text-xs" onclick={pasteFromClipboard}>Paste from clipboard</button>
+                {/if}
+                <span class="flex-1 text-xs text-right truncate {messageParsed ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400'}">
+                  {#if messageParsed}
+                    {money(messageParsed.amount, messageParsed.currency || undefined)}{messageParsed.merchant ? ` · ${messageParsed.merchant}` : ''}{messageParsed.when ? ` · ${new Date(messageParsed.when).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}
+                  {:else if messageText.trim()}
+                    No amount found yet
+                  {/if}
+                </span>
+                <button type="button" class="btn btn-primary !py-1.5 text-xs" disabled={!messageParsed} onclick={() => applyPayment(messageParsed, { replaceTitle: true })}>Fill in</button>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
     {/if}

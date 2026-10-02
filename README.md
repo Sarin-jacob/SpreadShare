@@ -13,6 +13,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
 *   **Receipt Scanning (on-device):** Snap a bill with the camera, or pick a photo or screenshot from your gallery (drag-and-drop and paste work on desktop), and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
 *   **Auto-Categorization (on-device):** As you type a description or scan a receipt, SpreadShare picks the category. A small Naive Bayes model learns from your own past expenses (so "Toit" → Food, or your Instamart runs → Groceries), and built-in keyword rules cover everything else. It never overrides a category you picked yourself.
+*   **Payment Messages & Sharing:** Paste a bank SMS, UPI notification or card alert and the amount, payee and date are filled in (balances and limits are ignored). In the installed app, share a receipt image or a payment message from any app straight into SpreadShare.
 *   **Item-Wise Splitting:** Scanned receipts default to splitting by items. Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
@@ -45,11 +46,11 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [x] **Item-Wise Bill Splitting:** Assign line items from a scanned receipt to specific members instead of splitting the grand total.
 - [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback.
 - [x] **Offline receipt reader:** Downloaded on install and kept on the device, so scanning works without a connection.
+- [x] **Share to SpreadShare:** Share a receipt photo or screenshot, or a payment message, from Gallery, WhatsApp, Messages or a delivery app straight into a new expense (installed app, Web Share Target).
+- [x] **Paste a payment message:** Bank SMS, UPI notifications and payment emails ("Rs 450.00 debited … to SWIGGY on 01-10-26") become an expense with amount, merchant and date filled in.
 
 ### Import from anywhere
-- [ ] **Share to SpreadShare:** Share a photo, screenshot or PDF from Gallery, WhatsApp, Gmail or a delivery app straight into a new expense. The installed app opens the scanner with it (Web Share Target).
-- [ ] **PDF bills & e-invoices:** Food delivery, shopping, cab and airline PDFs rendered on device with pdf.js. Text-based PDFs skip OCR entirely, so the numbers are exact.
-- [ ] **Paste a payment message:** Bank SMS, UPI notifications and payment emails ("Rs 450.00 debited … to SWIGGY on 01-10-26") become an expense with amount, merchant and date filled in.
+- [ ] **PDF bills & e-invoices:** Food delivery, shopping, cab and airline PDFs rendered on device with pdf.js (and accepted by Share to SpreadShare). Text-based PDFs skip OCR entirely, so the numbers are exact.
 - [ ] **Bank & card statements:** Import CSV / XLSX / OFX (PDF later), tick the transactions to add, auto-categorised, with duplicates flagged by amount and date.
 - [ ] **Switch from Splitwise, Tricount or Settle Up:** Import their CSV exports, match names to group members, and carry balances over.
 - [ ] **Existing spreadsheets:** Map the columns of a Google Sheet you already use for expenses and import its rows.

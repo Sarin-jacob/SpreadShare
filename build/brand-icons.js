@@ -41,6 +41,14 @@ function manifest(accent) {
       display: 'standalone',
       background_color: '#0f172a',
       theme_color: '#0f172a',
+      // Lets the installed app receive receipt photos / screenshots and payment messages from the
+      // OS share sheet. Handled by public/sw.js, then the #/share screen.
+      share_target: {
+        action: './share-target',
+        method: 'POST',
+        enctype: 'multipart/form-data',
+        params: { title: 'title', text: 'text', url: 'url', files: [{ name: 'files', accept: ['image/*'] }] },
+      },
       icons: [
         { src: `icons/${accent}.svg`, sizes: 'any', type: 'image/svg+xml' },
         { src: `icons/${accent}-192.png`, sizes: '192x192', type: 'image/png' },

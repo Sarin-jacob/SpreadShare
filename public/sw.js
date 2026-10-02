@@ -4,7 +4,9 @@
 // - Receipt reader (PaddleOCR code, ONNX runtime, OCR models): cache-first in its own cache so the
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
-const CACHE = 'spreadshare-v5';
+const CACHE = 'spreadshare-v6';
+// Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
+const SHARE_CACHE = 'spreadshare-share';
 // Keep in sync with src/lib/ocrOffline.svelte.js. Bump when the vendored PaddleOCR version changes.
 const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
@@ -24,7 +26,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== OCR_CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, OCR_CACHE, SHARE_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -93,10 +95,37 @@ async function ocrAsset(event) {
   return res;
 }
 
+// Web Share Target: the OS posts shared files / text here. Park them in SHARE_CACHE and open the app.
+async function receiveShare(req) {
+  const scope = self.registration.scope;
+  try {
+    const form = await req.formData();
+    const files = form.getAll('files').filter((f) => f && typeof f !== 'string' && f.size > 0);
+    const text = ['title', 'text', 'url']
+      .map((k) => form.get(k))
+      .filter((v) => typeof v === 'string' && v.trim())
+      .join('\n');
+    const cache = await caches.open(SHARE_CACHE);
+    await Promise.all((await cache.keys()).map((k) => cache.delete(k)));
+    const meta = { at: Date.now(), text, files: files.map((f, i) => ({ key: `__share/${i}`, name: f.name, type: f.type })) };
+    await Promise.all(
+      files.map((f, i) => cache.put(new URL(`__share/${i}`, scope).href, new Response(f, { headers: { 'Content-Type': f.type || 'application/octet-stream' } })))
+    );
+    await cache.put(new URL('__share/meta', scope).href, new Response(JSON.stringify(meta), { headers: { 'Content-Type': 'application/json' } }));
+  } catch (err) {
+    console.warn('Share target failed', err);
+  }
+  return Response.redirect(new URL('./#/share', scope).href, 303);
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (req.method === 'POST' && url.origin === self.location.origin && url.pathname.endsWith('/share-target')) {
+    event.respondWith(receiveShare(req));
+    return;
+  }
+  if (req.method !== 'GET') return;
 
   if (url.origin !== self.location.origin) {
     if (isOcrAsset(url)) event.respondWith(ocrAsset(event));
