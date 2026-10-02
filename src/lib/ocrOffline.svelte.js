@@ -135,6 +135,8 @@ export function downloadOcr() {
       const receipt = await import('./receipt/index.js');
       await receipt.warmUp();
       await storeUsedFiles();
+      // PDF bills too: pdf.js is same-origin, so loading it once lets the service worker keep it.
+      await import('./receipt/pdf.js').then((m) => m.warmPdf()).catch(() => {});
       // Cache writes finish slightly after the last byte reaches the page.
       for (let i = 0; i < 60 && !isComplete(await cachedEntries()); i++) await new Promise((r) => setTimeout(r, 500));
       await checkOcrOffline({ force: true });

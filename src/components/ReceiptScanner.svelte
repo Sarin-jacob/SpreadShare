@@ -22,6 +22,7 @@
   let result = $state.raw(null);
   let image = $state(null);
   let elapsed = $state(0);
+  let pdfPages = $state(0); // > 0 when the file is a PDF
 
   let canvasEl = $state();
   let stageEl = $state();
@@ -38,8 +39,31 @@
   async function open() {
     try {
       R = await import('../lib/receipt/index.js');
-      source = await R.loadPhoto(file);
-      quad = R.autoQuad(source);
+      if (R.isPdf(file)) {
+        const pdf = await R.readPdf(file);
+        source = pdf.canvas;
+        quad = R.fullQuad(source); // a PDF page is already flat
+        pdfPages = pdf.numPages;
+        if (pdf.result) {
+          // Text PDF: read straight from its text, no OCR (and no reader download) needed.
+          result = pdf.result;
+          image = R.canvasToDataUrl(source);
+          step = 'review';
+          return;
+        }
+      } else {
+        source = await R.loadPhoto(file);
+        quad = R.autoQuad(source);
+      }
+      startEditing();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  /** Crop editor + OCR path (photos, scanned PDFs, or a text PDF the user wants re-read). */
+  async function startEditing() {
+    try {
       step = 'edit';
       // Fetch (or load from the offline copy) the OCR model while the user adjusts the crop.
       await checkOcrOffline();
@@ -286,7 +310,13 @@
           </ul>
         {/if}
 
-        <p class="text-xs text-slate-400">Read on this device in {(result.ms / 1000).toFixed(1)}s</p>
+        {#if result.fromText}
+          <p class="text-xs text-slate-400">
+            Read from the PDF's own text: exact numbers, no scanning needed{pdfPages > 3 ? ` (first 3 of ${pdfPages} pages)` : ''}.
+          </p>
+        {:else}
+          <p class="text-xs text-slate-400">Read on this device in {(result.ms / 1000).toFixed(1)}s</p>
+        {/if}
       </div>
 
       {#if draft?.items.length}
@@ -302,7 +332,11 @@
         </button>
       {/if}
       <div class="flex gap-2">
-        <button class="btn btn-ghost flex-1" onclick={() => (step = 'edit')}>Adjust crop &amp; rescan</button>
+        {#if result.fromText}
+          <button class="btn btn-ghost flex-1" onclick={startEditing}>Scan the page image instead</button>
+        {:else}
+          <button class="btn btn-ghost flex-1" onclick={() => (step = 'edit')}>Adjust crop &amp; rescan</button>
+        {/if}
         <button class="btn btn-ghost flex-1" onclick={onclose}>Cancel</button>
       </div>
 

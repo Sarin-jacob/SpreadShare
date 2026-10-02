@@ -13,7 +13,8 @@
   let preview = $state(null);
 
   const image = $derived(shared?.files.find((f) => f.type.startsWith('image/')) ?? null);
-  const payment = $derived(shared && !image ? parsePaymentText(shared.text) : null);
+  const pdf = $derived(shared?.files.find((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) ?? null);
+  const payment = $derived(shared && !image && !pdf ? parsePaymentText(shared.text) : null);
 
   onMount(() => {
     peekShared().then((s) => {
@@ -57,6 +58,12 @@
         <div class="min-w-0">
           <div class="font-semibold">Receipt image</div>
           <div class="text-xs text-slate-500">It will open in the scanner.</div>
+        </div>
+      {:else if pdf}
+        <span class="w-12 h-14 rounded-lg grid place-items-center bg-rose-500/10 text-rose-600 dark:text-rose-400 font-black text-xs shrink-0">PDF</span>
+        <div class="min-w-0">
+          <div class="font-semibold truncate">{pdf.name}</div>
+          <div class="text-xs text-slate-500">PDF bill. It will be read in the next step.</div>
         </div>
       {:else}
         <span class="w-12 h-12 rounded-xl grid place-items-center bg-accent-500/10 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="message" /></span>

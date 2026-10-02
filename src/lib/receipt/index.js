@@ -4,14 +4,37 @@
 // happen when someone actually scans. Parser modules are vendored from receipt_test@8125280.
 // Same specifier as ocr.js, so both share one module instance.
 import { PaddleOCR } from 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
-import { getOcr, OCR_MODELS } from './ocr.js';
+import { getOcr, OCR_MODELS, toBoxes } from './ocr.js';
 import { ocrPhoto } from './preprocess.js';
 import { solveReceipt } from './solver.js';
 import { normalize } from './schema.js';
 import { audit } from './audit.js';
+import { runsToOcrItems, hasUsableText } from './pdfText.js';
 
 export * from './image.js';
 export * from './draft.js';
+export { isPdf } from './pdfText.js';
+
+function solve(boxes, t0) {
+  // eslint-disable-next-line no-unused-vars
+  const { _lines, _debug, ...raw } = solveReceipt(boxes);
+  const receipt = normalize(raw);
+  return { receipt, check: audit(receipt), lines: _lines, ms: performance.now() - t0 };
+}
+
+/**
+ * Opens a PDF bill. Text PDFs are read directly (no OCR, exact numbers); scanned PDFs return
+ * only the rendered page, to go through the crop editor and OCR like a photo.
+ * @returns {Promise<{ canvas: HTMLCanvasElement, result: object|null, numPages: number }>}
+ */
+export async function readPdf(file) {
+  const t0 = performance.now();
+  const { loadPdf } = await import('./pdf.js'); // pdf.js is its own chunk
+  const { canvas, runs, numPages } = await loadPdf(file);
+  if (!hasUsableText(runs)) return { canvas, result: null, numPages };
+  const result = solve(toBoxes(runsToOcrItems(runs)), t0);
+  return { canvas, result: { ...result, fromText: true }, numPages };
+}
 
 export const OCR_MODEL = 'v6-small';
 /** One-time download: OCR models (~30 MB) + OpenCV and the ONNX runtime (~37 MB). */
@@ -62,8 +85,5 @@ export async function scanReceipt(flat) {
   await preloadOcr();
   const t0 = performance.now();
   const boxes = await ocrPhoto(flat, { ocrModel: OCR_MODEL, crop: true, contrast: false });
-  // eslint-disable-next-line no-unused-vars
-  const { _lines, _debug, ...raw } = solveReceipt(boxes);
-  const receipt = normalize(raw);
-  return { receipt, check: audit(receipt), lines: _lines, ms: performance.now() - t0 };
+  return solve(boxes, t0);
 }

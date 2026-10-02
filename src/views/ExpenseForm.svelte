@@ -223,10 +223,13 @@
   }
 
   // ─── Receipt scanning ───
+  /** Photos, screenshots and PDF bills can all be read. */
+  const isScannable = (f) => !!f && (f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+
   function startScan(file) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast('That isn’t an image. Choose a photo or screenshot of the receipt.', 'error');
+    if (!isScannable(file)) {
+      toast('That isn’t an image or PDF. Choose a photo, screenshot or PDF of the bill.', 'error');
       return;
     }
     scanFile = file;
@@ -241,13 +244,13 @@
   function onDrop(e) {
     e.preventDefault();
     dropping = false;
-    startScan([...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/')) || e.dataTransfer?.files?.[0]);
+    startScan([...(e.dataTransfer?.files || [])].find(isScannable) || e.dataTransfer?.files?.[0]);
   }
 
   /** Ctrl/Cmd+V a screenshot anywhere on the form to scan it (text pastes are left alone). */
   function onPaste(e) {
     if (type !== 'EXPENSE_ADD' || scanFile) return;
-    const image = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
+    const image = [...(e.clipboardData?.files || [])].find(isScannable);
     if (image) {
       e.preventDefault();
       startScan(image);
@@ -298,7 +301,7 @@
     sharedTaken = true;
     takeShared().then((shared) => {
       if (!shared) return;
-      const file = shared.files.find((f) => f.type.startsWith('image/'));
+      const file = shared.files.find(isScannable);
       if (file) return startScan(file);
       const parsed = parsePaymentText(shared.text);
       if (parsed) applyPayment(parsed, { replaceTitle: true });
@@ -450,7 +453,7 @@
           <div class="flex-1 min-w-0">
             <div class="text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</div>
             <div class="text-xs text-slate-500 dark:text-slate-400">
-              {dropping ? 'Drop the image to scan it' : touch ? 'Fills in the amount, date, shop and items. Read on this device.' : 'Fills in everything. Drop or paste (Ctrl+V) an image here too.'}
+              {dropping ? 'Drop it to scan' : touch ? 'Photo, screenshot or PDF bill. Fills in the amount, date, shop and items.' : 'Photo, screenshot or PDF bill. Drop or paste (Ctrl+V) one here too.'}
             </div>
           </div>
         </div>
@@ -462,8 +465,8 @@
             </label>
           {/if}
           <label class="btn btn-soft !py-2 text-sm cursor-pointer">
-            <Icon name="image" class="w-4 h-4" /> {touch ? 'Gallery' : 'Choose image'}
-            <input type="file" accept="image/*" class="hidden" onchange={onScanFile} />
+            <Icon name="image" class="w-4 h-4" /> {touch ? 'Gallery / PDF' : 'Choose image or PDF'}
+            <input type="file" accept="image/*,application/pdf,.pdf" class="hidden" onchange={onScanFile} />
           </label>
         </div>
         <div class="border-t border-accent-500/20 mt-3 pt-2.5">
