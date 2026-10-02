@@ -19,7 +19,9 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Personal Analytics:** SVG charts for day-of-the-week spending, category breakdowns, per-group totals and daily trendlines.
 *   **Deep Customization:** Light / dark / auto themes, OLED pure-black mode, 12 accent palettes, and global UI scaling.
 *   **Accent-Tinted App Icon:** The app icon is a parametric SVG. The in-app logo recolours live, and the favicon, home-screen icon and PWA manifest switch to a matching icon set for the chosen accent.
-*   **Installable:** Install prompt in Settings, and the home-screen icon shows a badge with the number of entries waiting to sync (where supported).
+*   **Installable:** Install prompt in Settings, and the home-screen icon shows a badge with the number of entries waiting to sync (where supported). Long-press the icon for **Add expense** / **Scan receipt** shortcuts, which open in the group you used last.
+*   **Updates you control:** New versions download in the background and a banner offers **Update**. Settings shows the version, can check for updates, and can **Reinstall** the app's files from scratch (your data and the receipt reader are kept).
+*   **Fast & native-feeling:** The app opens straight to your local data, with pull-to-refresh on phones, smooth screen transitions, haptic taps, and recent descriptions suggested as you type.
 
 ## Technical Stack
 
@@ -57,7 +59,7 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [ ] **Batch scan:** Pick several receipts at once; each becomes a draft to review and save.
 
 ### Faster everyday use
-- [ ] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
+- [x] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
 - [ ] **Recurring expenses:** Rent, subscriptions, house help. A pre-filled entry appears each period, created on device when the app opens.
 - [ ] **Pay with UPI:** "Record payment" can open your UPI app with the payee and amount filled in (members add their UPI ID once), then records the payment when you return.
 - [ ] **Members without Google accounts:** Add people by name (family, a friend who won't sign in) and merge them into their account if they join later.
@@ -131,3 +133,5 @@ PaddleOCR is loaded from jsDelivr (pinned version). The service worker keeps Pad
 npm run deploy
 ```
 This type-checks, runs the tests, builds into `dist/` and publishes it to the `gh-pages` branch (via the `gh-pages` package), with a `.nojekyll` marker. The build uses relative asset paths, so it works under `https://<user>.github.io/SpreadShare/` without extra config.
+
+Every build stamps a unique ID into `sw.js` (`build/build-info.js`). Open apps notice the new version within about half an hour (or straight away from Settings → Check for updates) and show an **Update** banner. Nothing switches over until the user taps it.

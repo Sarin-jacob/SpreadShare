@@ -39,6 +39,7 @@
     const original = $state.snapshot(x.event);
     try {
       await appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: eventId });
+      navigator.vibrate?.([8, 40, 8]);
       toast(`Deleted “${x?.title ?? original.payload_json?.title}”`, 'info', {
         action: {
           label: 'Undo',

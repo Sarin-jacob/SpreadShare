@@ -4,7 +4,9 @@
 // - Receipt reader (PaddleOCR code, ONNX runtime, OCR models): cache-first in its own cache so the
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
-const CACHE = 'spreadshare-v6';
+// Replaced with a unique ID on every build (build/build-info.js), so each deploy is a new worker.
+const BUILD = '__BUILD_ID__';
+const CACHE = `spreadshare-app-${BUILD}`;
 // Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
 const SHARE_CACHE = 'spreadshare-share';
 // Keep in sync with src/lib/ocrOffline.svelte.js. Bump when the vendored PaddleOCR version changes.
@@ -18,9 +20,15 @@ function isOcrAsset(url) {
   return url.hostname === 'cdn.jsdelivr.net' && /^\/npm\/(@[^/]+\/)?[^/@]+@\d[^/]*\//.test(url.pathname);
 }
 
+// A new version installs in the background and then waits, so the app can offer "Update" instead
+// of swapping code under someone mid-entry. (The very first install activates straight away.)
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data?.type === 'GET_VERSION') event.ports?.[0]?.postMessage({ build: BUILD });
 });
 
 self.addEventListener('activate', (event) => {

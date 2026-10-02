@@ -7,6 +7,7 @@
   import { money } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
   import Icon from '../components/Icon.svelte';
+  import GroupPicker from '../components/GroupPicker.svelte';
 
   let shared = $state.raw(null);
   let loaded = $state(false);
@@ -85,20 +86,7 @@
       <p class="text-sm text-center text-slate-500">Create a group first, then share again.</p>
       <a href="#/" class="btn btn-primary w-full">Create a group</a>
     {:else}
-      <section class="space-y-2">
-        <h2 class="label px-1">Which group is it for?</h2>
-        <ul class="space-y-2">
-          {#each app.directory as g (g.id)}
-            <li>
-              <button class="card w-full p-4 flex items-center gap-3 text-left hover:border-accent-500/50 transition" onclick={() => pick(g.id)}>
-                <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/10 text-accent-600 dark:text-accent-400 font-black">{g.name.charAt(0).toUpperCase()}</span>
-                <span class="flex-1 font-semibold truncate">{g.name}</span>
-                <Icon name="chevron" class="w-4 h-4 text-slate-400" />
-              </button>
-            </li>
-          {/each}
-        </ul>
-      </section>
+      <GroupPicker onpick={pick} />
     {/if}
   {/if}
 </div>

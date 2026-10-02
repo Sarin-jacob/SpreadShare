@@ -105,6 +105,8 @@ html[data-accent="slate"] {
 /* ─── Base ─── */
 @layer base {
   html { -webkit-tap-highlight-color: transparent; }
+  /* The app has its own pull-to-refresh; stop the browser's from reloading the page. */
+  html, body { overscroll-behavior-y: contain; }
   body {
     @apply bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-100 antialiased min-h-dvh;
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -139,3 +141,17 @@ html[data-accent="slate"] {
 }
 
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Quick cross-fade between screens (View Transitions; skipped for reduced motion in router). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 140ms;
+  animation-timing-function: ease-out;
+}
+
+/* Draws attention to the scan card when opened from the "Scan receipt" shortcut. */
+@keyframes ss-attention {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-500) 0%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-500) 35%, transparent); }
+}
+.attention { animation: ss-attention 1.2s ease-in-out 3; }

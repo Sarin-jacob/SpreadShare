@@ -57,9 +57,16 @@
 </script>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-black tracking-tight">Hi {firstName} 👋</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400">Your shared expense groups.</p>
+  <div class="flex items-start gap-3">
+    <div class="flex-1 min-w-0">
+      <h1 class="text-2xl font-black tracking-tight">Hi {firstName} 👋</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400">Your shared expense groups.</p>
+    </div>
+    {#if app.directory.length}
+      <a href="#/quick/add" class="btn btn-primary !py-2 shrink-0" title="Add to the group you used last">
+        <Icon name="plus" class="w-4 h-4" /> Add expense
+      </a>
+    {/if}
   </div>
 
   {#if app.directory.length > 0}

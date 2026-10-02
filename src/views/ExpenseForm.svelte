@@ -63,6 +63,25 @@
 
   // Editing an entry, or duplicating one (?copy=<eventId>) as a starting point
   const sourceId = $derived(editId || prefill.copy || null);
+
+  /** This group's recent descriptions, newest first, offered as you type (picking one also brings its category). */
+  const recentTitles = $derived.by(() => {
+    const seen = new Set();
+    const out = [];
+    for (const x of L.expenses) {
+      const key = x.title.trim().toLowerCase();
+      if (x.type !== 'EXPENSE_ADD' || !key || key === 'untitled' || seen.has(key)) continue;
+      seen.add(key);
+      out.push(x.title.trim());
+      if (out.length >= 12) break;
+    }
+    return out;
+  });
+
+  // Opened from the "Scan receipt" shortcut: the browser needs a tap to open the camera.
+  $effect(() => {
+    if (ready && prefill.scan) untrack(() => toast('Tap Camera or Gallery to scan your receipt', 'info'));
+  });
   const source = $derived(sourceId ? app.events.find((e) => e.eventId === sourceId) : null);
 
   // Initialise once the data we need is available (events load asynchronously).
@@ -391,6 +410,7 @@
     try {
       if (editId) await appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: editId });
       await appendEvent(groupId, type, payload, { actor });
+      navigator.vibrate?.(12);
       toast(editId ? 'Changes saved' : 'Saved');
       replace(`/g/${groupId}`);
     } catch (err) {
@@ -441,7 +461,8 @@
     {#if type === 'EXPENSE_ADD'}
       <div
         class="rounded-2xl border border-dashed px-4 py-3 transition
-          {dropping ? 'border-accent-500 bg-accent-500/15' : 'border-accent-500/50 bg-accent-500/5'}"
+          {dropping ? 'border-accent-500 bg-accent-500/15' : 'border-accent-500/50 bg-accent-500/5'}
+          {prefill.scan ? 'attention' : ''}"
         role="group"
         aria-label="Scan a receipt"
         ondragover={(e) => { e.preventDefault(); dropping = true; }}
@@ -547,7 +568,10 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
         <label class="label" for="f-title">Description</label>
-        <input id="f-title" class="field" bind:value={title} maxlength="120" placeholder={type === 'EXPENSE_ADD' ? 'Dinner, cab, groceries…' : 'Optional note'} />
+        <input id="f-title" class="field" bind:value={title} maxlength="120" list="recent-titles" autocomplete="off" placeholder={type === 'EXPENSE_ADD' ? 'Dinner, cab, groceries…' : 'Optional note'} />
+        <datalist id="recent-titles">
+          {#each recentTitles as t (t)}<option value={t}></option>{/each}
+        </datalist>
       </div>
       <div>
         <label class="label" for="f-when">Date</label>

@@ -97,6 +97,7 @@ class AuthenticationService {
     const cached = this.cachedToken(REFRESH_BUFFER_MS);
     if (cached) return cached;
     try {
+      await this.init(); // the sign-in script now loads in the background at startup
       return await this.#request({ prompt: 'none', hint: emailHint });
     } catch {
       // Silent refresh can fail (popup blocked, cookies cleared). Fall back to a still-valid token.

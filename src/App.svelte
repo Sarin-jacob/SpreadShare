@@ -1,6 +1,7 @@
 <script>
-  import { app, openGroup, login, pendingIds } from './lib/app.svelte.js';
+  import { app, openGroup, login, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
   import { setBadge } from './lib/pwa.svelte.js';
+  import { updates, applyUpdate } from './lib/updates.svelte.js';
   import { route } from './lib/router.svelte.js';
   import { toast } from './lib/toast.svelte.js';
   import Icon from './components/Icon.svelte';
@@ -15,10 +16,53 @@
   import Insights from './views/Insights.svelte';
   import Settings from './views/Settings.svelte';
   import Share from './views/Share.svelte';
+  import Quick from './views/Quick.svelte';
 
   const seg = $derived(route.segments);
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
-  const isSubPage = $derived((seg[0] === 'g' && seg.length > 2) || seg[0] === 'share');
+  const isSubPage = $derived((seg[0] === 'g' && seg.length > 2) || seg[0] === 'share' || seg[0] === 'quick');
+
+  // ─── Pull to refresh (phones; list screens only) ───
+  const PULL_TRIGGER = 64;
+  const canPull = $derived(!seg[0] || seg[0] === 'insights' || (seg[0] === 'g' && seg.length === 2));
+  let pull = $state(0);
+  let refreshing = $state(false);
+  let pullStart = null;
+
+  function onTouchStart(e) {
+    if (!app.user || !canPull || refreshing || window.scrollY > 0 || e.touches.length !== 1) return;
+    if (e.target.closest?.('[role="dialog"], input, textarea, select')) return;
+    pullStart = e.touches[0].clientY;
+  }
+  function onTouchMove(e) {
+    if (pullStart == null) return;
+    const dy = e.touches[0].clientY - pullStart;
+    pull = dy > 0 && window.scrollY <= 0 ? Math.min(110, dy * 0.5) : 0;
+  }
+  async function onTouchEnd() {
+    if (pullStart == null) return;
+    pullStart = null;
+    if (pull < PULL_TRIGGER) return (pull = 0);
+    if (!navigator.onLine) {
+      pull = 0;
+      return toast('You’re offline. Changes will sync when you’re back.', 'info');
+    }
+    if (app.sync.authExpired) {
+      pull = 0;
+      return toast('Reconnect to Google to sync', 'info');
+    }
+    refreshing = true;
+    pull = PULL_TRIGGER;
+    navigator.vibrate?.(8);
+    try {
+      await loadDirectory();
+      await syncAll();
+      toast(app.sync.error ? 'Some groups couldn’t sync' : 'Up to date', app.sync.error ? 'error' : 'info');
+    } finally {
+      refreshing = false;
+      pull = 0;
+    }
+  }
 
   $effect(() => {
     if (app.user && groupId) openGroup(groupId);
@@ -46,6 +90,8 @@
   }
 </script>
 
+<svelte:window ontouchstart={onTouchStart} ontouchmove={onTouchMove} ontouchend={onTouchEnd} ontouchcancel={onTouchEnd} />
+
 {#if !app.booted}
   <div class="min-h-dvh grid place-items-center">
     <div class="w-8 h-8 rounded-full border-2 border-accent-500 border-t-transparent animate-spin"></div>
@@ -53,6 +99,16 @@
 {:else if !app.user}
   <Login />
 {:else}
+  {#if pull > 0 || refreshing}
+    <div class="md:hidden fixed left-1/2 top-14 z-40 -translate-x-1/2 pointer-events-none" style="transform: translate(-50%, {pull - 40}px)">
+      <div class="w-10 h-10 rounded-full grid place-items-center bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 text-accent-600 dark:text-accent-400">
+        <span class={refreshing ? 'animate-spin' : ''} style={refreshing ? '' : `transform: rotate(${pull * 4}deg); opacity: ${Math.min(1, pull / PULL_TRIGGER)}`}>
+          <Icon name="refresh" class="w-5 h-5" />
+        </span>
+      </div>
+    </div>
+  {/if}
+
   <div class="md:flex max-w-6xl mx-auto min-h-dvh">
     <!-- Desktop sidebar -->
     <aside class="hidden md:flex md:w-60 shrink-0 flex-col gap-8 p-6 border-r border-slate-200 dark:border-slate-800 sticky top-0 h-dvh">
@@ -96,6 +152,16 @@
         </div>
       {/if}
 
+      {#if updates.available && !updates.dismissed}
+        <div class="mx-4 mt-4 md:mx-8 flex items-center gap-3 rounded-xl border border-accent-500/30 bg-accent-500/10 px-4 py-3 text-sm" role="status">
+          <span class="flex-1">✨ A new version of SpreadShare is ready.</span>
+          <button class="btn btn-ghost !py-1.5 !px-3 shrink-0" onclick={() => (updates.dismissed = true)}>Later</button>
+          <button class="btn btn-primary !py-1.5 shrink-0" onclick={applyUpdate} disabled={updates.applying}>
+            {updates.applying ? 'Updating…' : 'Update'}
+          </button>
+        </div>
+      {/if}
+
       <main class="flex-1 w-full max-w-2xl mx-auto px-4 md:px-8 pt-4 md:pt-8 {isSubPage ? 'pb-10' : 'pb-28 md:pb-10'}">
         {#if seg[0] === 'g' && groupId}
           {#key groupId}
@@ -113,6 +179,8 @@
           <Insights />
         {:else if seg[0] === 'share'}
           <Share />
+        {:else if seg[0] === 'quick'}
+          {#key seg[1]}<Quick action={seg[1] === 'scan' ? 'scan' : 'add'} />{/key}
         {:else if seg[0] === 'settings'}
           <Settings />
         {:else}

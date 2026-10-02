@@ -86,11 +86,9 @@ export async function boot() {
     app.directory = readJson(DIRECTORY_KEY, []);
   }
 
-  try {
-    await AuthService.init(CONFIG.GOOGLE_CLIENT_ID);
-  } catch (e) {
-    console.warn(e.message);
-  }
+  // Show local data right away. Google's sign-in script loads in the background; only signing
+  // in (or refreshing an expired token) needs it, and those wait for it themselves.
+  AuthService.init(CONFIG.GOOGLE_CLIENT_ID).catch((e) => console.warn(e.message));
 
   app.booted = true;
 
@@ -297,9 +295,20 @@ async function handlePendingInvite() {
 
 // ─── Active group ───
 
+const LAST_GROUP_KEY = 'ss_last_group';
+
+/** The group used most recently on this device (for shortcuts / quick add), if it still exists. */
+export function lastGroupId() {
+  const id = localStorage.getItem(LAST_GROUP_KEY);
+  return app.directory.some((g) => g.id === id) ? id : null;
+}
+
 export async function openGroup(id) {
   if (app.groupId === id) return;
   app.groupId = id;
+  try {
+    localStorage.setItem(LAST_GROUP_KEY, id);
+  } catch {}
   app.groupLoading = true;
   const cached = await db.getGroupEvents(id);
   if (app.groupId !== id) return;

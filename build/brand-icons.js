@@ -41,6 +41,11 @@ function manifest(accent) {
       display: 'standalone',
       background_color: '#0f172a',
       theme_color: '#0f172a',
+      // Long-press the home-screen icon. Both open in the group used last (see src/views/Quick.svelte).
+      shortcuts: [
+        { name: 'Add expense', short_name: 'Add', url: './#/quick/add', icons: [{ src: `icons/${accent}-192.png`, sizes: '192x192', type: 'image/png' }] },
+        { name: 'Scan receipt', short_name: 'Scan', url: './#/quick/scan', icons: [{ src: `icons/${accent}-192.png`, sizes: '192x192', type: 'image/png' }] },
+      ],
       // Lets the installed app receive receipt photos / screenshots and payment messages from the
       // OS share sheet. Handled by public/sw.js, then the #/share screen.
       share_target: {

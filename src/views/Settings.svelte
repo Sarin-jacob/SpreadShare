@@ -3,6 +3,7 @@
   import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
   import { pwa, promptInstall } from '../lib/pwa.svelte.js';
   import { ocrOffline, downloadOcr, removeOcr } from '../lib/ocrOffline.svelte.js';
+  import { updates, checkForUpdates, applyUpdate, reinstallApp, APP_VERSION, BUILD_ID, BUILD_TIME } from '../lib/updates.svelte.js';
   import Logo from '../components/Logo.svelte';
   import { toast } from '../lib/toast.svelte.js';
   import Avatar from '../components/Avatar.svelte';
@@ -30,6 +31,22 @@
     if (!confirm('Remove the receipt reader from this device? It will download again the next time you scan.')) return;
     await removeOcr();
     toast('Receipt reader removed', 'info');
+  }
+
+  const builtOn = new Date(BUILD_TIME).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+
+  async function checkUpdates() {
+    if (await checkForUpdates()) return; // the Update button appears
+    toast('You’re on the latest version', 'info');
+  }
+
+  async function reinstall() {
+    if (!confirm('Reinstall SpreadShare? The app’s files are downloaded again and it restarts.\n\nYour groups, unsynced entries, settings and the receipt reader stay on this device.')) return;
+    try {
+      await reinstallApp();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
   }
 
   async function signOut() {
@@ -170,6 +187,40 @@
       </div>
       <button class="btn btn-soft !py-2 shrink-0" onclick={rebuildCache}>Rebuild</button>
     </div>
+  </section>
+
+  <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
+    <div class="p-4 flex items-center gap-4">
+      <Logo class="w-11 h-11" />
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-bold">SpreadShare {APP_VERSION}</div>
+        <div class="text-xs text-slate-500 truncate" title={BUILD_ID}>
+          {#if updates.available}
+            <span class="text-accent-600 dark:text-accent-400 font-semibold">A new version is ready</span>
+          {:else}
+            Built {builtOn} · {BUILD_ID.split('-')[1] ?? ''}
+          {/if}
+        </div>
+      </div>
+      {#if updates.available}
+        <button class="btn btn-primary !py-2 shrink-0" onclick={applyUpdate} disabled={updates.applying}>
+          {updates.applying ? 'Updating…' : 'Update now'}
+        </button>
+      {:else if updates.supported}
+        <button class="btn btn-soft !py-2 shrink-0" onclick={checkUpdates} disabled={updates.checking || !app.sync.online}>
+          <Icon name="refresh" class="w-4 h-4 {updates.checking ? 'animate-spin' : ''}" /> {updates.checking ? 'Checking…' : 'Check for updates'}
+        </button>
+      {/if}
+    </div>
+    {#if updates.supported}
+      <div class="p-4 flex items-center justify-between gap-4">
+        <div>
+          <div class="text-sm font-bold">Reinstall app</div>
+          <div class="text-xs text-slate-500">Downloads the app fresh if something looks stuck or outdated. Your data stays.</div>
+        </div>
+        <button class="btn btn-soft !py-2 shrink-0" onclick={reinstall} disabled={updates.applying || !app.sync.online}>Reinstall</button>
+      </div>
+    {/if}
   </section>
 
   <section class="rounded-2xl p-4 bg-accent-500/5 border border-accent-500/20 text-sm space-y-1">
