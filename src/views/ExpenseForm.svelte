@@ -52,6 +52,9 @@
   let receiptItems = $state([]); // [{ name, amount: string, members: string[] }] for the 'ITEMS' split
   let receiptScan = $state(null); // compact copy of a scanned receipt, kept on the expense
   let scanFile = $state(null);
+  let dropping = $state(false); // an image is being dragged over the scan card
+  // Phones get separate Camera / Gallery buttons; desktops get a file picker + drag-and-drop + paste.
+  const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   let compressing = $state(false);
   let saving = $state(false);
   let ready = $state(false);
@@ -218,10 +221,34 @@
   }
 
   // ─── Receipt scanning ───
+  function startScan(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast('That isn’t an image. Choose a photo or screenshot of the receipt.', 'error');
+      return;
+    }
+    scanFile = file;
+  }
+
   function onScanFile(e) {
     const file = e.currentTarget.files?.[0];
     e.currentTarget.value = '';
-    if (file) scanFile = file;
+    startScan(file);
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    dropping = false;
+    startScan([...(e.dataTransfer?.files || [])].find((f) => f.type.startsWith('image/')) || e.dataTransfer?.files?.[0]);
+  }
+
+  /** Ctrl/Cmd+V a screenshot anywhere on the form to scan it (text pastes are left alone). */
+  function onPaste(e) {
+    if (type !== 'EXPENSE_ADD' || scanFile) return;
+    const image = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
+    if (!image) return;
+    e.preventDefault();
+    startScan(image);
   }
 
   function applyScan({ draft, image, mode, compact }) {
@@ -329,6 +356,8 @@
   };
 </script>
 
+<svelte:window onpaste={onPaste} />
+
 {#if !ready}
   <div class="py-20 text-center text-slate-400 text-sm">{editId ? 'Loading entry…' : ''}</div>
 {:else}
@@ -347,14 +376,37 @@
     {/if}
 
     {#if type === 'EXPENSE_ADD'}
-      <label class="flex items-center gap-3 rounded-2xl border border-dashed border-accent-500/50 bg-accent-500/5 px-4 py-3 cursor-pointer hover:bg-accent-500/10 transition">
-        <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/15 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
-        <span class="flex-1 min-w-0">
-          <span class="block text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</span>
-          <span class="block text-xs text-slate-500 dark:text-slate-400">Fills in the amount, date, shop and items , read on this device</span>
-        </span>
-        <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
-      </label>
+      <div
+        class="rounded-2xl border border-dashed px-4 py-3 transition
+          {dropping ? 'border-accent-500 bg-accent-500/15' : 'border-accent-500/50 bg-accent-500/5'}"
+        role="group"
+        aria-label="Scan a receipt"
+        ondragover={(e) => { e.preventDefault(); dropping = true; }}
+        ondragleave={() => (dropping = false)}
+        ondrop={onDrop}
+      >
+        <div class="flex items-center gap-3">
+          <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/15 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400">
+              {dropping ? 'Drop the image to scan it' : touch ? 'Fills in the amount, date, shop and items. Read on this device.' : 'Fills in everything. Drop or paste (Ctrl+V) an image here too.'}
+            </div>
+          </div>
+        </div>
+        <div class="grid {touch ? 'grid-cols-2' : 'grid-cols-1 sm:w-56 sm:ml-[3.25rem]'} gap-2 mt-3">
+          {#if touch}
+            <label class="btn btn-soft !py-2 text-sm cursor-pointer">
+              <Icon name="camera" class="w-4 h-4" /> Camera
+              <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
+            </label>
+          {/if}
+          <label class="btn btn-soft !py-2 text-sm cursor-pointer">
+            <Icon name="image" class="w-4 h-4" /> {touch ? 'Gallery' : 'Choose image'}
+            <input type="file" accept="image/*" class="hidden" onchange={onScanFile} />
+          </label>
+        </div>
+      </div>
     {/if}
 
     <!-- Amount -->

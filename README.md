@@ -11,7 +11,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 *   **Optimized Settlements:** Utilizes a greedy algorithm to calculate the most efficient path to settle complex group debts, minimizing the total number of required transactions.
 *   **Fast Everyday Use:** Search and filter group activity, duplicate an entry, undo a delete, nudge friends who owe you with a share-sheet reminder, and use the keyboard shortcuts `n` (new entry) and `/` (search).
 *   **Offline-First & PWA:** Built to work entirely offline. Transactions are stored in a local IndexedDB queue and automatically pushed to Google APIs when the network connection is restored.
-*   **Receipt Scanning (on-device):** Snap a bill and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
+*   **Receipt Scanning (on-device):** Snap a bill with the camera, or pick a photo or screenshot from your gallery (drag-and-drop and paste work on desktop), and SpreadShare fills in the amount, currency, date, shop and category. You can drag the crop corners (with perspective correction) and fix dark or faded photos before reading. PaddleOCR (PP-OCRv6) runs in the browser, and an arithmetic solver checks that items, taxes and the total add up, flagging anything that doesn't. Nothing is sent to a server. The reader (~67 MB) downloads automatically when the app is installed (or on first scan, or from Settings) and is kept on the device, so scanning works offline.
 *   **Auto-Categorization (on-device):** As you type a description or scan a receipt, SpreadShare picks the category. A small Naive Bayes model learns from your own past expenses (so "Toit" → Food, or your Instamart runs → Groceries), and built-in keyword rules cover everything else. It never overrides a category you picked yourself.
 *   **Item-Wise Splitting:** Scanned receipts default to splitting by items. Assign scanned (or hand-typed) items to people. Tax, service charges and discounts are shared in proportion to each person's items, to the exact cent.
 *   **On-Device Image Compression:** Receipt uploads are intercepted, aggressively scaled down, and converted to WebP formats client-side to bypass payload limits and cross-site tracking blocks before uploading to Google Drive.
@@ -38,11 +38,42 @@ SpreadShare operates on a double-entry ledger system. Every action (Expense, Tra
 
 ## Roadmap
 
-Upcoming features focused on bringing privacy-first, on-device AI to expense management via small client-side models running entirely in the browser:
+Everything here keeps SpreadShare's rules: no server, data stays in your own Google Drive, and anything smart runs on your device.
 
-- [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback.
-- [x] **Receipt Auto-Parsing:** On-device OCR extracts totals, dates, merchant names, items and taxes from photos.
+### Done
+- [x] **Receipt Auto-Parsing:** On-device OCR extracts totals, dates, merchant names, items and taxes from photos, screenshots and gallery images (camera, gallery, drag-and-drop or paste).
 - [x] **Item-Wise Bill Splitting:** Assign line items from a scanned receipt to specific members instead of splitting the grand total.
+- [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback.
+- [x] **Offline receipt reader:** Downloaded on install and kept on the device, so scanning works without a connection.
+
+### Import from anywhere
+- [ ] **Share to SpreadShare:** Share a photo, screenshot or PDF from Gallery, WhatsApp, Gmail or a delivery app straight into a new expense. The installed app opens the scanner with it (Web Share Target).
+- [ ] **PDF bills & e-invoices:** Food delivery, shopping, cab and airline PDFs rendered on device with pdf.js. Text-based PDFs skip OCR entirely, so the numbers are exact.
+- [ ] **Paste a payment message:** Bank SMS, UPI notifications and payment emails ("Rs 450.00 debited … to SWIGGY on 01-10-26") become an expense with amount, merchant and date filled in.
+- [ ] **Bank & card statements:** Import CSV / XLSX / OFX (PDF later), tick the transactions to add, auto-categorised, with duplicates flagged by amount and date.
+- [ ] **Switch from Splitwise, Tricount or Settle Up:** Import their CSV exports, match names to group members, and carry balances over.
+- [ ] **Existing spreadsheets:** Map the columns of a Google Sheet you already use for expenses and import its rows.
+- [ ] **Batch scan:** Pick several receipts at once; each becomes a draft to review and save.
+
+### Faster everyday use
+- [ ] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
+- [ ] **Recurring expenses:** Rent, subscriptions, house help. A pre-filled entry appears each period, created on device when the app opens.
+- [ ] **Pay with UPI:** "Record payment" can open your UPI app with the payee and amount filled in (members add their UPI ID once), then records the payment when you return.
+- [ ] **Members without Google accounts:** Add people by name (family, a friend who won't sign in) and merge them into their account if they join later.
+- [ ] **Voice entry:** "Paid 600 for dinner with Asha and Ravi", understood on device.
+- [ ] **Split presets:** Save splits you use often, like "me + Asha 60/40", per group.
+- [ ] **Trip currency:** A default currency per group for trips abroad, with totals shown at the trip's rate.
+
+### Stay organised
+- [ ] **Budgets:** Monthly limits per category with gentle warnings in Insights.
+- [ ] **Notes, comments & history:** Discuss an entry and see every edit (the event log already records them).
+- [ ] **Monthly statements:** A PDF/CSV summary per person, ready to share in the group chat.
+- [ ] **Search everywhere & tags:** Search across all groups and tag entries (#goa, #office).
+
+### Smarter on-device AI
+- [ ] **Learns from your corrections:** When you fix a scanned total or merchant, remember that shop's receipt layout.
+- [ ] **Richer category model:** Also use the amount, time of day and group to break ties.
+- [ ] **Duplicate detection:** Warn when someone in the group already added the same bill (same amount, date and shop).
 
 ## Setup & Deployment
 
