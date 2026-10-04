@@ -10,6 +10,7 @@
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
   import Donut from '../components/Donut.svelte';
+  import UpiQr from '../components/UpiQr.svelte';
   import { entryMeta } from '../lib/history.js';
   import { splitTags, tagsOf } from '../lib/tags.js';
   import { prefs } from '../lib/prefs.svelte.js';
@@ -24,6 +25,7 @@
   let query = $state('');
   let onlyMine = $state(false);
   let searchEl = $state();
+  let qrFor = $state(null); // settlement shown as a UPI QR (desktop)
 
   // Wide screens show balances in a side column instead of a tab.
   let vw = $state(window.innerWidth);
@@ -146,11 +148,7 @@
   function payUpi(s) {
     const upiId = L.profiles[s.to]?.upi;
     if (!canOpenUpi()) {
-      navigator.clipboard?.writeText(upiId).catch(() => {});
-      toast(`UPI ID ${upiId} copied. Pay ${money(s.amount)} from your phone, then record it here.`, 'info', {
-        ms: 8000,
-        action: { label: 'Record', run: () => settle(s) },
-      });
+      qrFor = s; // computer: scan a QR with your phone instead
       return;
     }
     const ask = () => {
@@ -456,6 +454,16 @@
       </ul>
     </section>
 {/snippet}
+
+{#if qrFor}
+  <UpiQr
+    payee={{ upiId: L.profiles[qrFor.to]?.upi, name: L.profiles[qrFor.to]?.name || name(qrFor.to) }}
+    amount={qrFor.amount}
+    note="{groupName(groupId)} settle-up"
+    onclose={() => (qrFor = null)}
+    onpaid={() => { const s = qrFor; qrFor = null; settle(s); }}
+  />
+{/if}
 
 <!-- Floating add button -->
 <button

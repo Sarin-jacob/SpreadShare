@@ -573,17 +573,28 @@
             </div>
           </div>
         </div>
-        <div class="grid {touch ? 'grid-cols-2' : 'grid-cols-1 sm:w-56 sm:ml-[3.25rem]'} gap-2 mt-3">
+        <!-- On phones, one input per source: an input that accepts images *and* PDFs makes Android
+             ask "Camera or Files?" first. Image-only opens the photo picker, PDF-only the file picker. -->
+        <div class="grid {touch ? 'grid-cols-3' : 'grid-cols-1 sm:w-56 sm:ml-[3.25rem]'} gap-2 mt-3">
           {#if touch}
-            <label class="btn btn-soft !py-2 text-sm cursor-pointer">
+            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
               <Icon name="camera" class="w-4 h-4" /> Camera
               <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
             </label>
+            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
+              <Icon name="image" class="w-4 h-4" /> Photos
+              <input type="file" accept="image/*" class="hidden" onchange={onScanFile} />
+            </label>
+            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
+              <Icon name="sheet" class="w-4 h-4" /> PDF
+              <input type="file" accept="application/pdf,.pdf" class="hidden" onchange={onScanFile} />
+            </label>
+          {:else}
+            <label class="btn btn-soft !py-2 text-sm cursor-pointer">
+              <Icon name="image" class="w-4 h-4" /> Choose image or PDF
+              <input type="file" accept="image/*,application/pdf,.pdf" class="hidden" onchange={onScanFile} />
+            </label>
           {/if}
-          <label class="btn btn-soft !py-2 text-sm cursor-pointer">
-            <Icon name="image" class="w-4 h-4" /> {touch ? 'Gallery / PDF' : 'Choose image or PDF'}
-            <input type="file" accept="image/*,application/pdf,.pdf" class="hidden" onchange={onScanFile} />
-          </label>
         </div>
         <div class="border-t border-accent-500/20 mt-3 pt-2.5">
           <button
