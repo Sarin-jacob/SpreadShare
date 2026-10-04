@@ -42,7 +42,7 @@
   let type = $state('EXPENSE_ADD');
   let title = $state('');
   let notes = $state('');
-  let notesOpen = $state(false);
+  let panel = $state(null); // details chip whose panel is open: date | category | repeat | note | receipt
   let when = $state(toLocalInput());
   let amountExpr = $state('');
   let currency = $state(BASE);
@@ -111,7 +111,7 @@
 
   // Opened from the "Scan receipt" shortcut: the browser needs a tap to open the camera.
   $effect(() => {
-    if (ready && prefill.scan) untrack(() => toast('Tap Camera or Gallery to scan your receipt', 'info'));
+    if (ready && prefill.scan) untrack(() => toast('Tap Camera or Photos to scan your receipt', 'info'));
   });
   const source = $derived(sourceId ? app.events.find((e) => e.eventId === sourceId) : null);
 
@@ -145,7 +145,6 @@
     type = ev.event_type;
     title = p.title || '';
     notes = p.notes || '';
-    notesOpen = !!notes;
     when = toLocalInput(p.custom_timestamp || ev.timestamp);
     currency = p.foreign_currency || BASE;
     rateExpr = String(p.exchange_rate || 1);
@@ -617,6 +616,28 @@
     await deletePreset(groupId, p.id);
   }
 
+  const togglePanel = (name) => (panel = panel === name ? null : name);
+
+  /** "Today, 8:30 pm", "Yesterday, …" or "12 Sep, …" for the date chip. */
+  const whenLabel = $derived.by(() => {
+    const d = new Date(when);
+    if (Number.isNaN(d.getTime())) return 'Date';
+    const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86_400_000);
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const day = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) });
+    return `${day}, ${time}`;
+  });
+
+  /** Moves the date to today / yesterday / …, keeping the time. */
+  function setDay(offset) {
+    const d = new Date(when);
+    const t = new Date();
+    t.setDate(t.getDate() + offset);
+    t.setHours(Number.isNaN(d.getTime()) ? t.getHours() : d.getHours(), Number.isNaN(d.getTime()) ? t.getMinutes() : d.getMinutes(), 0, 0);
+    when = toLocalInput(t);
+    panel = null;
+  }
+
   const STRATEGIES = [
     { value: 'EQUALLY', label: 'Equally' },
     { value: 'SHARES', label: 'Shares' },
@@ -660,65 +681,58 @@
       </div>
     {/if}
 
+    <div class="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+  <div class="space-y-5 min-w-0">
     {#if type === 'EXPENSE_ADD'}
+      <!-- Scan: one compact row. Drop or paste (Ctrl+V) a photo / PDF anywhere on the form too. -->
       <div
-        class="rounded-2xl border border-dashed px-4 py-3 transition
+        class="rounded-2xl border border-dashed px-3 py-2 transition
           {dropping ? 'border-accent-500 bg-accent-500/15' : 'border-accent-500/50 bg-accent-500/5'}
           {prefill.scan ? 'attention' : ''}"
         role="group"
         aria-label="Scan a receipt"
+        title={touch ? '' : 'You can also drop a photo or PDF here, or paste one with Ctrl+V'}
         ondragover={(e) => { e.preventDefault(); dropping = true; }}
         ondragleave={() => (dropping = false)}
         ondrop={onDrop}
       >
-        <div class="flex items-center gap-3">
-          <span class="w-10 h-10 rounded-xl grid place-items-center bg-accent-500/15 text-accent-600 dark:text-accent-400 shrink-0"><Icon name="scan" /></span>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-bold">{receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">
-              {dropping ? 'Drop it to scan' : touch ? 'Photo, screenshot or PDF bill. Fills in the amount, date, shop and items.' : 'Photo, screenshot or PDF bill. Drop or paste (Ctrl+V) one here too.'}
-            </div>
-          </div>
-        </div>
-        <!-- On phones, one input per source: an input that accepts images *and* PDFs makes Android
-             ask "Camera or Files?" first. Image-only opens the photo picker, PDF-only the file picker. -->
-        <div class="grid {touch ? 'grid-cols-3' : 'grid-cols-1 sm:w-56 sm:ml-[3.25rem]'} gap-2 mt-3">
+        <div class="flex items-center gap-1.5">
+          <Icon name="scan" class="w-5 h-5 text-accent-600 dark:text-accent-400 shrink-0" />
+          <!-- Phones: the buttons say it all (no room for a label next to them) -->
+          <span class="text-sm font-bold flex-1 min-w-0 truncate {touch ? 'sr-only' : ''}">{dropping ? 'Drop to scan' : receiptScan ? 'Scan another receipt' : 'Scan a receipt'}</span>
+          {#if touch}<span class="flex-1"></span>{/if}
+          <!-- On phones, one input per source: an input that accepts images *and* PDFs makes Android
+               ask "Camera or Files?" first. Image-only opens the photo picker, PDF-only the file picker. -->
           {#if touch}
-            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
+            <label class="btn btn-soft !px-2.5 !py-1.5 text-xs cursor-pointer">
               <Icon name="camera" class="w-4 h-4" /> Camera
               <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
             </label>
-            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
+            <label class="btn btn-soft !px-2.5 !py-1.5 text-xs cursor-pointer">
               <Icon name="image" class="w-4 h-4" /> Photos
               <input type="file" accept="image/*" multiple class="hidden" onchange={onScanFile} />
             </label>
-            <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
+            <label class="btn btn-soft !px-2.5 !py-1.5 text-xs cursor-pointer">
               <Icon name="sheet" class="w-4 h-4" /> PDF
               <input type="file" accept="application/pdf,.pdf" multiple class="hidden" onchange={onScanFile} />
             </label>
           {:else}
-            <label class="btn btn-soft !py-2 text-sm cursor-pointer">
-              <Icon name="image" class="w-4 h-4" /> Choose image or PDF
+            <label class="btn btn-soft !px-3 !py-1.5 text-xs cursor-pointer">
+              <Icon name="image" class="w-4 h-4" /> Image or PDF
               <input type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" onchange={onScanFile} />
             </label>
           {/if}
-        </div>
-        {#if !editId}
-          <a href="#/g/{groupId}/import" class="mt-2 flex items-center gap-1.5 text-xs font-semibold text-accent-700 dark:text-accent-300 sm:ml-[3.25rem]">
-            <Icon name="plus" class="w-3.5 h-3.5" /> Many payments? Import a GPay / PhonePe / bank list
-          </a>
-        {/if}
-        <div class="border-t border-accent-500/20 mt-3 pt-2.5">
           <button
             type="button"
-            class="w-full flex items-center gap-2 text-left text-xs font-semibold text-accent-700 dark:text-accent-300"
+            class="btn !p-2 shrink-0 {messageOpen ? 'btn-primary' : 'btn-ghost text-accent-700 dark:text-accent-300'}"
+            aria-label="Paste a bank or UPI message"
+            title="Paste a bank / UPI message"
             aria-expanded={messageOpen}
             onclick={() => (messageOpen = !messageOpen)}
           >
             <Icon name="message" class="w-4 h-4" />
-            <span class="flex-1">Paste a bank / UPI message instead</span>
-            <Icon name="chevron" class="w-3.5 h-3.5 transition-transform {messageOpen ? 'rotate-90' : ''}" />
           </button>
+        </div>
           {#if messageOpen}
             <div class="mt-2.5 space-y-2">
               <textarea
@@ -743,7 +757,6 @@
               </div>
             </div>
           {/if}
-        </div>
       </div>
     {/if}
 
@@ -783,71 +796,105 @@
       {/if}
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="label" for="f-title">Description</label>
-        <input id="f-title" class="field" bind:value={title} maxlength="120" list="recent-titles" autocomplete="off" placeholder={type === 'EXPENSE_ADD' ? 'Dinner, cab, groceries…' : 'Optional note'} />
-        <datalist id="recent-titles">
-          {#each recentTitles as t (t)}<option value={t}></option>{/each}
-        </datalist>
-      </div>
-      <div>
-        <label class="label" for="f-when">Date</label>
-        <input id="f-when" class="field" type="datetime-local" bind:value={when} />
-      </div>
+    <div>
+      <label class="label" for="f-title">Description</label>
+      <input id="f-title" class="field" bind:value={title} maxlength="120" list="recent-titles" autocomplete="off" placeholder={type === 'EXPENSE_ADD' ? 'Dinner, cab, groceries…' : 'Optional note'} />
+      <datalist id="recent-titles">
+        {#each recentTitles as t (t)}<option value={t}></option>{/each}
+      </datalist>
     </div>
 
-    {#if type === 'EXPENSE_ADD' && !occurrenceMeta}
-      <div class="flex items-center gap-3 -mt-1">
-        <span class="label !mb-0">Repeats</span>
-        <div class="seg !p-0.5 flex-1 max-w-xs">
-          {#each REPEATS as r (r.label)}
-            <button type="button" aria-pressed={repeat === r.value} onclick={() => (repeat = r.value)}>{r.label}</button>
-          {/each}
-        </div>
-      </div>
-      {#if repeat}
-        <p class="-mt-2 text-xs text-slate-500">
-          A copy is added {repeat === 'week' ? 'every week' : 'every month'} from this date, split the same way, when {recurringMeta?.owner && recurringMeta.owner !== me ? 'its creator' : 'you'} next open{recurringMeta?.owner && recurringMeta.owner !== me ? 's' : ''} the app. Delete a copy to skip that time.
-        </p>
-      {/if}
-    {/if}
-
-    {#if notesOpen}
-      <div>
-        <label class="label" for="f-notes">Note</label>
-        <textarea id="f-notes" class="field min-h-16" bind:value={notes} maxlength="2000" placeholder="Anything worth remembering. Add #tags to find it later, e.g. #goa"></textarea>
-      </div>
-    {:else}
-      <button type="button" class="-mt-2 text-xs font-semibold text-accent-600 dark:text-accent-400 flex items-center gap-1.5" onclick={() => (notesOpen = true)}>
-        <Icon name="plus" class="w-3.5 h-3.5" /> Add a note or #tags
-      </button>
-    {/if}
-
-    {#if type === 'EXPENSE_ADD'}
-      <div>
-        <div class="flex items-center justify-between gap-2">
-          <span class="label">Category</span>
-          {#if autoCategory && !categoryTouched}
-            <span class="text-[11px] font-medium text-accent-600 dark:text-accent-400 mb-1.5" title="Tap a category to choose it yourself">
-              ✨ Auto · {autoCategory.source === 'history' ? 'learned from your expenses' : 'matched keywords'}
-            </span>
-          {/if}
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          {#each CATEGORIES as c}
-            <button
-              type="button"
-              class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
-                {categoryValue === c.value ? 'border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"
-              onclick={() => pickCategory(c.value)}
-            >
-              {c.icon} {c.label}
+    <!-- Details: one row of chips; each opens its own small panel -->
+    <div class="space-y-2 -mt-2">
+      <div class="flex flex-wrap gap-1.5">
+        <button type="button" class="chip {panel === 'date' ? 'chip-open' : ''}" aria-expanded={panel === 'date'} onclick={() => togglePanel('date')}>
+          📅 {whenLabel}
+        </button>
+        {#if type === 'EXPENSE_ADD'}
+          <button type="button" class="chip {panel === 'category' ? 'chip-open' : 'chip-set'}" aria-expanded={panel === 'category'} onclick={() => togglePanel('category')} title={autoCategory && !categoryTouched ? `Picked automatically (${autoCategory.source === 'history' ? 'learned from your expenses' : 'matched keywords'}). Tap to change.` : 'Category'}>
+            {category(categoryValue).icon} {category(categoryValue).label}{#if autoCategory && !categoryTouched}<span class="text-accent-500" aria-label="picked automatically"> ✨</span>{/if}
+          </button>
+          {#if !occurrenceMeta}
+            <button type="button" class="chip {panel === 'repeat' ? 'chip-open' : repeat ? 'chip-set' : ''}" aria-expanded={panel === 'repeat'} onclick={() => togglePanel('repeat')}>
+              🔁 {repeat === 'week' ? 'Weekly' : repeat === 'month' ? 'Monthly' : 'Repeat'}
             </button>
-          {/each}
-        </div>
+          {/if}
+        {/if}
+        <button type="button" class="chip {panel === 'note' ? 'chip-open' : notes.trim() ? 'chip-set' : ''}" aria-expanded={panel === 'note'} onclick={() => togglePanel('note')}>
+          📝 {notes.trim() ? 'Note' : 'Note / #tags'}
+        </button>
+        {#if type === 'EXPENSE_ADD'}
+          {#if receipt}
+            <button type="button" class="chip {panel === 'receipt' ? 'chip-open' : 'chip-set'} !py-1 !pl-1" aria-expanded={panel === 'receipt'} onclick={() => togglePanel('receipt')}>
+              <img src={receipt} alt="" referrerpolicy="no-referrer" class="w-5 h-5 rounded object-cover" /> Receipt
+            </button>
+          {:else}
+            <label class="chip cursor-pointer">
+              📎 {compressing ? 'Processing…' : 'Receipt'}
+              <input type="file" accept="image/*" class="hidden" onchange={onFile} />
+            </label>
+          {/if}
+        {/if}
       </div>
 
+      {#if panel === 'date'}
+        <div class="card p-3 space-y-2">
+          <input id="f-when" class="field" type="datetime-local" bind:value={when} aria-label="Date and time" />
+          <div class="flex gap-1.5">
+            <button type="button" class="chip" onclick={() => setDay(0)}>Today</button>
+            <button type="button" class="chip" onclick={() => setDay(-1)}>Yesterday</button>
+            <button type="button" class="chip" onclick={() => setDay(-2)}>2 days ago</button>
+          </div>
+        </div>
+      {:else if panel === 'category'}
+        <div class="card p-3 space-y-2">
+          {#if autoCategory && !categoryTouched}
+            <p class="text-[11px] font-medium text-accent-600 dark:text-accent-400">✨ Picked automatically · {autoCategory.source === 'history' ? 'learned from your expenses' : 'matched keywords'}</p>
+          {/if}
+          <div class="flex flex-wrap gap-1.5">
+            {#each CATEGORIES as c}
+              <button
+                type="button"
+                class="px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                  {categoryValue === c.value ? 'border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"
+                onclick={() => { pickCategory(c.value); panel = null; }}
+              >
+                {c.icon} {c.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {:else if panel === 'repeat'}
+        <div class="card p-3 space-y-2">
+          <div class="seg !p-0.5">
+            {#each REPEATS as r (r.label)}
+              <button type="button" aria-pressed={repeat === r.value} onclick={() => (repeat = r.value)}>{r.label}</button>
+            {/each}
+          </div>
+          <p class="text-xs text-slate-500">
+            {#if repeat}
+              A copy is added {repeat === 'week' ? 'every week' : 'every month'} from this date, split the same way, when {recurringMeta?.owner && recurringMeta.owner !== me ? 'its creator' : 'you'} next open{recurringMeta?.owner && recurringMeta.owner !== me ? 's' : ''} the app. Delete a copy to skip that time.
+            {:else}
+              For rent, subscriptions or house help: a copy is added each week or month automatically.
+            {/if}
+          </p>
+        </div>
+      {:else if panel === 'note'}
+        <!-- svelte-ignore a11y_autofocus -->
+        <textarea id="f-notes" class="field min-h-16" bind:value={notes} maxlength="2000" autofocus placeholder="Anything worth remembering. Add #tags to find it later, e.g. #goa"></textarea>
+      {:else if panel === 'receipt' && receipt}
+        <div class="card p-3 flex items-center gap-3">
+          <img src={receipt} alt="Receipt" referrerpolicy="no-referrer" class="w-16 h-16 rounded-lg object-cover" />
+          <span class="flex-1 text-sm font-medium">Receipt attached</span>
+          <button type="button" class="btn btn-ghost !p-2" aria-label="Remove receipt" onclick={() => { receipt = null; panel = null; }}><Icon name="x" /></button>
+        </div>
+      {/if}
+    </div>
+  </div>
+
+  <!-- Right column on wide screens: who paid and how it's split -->
+  <div class="space-y-5 min-w-0">
+    {#if type === 'EXPENSE_ADD'}
       <!-- Paid by -->
       <div class="card p-4 space-y-3">
         <div class="flex items-center justify-between">
@@ -1025,22 +1072,6 @@
         </ul>
       </div>
 
-      <!-- Receipt -->
-      <div class="card p-4">
-        {#if receipt}
-          <div class="flex items-center gap-3">
-            <img src={receipt} alt="Receipt" referrerpolicy="no-referrer" class="w-16 h-16 rounded-lg object-cover" />
-            <span class="flex-1 text-sm font-medium">Receipt attached</span>
-            <button type="button" class="btn btn-ghost !p-2" aria-label="Remove receipt" onclick={() => (receipt = null)}><Icon name="x" /></button>
-          </div>
-        {:else}
-          <label class="flex items-center gap-3 cursor-pointer text-sm text-slate-500 dark:text-slate-400">
-            <span class="w-10 h-10 rounded-lg grid place-items-center bg-slate-100 dark:bg-slate-700"><Icon name="camera" /></span>
-            {compressing ? 'Processing…' : 'Attach a receipt (optional)'}
-            <input type="file" accept="image/*" class="hidden" onchange={onFile} />
-          </label>
-        {/if}
-      </div>
     {:else}
       <div class="card p-4 space-y-4">
         {#each [{ label: type === 'LOAN' ? 'Lender' : 'Paid by', get: () => from, set: (v) => (from = v) }, { label: type === 'LOAN' ? 'Borrower' : 'Paid to', get: () => to, set: (v) => (to = v) }] as row, i}
@@ -1089,6 +1120,9 @@
         </ul>
       </div>
     {/if}
+
+  </div>
+    </div>
 
     <div class="sticky bottom-0 -mx-4 px-4 py-3 md:static md:mx-0 md:px-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur md:bg-transparent md:backdrop-blur-none pb-safe">
       {#if error && amountExpr}

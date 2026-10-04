@@ -136,6 +136,11 @@ html[data-accent="slate"] {
   .btn-danger { @apply bg-rose-500/10 text-rose-600 hover:bg-rose-500 hover:text-white dark:text-rose-400; }
 
   .seg { @apply flex p-1 gap-1 bg-slate-200/60 dark:bg-slate-800 rounded-xl; }
+  /* Small rounded option buttons ("details" chips in the expense form) */
+  .add-pop { animation: add-pop 160ms ease-out both; }
+  .chip { @apply inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 bg-white/60 dark:bg-slate-800/60 transition; }
+  .chip-set { @apply border-accent-500/50 text-accent-700 dark:text-accent-300; }
+  .chip-open { @apply border-accent-500 bg-accent-500/10 text-accent-700 dark:text-accent-300; }
   .seg > button { @apply flex-1 py-1.5 text-xs font-semibold rounded-lg text-slate-500 dark:text-slate-400 transition; }
   .seg > button[aria-pressed="true"] { @apply bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white; }
 }
@@ -155,6 +160,13 @@ html[data-accent="slate"] {
   50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-500) 35%, transparent); }
 }
 .attention { animation: ss-attention 1.2s ease-in-out 3; }
+
+/* Add menu options rising above the floating button. */
+@keyframes add-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .add-pop { animation: none; } }
 
 /* Printing (statements → "Save as PDF"): just the page content, on white. */
 @media print {

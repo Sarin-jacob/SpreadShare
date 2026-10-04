@@ -14,6 +14,7 @@
   import Avatar from '../components/Avatar.svelte';
   import Donut from '../components/Donut.svelte';
   import UpiQr from '../components/UpiQr.svelte';
+  import AddMenu from '../components/AddMenu.svelte';
   import { entryMeta } from '../lib/history.js';
   import { splitTags, tagsOf } from '../lib/tags.js';
   import { prefs } from '../lib/prefs.svelte.js';
@@ -255,9 +256,7 @@
         {/if}
       </div>
     </div>
-    <button class="hidden lg:inline-flex btn btn-primary !px-3 !py-2 shrink-0" onclick={() => go(`/g/${groupId}/add`)} title="Add expense (N)">
-      <Icon name="plus" class="w-4 h-4" /> Add expense
-    </button>
+    <AddMenu {groupId} variant="header" />
     <button class="btn btn-soft !px-3 !py-2 shrink-0" onclick={() => invite()} disabled={sharing}>
       <Icon name="share" class="w-4 h-4" /> <span class="hidden sm:inline">Invite</span>
     </button>
@@ -559,11 +558,5 @@
   />
 {/if}
 
-<!-- Floating add button -->
-<button
-  class="lg:hidden fixed z-20 right-5 bottom-24 md:bottom-8 md:right-8 w-14 h-14 rounded-2xl grid place-items-center text-white bg-accent-600 dark:bg-accent-500 shadow-xl shadow-accent-900/30 active:scale-95 transition"
-  aria-label="Add expense"
-  onclick={() => go(`/g/${groupId}/add`)}
->
-  <Icon name="plus" class="w-6 h-6" stroke={2.5} />
-</button>
+<!-- Floating add button with its options -->
+<AddMenu {groupId} />
