@@ -63,7 +63,7 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [x] **Batch scan:** Pick or share several receipts at once; each opens as its own draft to check and save ("Receipt 2 of 4", Skip / Stop).
 
 ### Faster everyday use
-- [x] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
+- [x] **Home-screen shortcuts:** Long-press the app icon for Add expense, Scan receipt (opens the camera), Record a payment, Search or Insights, each with its own icon. (Android doesn't offer home-screen widgets to web apps.)
 - [x] **Recurring expenses:** Rent, subscriptions, house help repeat weekly or monthly. The creator's device adds each period's copy when it opens the group; copies have a fixed ID per period, so they can't be counted twice, and deleting one skips that period.
 - [x] **App lock:** Fingerprint, face or device PIN (WebAuthn platform authenticator) when opening the app, again after a chosen time in the background. A privacy lock: it doesn't encrypt local data.
 - [x] **Pay with UPI:** Members add their UPI ID once in Settings (published to their groups). "Pay with UPI" in Settle up opens the UPI app with payee and amount filled in, then offers to record the payment when you return; on a computer it shows a UPI QR code to scan with your phone. Reminders include your UPI ID.
@@ -79,6 +79,8 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [x] **Search everywhere & tags:** Search all groups at once, and tag entries with #goa, #office in a title or note.
 - [x] **Group budgets:** A shared budget for a trip (or each month for a flat), on everyone's balance card.
 - [x] **Coming up:** The home screen lists recurring expenses due this week. (Push notifications would need a server.)
+
+- [x] **Deeper insights:** This month vs last month with a forecast, a 6-month trend by category, a daily calendar, what you covered for others, top places, biggest expenses and who you share with.
 
 ### Smarter on-device AI
 - [x] **Quantities on receipts:** Item quantity and rate are read, shown and kept on the expense. "How many each?" splits "3 × Beer" as 2 for Asha and 1 for Ravi (halves only when you allow them); items without a quantity can use uneven shares.
