@@ -14,6 +14,7 @@ import { toast } from './toast.svelte.js';
 import { prefs, syncPrefs, clearPrefs } from './prefs.svelte.js';
 import { computeLedgerState, parsePayload } from './engine.js';
 import { dueOccurrences } from './recurring.js';
+import { disableLock } from './lock.svelte.js';
 import { tagsOf } from './tags.js';
 
 const PROFILE_KEY = 'ss_profile';
@@ -231,6 +232,7 @@ export async function publishUpi(upiId) {
 }
 
 export async function logout() {
+  disableLock(); // the next person to sign in here sets up their own
   AuthService.logout();
   await resetLocalData();
   localStorage.removeItem(PROFILE_KEY);

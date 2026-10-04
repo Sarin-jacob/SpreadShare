@@ -2,6 +2,7 @@
   import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi } from '../lib/app.svelte.js';
   import { prefs, setUpi } from '../lib/prefs.svelte.js';
   import { isUpiId, normalizeUpiId } from '../lib/upi.js';
+  import { lock, lockSupported, enableLock, disableLock, setLockAfter } from '../lib/lock.svelte.js';
   import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
   import { pwa, promptInstall } from '../lib/pwa.svelte.js';
   import { ocrOffline, downloadOcr, removeOcr } from '../lib/ocrOffline.svelte.js';
@@ -13,6 +14,25 @@
   import Switch from '../components/Switch.svelte';
 
   let busy = $state(false);
+
+  let canLock = $state(null); // null while checking
+  lockSupported().then((ok) => (canLock = ok));
+  const LOCK_AFTER = [
+    { value: 0, label: 'Right away' },
+    { value: 1, label: '1 min' },
+    { value: 5, label: '5 min' },
+    { value: 15, label: '15 min' },
+  ];
+
+  async function toggleLock(on) {
+    if (on) {
+      if (await enableLock(app.user)) toast('App lock on');
+      else if (lock.error && lock.error !== 'Cancelled') toast(lock.error, 'error');
+    } else {
+      disableLock();
+      toast('App lock off', 'info');
+    }
+  }
 
   let upiInput = $state(prefs.upi || '');
   const upiChanged = $derived(normalizeUpiId(upiInput) !== (prefs.upi || ''));
@@ -94,6 +114,32 @@
     </div>
     {#if !upiValid}<p class="text-xs text-rose-600 dark:text-rose-400">That doesn’t look like a UPI ID (name@bank).</p>{/if}
   </form>
+
+  <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
+    <div class="p-4 flex items-center justify-between gap-4">
+      <div>
+        <div class="text-sm font-bold">Lock with fingerprint or face</div>
+        <div class="text-xs text-slate-500">
+          {#if canLock === false}
+            This device has no fingerprint, face or PIN unlock that the browser can use.
+          {:else}
+            Asks for your device unlock (fingerprint, face or PIN) when you open SpreadShare. Keeps people who pick up your phone out of the app; it doesn’t encrypt what’s stored on this device.
+          {/if}
+        </div>
+      </div>
+      <Switch label="App lock" checked={lock.enabled} disabled={!canLock || lock.busy} onchange={toggleLock} />
+    </div>
+    {#if lock.enabled}
+      <div class="p-4 flex items-center justify-between gap-4">
+        <div class="text-sm font-bold whitespace-nowrap">Lock again after</div>
+        <div class="seg !p-0.5 flex-1 max-w-xs">
+          {#each LOCK_AFTER as o (o.value)}
+            <button aria-pressed={lock.after === o.value} onclick={() => setLockAfter(o.value)}>{o.label}</button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </section>
 
   <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
     <div class="p-4 space-y-3">

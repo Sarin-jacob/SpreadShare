@@ -36,7 +36,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 
 SpreadShare operates on a double-entry ledger system. Every action (Expense, Transfer, Loan) is recorded as an immutable event node in a Google Sheet. The application fetches these raw events and reconstructs the group's mathematical state on the client side.
 
-Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT` and `PROFILE` (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
+Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT`, `GROUP_SETTINGS` (the group's currency, only before its first entry) and `PROFILE` (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
 
 1.  **Authentication:** The user logs in via Google. The app requests scopes exclusively for Sheets and Drive files created by the application itself.
 2.  **Provisioning:** Upon creating a new group, the app provisions a hidden configuration file in Drive and a new Spreadsheet formatted to accept ledger entries.
@@ -56,7 +56,8 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [x] **PDF bills & e-invoices:** Food delivery, shopping, cab and airline PDFs read on device with pdf.js, from the picker, drag-and-drop or Share to SpreadShare. Text-based PDFs skip OCR entirely, so the numbers are exact; scanned PDFs go through the scanner.
 
 ### Import from anywhere
-- [ ] **Bank & card statements:** Import CSV / XLSX / OFX (PDF later), tick the transactions to add, auto-categorised, with duplicates flagged by amount and date.
+- [x] **Transaction lists:** Screenshots of GPay / PhonePe / Paytm / bank app history, bank statement PDFs or pasted bank messages become a list to tick, fix and add in one go; auto-categorised, already-added ones flagged, received / failed ones left out.
+- [ ] **Bank & card statement files:** CSV / XLSX / OFX downloads.
 - [ ] **Switch from Splitwise, Tricount or Settle Up:** Import their CSV exports, match names to group members, and carry balances over.
 - [ ] **Existing spreadsheets:** Map the columns of a Google Sheet you already use for expenses and import its rows.
 - [ ] **Batch scan:** Pick several receipts at once; each becomes a draft to review and save.
@@ -64,11 +65,12 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 ### Faster everyday use
 - [x] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
 - [x] **Recurring expenses:** Rent, subscriptions, house help repeat weekly or monthly. The creator's device adds each period's copy when it opens the group; copies have a fixed ID per period, so they can't be counted twice, and deleting one skips that period.
-- [x] **Pay with UPI:** Members add their UPI ID once in Settings (published to their groups). "Pay with UPI" in Settle up opens the UPI app with payee and amount filled in, then offers to record the payment when you return. Reminders include your UPI ID.
+- [x] **App lock:** Fingerprint, face or device PIN (WebAuthn platform authenticator) when opening the app, again after a chosen time in the background. A privacy lock: it doesn't encrypt local data.
+- [x] **Pay with UPI:** Members add their UPI ID once in Settings (published to their groups). "Pay with UPI" in Settle up opens the UPI app with payee and amount filled in, then offers to record the payment when you return; on a computer it shows a UPI QR code to scan with your phone. Reminders include your UPI ID.
 - [ ] **Members without Google accounts:** Add people by name (family, a friend who won't sign in) and merge them into their account if they join later.
 - [ ] **Voice entry:** "Paid 600 for dinner with Asha and Ravi", understood on device.
 - [ ] **Split presets:** Save splits you use often, like "me + Asha 60/40", per group.
-- [ ] **Trip currency:** A default currency per group for trips abroad, with totals shown at the trip's rate.
+- [x] **Currency per group:** A group can keep its balances in its own currency (set when creating it, or before its first entry). New entries start in the currency last used in that group. Totals across groups never mix currencies.
 
 ### Stay organised
 - [x] **Budgets:** Monthly limits per category (and overall) on your share, with progress and pacing in Insights and a heads-up when you save something that gets close. Saved to your Drive.
@@ -125,6 +127,9 @@ src/
     recurring.js        repeating expenses (templates → one copy per period, fixed IDs)
     duplicates.js       "already added?" matching
     upi.js              UPI ID validation and upi://pay links
+    txnList.js          transaction-list parser (app history screenshots, statements)
+    lock.svelte.js      app lock (WebAuthn platform authenticator)
+    display.svelte.js   currency amounts show in (the open group's)
     receipt/            receipt scanner , see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css

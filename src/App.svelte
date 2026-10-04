@@ -12,6 +12,8 @@
   import Toasts from './components/Toasts.svelte';
   import SyncStatus from './components/SyncStatus.svelte';
   import SidebarGroups from './components/SidebarGroups.svelte';
+  import LockScreen from './components/LockScreen.svelte';
+  import { lock } from './lib/lock.svelte.js';
   import Login from './views/Login.svelte';
   import Groups from './views/Groups.svelte';
   import Group from './views/Group.svelte';
@@ -227,5 +229,7 @@
     </nav>
   {/if}
 {/if}
+
+{#if app.user && lock.locked}<LockScreen />{/if}
 
 <Toasts />
