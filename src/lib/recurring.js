@@ -77,3 +77,23 @@ export function dueOccurrences(events, me, now = new Date()) {
   }
   return out;
 }
+
+/**
+ * Recurring expenses due within `days` across groups, soonest first.
+ * @param groups { [groupId]: events }
+ * @returns [{ groupId, title, amount, when: Date, every, currency }]
+ */
+export function upcomingRecurring(groups, { now = new Date(), days = 7 } = {}) {
+  const until = new Date(now.getTime() + days * 86_400_000);
+  const out = [];
+  for (const [groupId, events] of Object.entries(groups)) {
+    const L = computeLedgerState(events);
+    for (const x of L.expenses) {
+      const r = x.payload.recurring;
+      if (x.type !== 'EXPENSE_ADD' || !r?.every) continue;
+      const when = nextOccurrence(x.timestamp, r.every, now);
+      if (when && when <= until) out.push({ groupId, title: x.title, amount: x.amount, when, every: r.every, currency: L.currency });
+    }
+  }
+  return out.sort((a, b) => a.when - b.when);
+}

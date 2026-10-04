@@ -1,6 +1,8 @@
 <script>
   import { app, createGroup } from '../lib/app.svelte.js';
-  import { loadAllEvents, summarizeGroups } from '../lib/cache.svelte.js';
+  import { loadAllEvents, summarizeGroups, eventsByGroup } from '../lib/cache.svelte.js';
+  import { upcomingRecurring } from '../lib/recurring.js';
+  import { splitTags } from '../lib/tags.js';
   import { money, shortDate } from '../lib/format.js';
   import { CONFIG } from '../lib/config.js';
   import { CURRENCIES } from '../lib/currency.js';
@@ -12,11 +14,15 @@
   let newCurrency = $state(CONFIG.DEFAULT_CURRENCY);
   let creating = $state(false);
   let summary = $state({}); // groupId → { net, lastActivity, count }
+  let upcoming = $state([]); // recurring expenses due this week
 
   $effect(() => {
     app.cacheVersion; // re-read whenever any group's cache changes
     const email = app.user.email;
-    loadAllEvents().then((all) => (summary = summarizeGroups(all, email)));
+    loadAllEvents().then((all) => {
+      summary = summarizeGroups(all, email);
+      upcoming = upcomingRecurring(eventsByGroup(all)).filter((u) => app.directory.some((g) => g.id === u.groupId));
+    });
   });
 
   const totals = $derived.by(() => {
@@ -98,6 +104,25 @@
       {creating ? 'Creating…' : 'Create'}
     </button>
   </form>
+
+  {#if upcoming.length}
+    <section class="card p-4 space-y-2">
+      <h2 class="label !mb-0">🔁 Coming up this week</h2>
+      <ul class="space-y-1.5">
+        {#each upcoming as u (u.groupId + u.title + u.when)}
+          {@const days = Math.round((new Date(u.when).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86_400_000)}
+          <li>
+            <a href="#/g/{u.groupId}" class="flex items-center gap-3 text-sm">
+              <span class="flex-1 min-w-0 truncate"><span class="font-medium">{splitTags(u.title).text}</span> <span class="text-slate-400">· {app.directory.find((g) => g.id === u.groupId)?.name}</span></span>
+              <span class="text-xs text-slate-500 whitespace-nowrap">{days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}</span>
+              <span class="font-semibold tabular-nums">{money(u.amount, u.currency || undefined, { decimals: 0 })}</span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+      <p class="text-[11px] text-slate-400">Added automatically on the day, split the same way.</p>
+    </section>
+  {/if}
 
   {#if app.directory.length === 0}
     <div class="text-center py-12 px-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl space-y-2">

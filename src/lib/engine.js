@@ -37,7 +37,8 @@ export function deletedIds(events) {
 export function computeLedgerState(rawEvents) {
   // currency: the group's own currency (GROUP_SETTINGS), null = the app default
   // presets: saved splits for the group ([{ id, name, strategy, members?, inputs? }])
-  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {}, currency: null, presets: [] };
+  // budget: the group's shared budget ({ amount, period: 'total' | 'month' }) or null
+  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {}, currency: null, presets: [], budget: null };
   let sawMoney = false;
   const seen = new Set();
   let cacheDirty = false;
@@ -109,6 +110,11 @@ export function computeLedgerState(rawEvents) {
     if (type === 'GROUP_SETTINGS') {
       // Amounts are stored in the group's currency, so it can only change before the first entry.
       if (payload.currency && !sawMoney) state.currency = String(payload.currency).toUpperCase();
+      // The budget can change any time; the latest setting wins (0 / null removes it).
+      if ('budget' in payload) {
+        const amount = Number(payload.budget);
+        state.budget = amount > 0 ? { amount: round2(amount), period: payload.budget_period === 'month' ? 'month' : 'total' } : null;
+      }
       continue;
     }
     if (type === 'PROFILE') {

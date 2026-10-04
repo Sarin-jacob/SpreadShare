@@ -1,5 +1,5 @@
 <script>
-  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency, addGuest, linkGuest, removeGuest } from '../lib/app.svelte.js';
+  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency, setGroupBudget, addGuest, linkGuest, removeGuest } from '../lib/app.svelte.js';
   import { isGuest } from '../lib/members.js';
   import { CONFIG } from '../lib/config.js';
   import { CURRENCIES } from '../lib/currency.js';
@@ -32,6 +32,34 @@
   let qrFor = $state(null); // settlement shown as a UPI QR (desktop)
 
   const groupCurrency = $derived(L.currency || CONFIG.DEFAULT_CURRENCY);
+
+  // ─── Group budget (shared with everyone in the group) ───
+  const budgetSpent = $derived.by(() => {
+    if (!L.budget) return 0;
+    if (L.budget.period === 'total') return L.totalSpent;
+    const now = new Date();
+    return L.expenses
+      .filter((x) => x.type === 'EXPENSE_ADD' && new Date(x.timestamp).getMonth() === now.getMonth() && new Date(x.timestamp).getFullYear() === now.getFullYear())
+      .reduce((s, x) => s + x.amount, 0);
+  });
+  let budgetOpen = $state(false);
+  let budgetInput = $state('');
+  let budgetPeriod = $state('total');
+
+  function openBudget() {
+    menuOpen = false;
+    budgetInput = L.budget ? String(L.budget.amount) : '';
+    budgetPeriod = L.budget?.period || 'total';
+    budgetOpen = true;
+  }
+
+  async function saveBudget(e) {
+    e.preventDefault();
+    const n = Number(budgetInput.replace(/[^\d.]/g, ''));
+    await setGroupBudget(groupId, n, budgetPeriod);
+    budgetOpen = false;
+    toast(n > 0 ? 'Group budget saved for everyone' : 'Group budget removed');
+  }
   async function changeCurrency(e) {
     const c = e.currentTarget.value;
     menuOpen = false;
@@ -276,6 +304,9 @@
               {#each CURRENCIES as c (c)}<option value={c}>{c}</option>{/each}
             </select>
           </label>
+          <button class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onclick={openBudget}>
+            <Icon name="chart" class="w-4 h-4" /> Group budget{L.budget ? ` · ${money(L.budget.amount, undefined, { decimals: 0 })}` : ''}
+          </button>
           <a class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" href="#/g/{groupId}/import">
             <Icon name="image" class="w-4 h-4" /> Import transactions
           </a>
@@ -459,6 +490,18 @@
       {#if myNet > 0.009}you are owed overall{:else if myNet < -0.009}you owe overall{:else}nothing owed either way{/if}
       · group spent {money(L.totalSpent, undefined, { decimals: 0 })}
     </div>
+    {#if L.budget}
+      {@const ratio = budgetSpent / L.budget.amount}
+      <button type="button" class="block w-full text-left mt-4 space-y-1.5" onclick={openBudget} title="Change the group budget">
+        <div class="flex items-baseline justify-between text-xs text-white/80">
+          <span>{L.budget.period === 'month' ? 'This month' : 'Budget'}: {money(budgetSpent, undefined, { decimals: 0 })} of {money(L.budget.amount, undefined, { decimals: 0 })}</span>
+          <span class="font-semibold {ratio > 1 ? 'text-rose-200' : ''}">{ratio > 1 ? `over by ${money(budgetSpent - L.budget.amount, undefined, { decimals: 0 })}` : `${money(L.budget.amount - budgetSpent, undefined, { decimals: 0 })} left`}</span>
+        </div>
+        <div class="h-1.5 rounded-full bg-white/20 overflow-hidden">
+          <div class="h-full rounded-full {ratio > 1 ? 'bg-rose-300' : ratio > 0.8 ? 'bg-amber-300' : 'bg-white'}" style="width:{Math.min(100, ratio * 100)}%"></div>
+        </div>
+      </button>
+    {/if}
   </div>
 
 {/snippet}
@@ -555,6 +598,34 @@
       {/if}
     </section>
 {/snippet}
+
+{#if budgetOpen}
+  <div class="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 backdrop-blur-sm p-4" role="presentation" onclick={(e) => e.target === e.currentTarget && (budgetOpen = false)}>
+    <div class="card w-full max-w-sm p-5 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="budget-title">
+    <form class="space-y-4" onsubmit={saveBudget}>
+      <div>
+        <h2 id="budget-title" class="font-black text-lg tracking-tight">Group budget</h2>
+        <p class="text-xs text-slate-500">Everyone in {groupName(groupId)} sees how the group's spending compares.</p>
+      </div>
+      <div class="seg">
+        <button type="button" aria-pressed={budgetPeriod === 'total'} onclick={() => (budgetPeriod = 'total')}>Whole trip</button>
+        <button type="button" aria-pressed={budgetPeriod === 'month'} onclick={() => (budgetPeriod = 'month')}>Each month</button>
+      </div>
+      <label class="block">
+        <span class="label">Amount ({groupCurrency})</span>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="field text-lg font-bold tabular-nums" bind:value={budgetInput} inputmode="decimal" placeholder="e.g. 50000" autofocus />
+      </label>
+      <div class="flex gap-2">
+        {#if L.budget}<button type="button" class="btn btn-ghost text-rose-600" onclick={async () => { await setGroupBudget(groupId, 0); budgetOpen = false; toast('Group budget removed'); }}>Remove</button>{/if}
+        <span class="flex-1"></span>
+        <button type="button" class="btn btn-soft" onclick={() => (budgetOpen = false)}>Cancel</button>
+        <button class="btn btn-primary">Save</button>
+      </div>
+    </form>
+    </div>
+  </div>
+{/if}
 
 {#if qrFor}
   <UpiQr

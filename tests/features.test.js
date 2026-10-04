@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { findDuplicates } from '../src/lib/duplicates.js';
-import { dueOccurrences, nthOccurrence, periodKey, nextOccurrence, occurrenceId } from '../src/lib/recurring.js';
+import { dueOccurrences, nthOccurrence, periodKey, nextOccurrence, occurrenceId, upcomingRecurring } from '../src/lib/recurring.js';
 import { isUpiId, upiPayLink } from '../src/lib/upi.js';
 import { computeLedgerState, displayName } from '../src/lib/engine.js';
 import { mergeMap } from '../src/lib/members.js';
@@ -201,5 +201,26 @@ describe('split presets', () => {
     const link = ev('MEMBER_MERGED', me, { from: 'guest:g1', into: asha }, '2026-09-03T00:00:00.000Z');
     const L = computeLedgerState([p1, p2, del, link]);
     expect(L.presets).toEqual([{ id: 'p1', name: 'Rent 60/40', strategy: 'SHARES', members: [], inputs: { [me]: '3', [asha]: '2' } }]);
+  });
+});
+
+describe('group budget', () => {
+  it('takes the latest budget setting, any time', () => {
+    const L = computeLedgerState([
+      ev('GROUP_SETTINGS', me, { budget: 50000, budget_period: 'total' }, '2026-09-01T00:00:00.000Z'),
+      expense('Villa', 21000, '2026-09-02T00:00:00.000Z'),
+      ev('GROUP_SETTINGS', me, { budget: 60000, budget_period: 'month' }, '2026-09-03T00:00:00.000Z'),
+    ]);
+    expect(L.budget).toEqual({ amount: 60000, period: 'month' });
+    expect(computeLedgerState([ev('GROUP_SETTINGS', me, { budget: 100 }), ev('GROUP_SETTINGS', me, { budget: 0 }, '2026-09-09T00:00:00.000Z')]).budget).toBeNull();
+  });
+});
+
+describe('upcoming recurring', () => {
+  it('lists what repeats in the next week, soonest first', () => {
+    const rent = expense('Rent', 30000, new Date(2026, 6, 1, 9).toISOString(), { recurring: { every: 'month', series: 's1', owner: me } });
+    const gym = expense('Gym', 1500, new Date(2026, 8, 20, 9).toISOString(), { recurring: { every: 'month', series: 's2', owner: me } });
+    const up = upcomingRecurring({ flat: [rent], me: [gym] }, { now: new Date(2026, 9, 28, 12) });
+    expect(up.map((u) => [u.title, u.when.getDate(), u.when.getMonth()])).toEqual([['Rent', 1, 10]]);
   });
 });

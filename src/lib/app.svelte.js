@@ -336,6 +336,9 @@ export async function createGroup(name, currency = CONFIG.DEFAULT_CURRENCY) {
 /** The currency balances are kept in. Only takes effect while the group has no entries (engine.js). */
 export const setGroupCurrency = (id, currency) => appendEvent(id, 'GROUP_SETTINGS', { currency });
 
+/** A budget for the whole group: for the trip (`total`) or each `month`. 0 removes it. */
+export const setGroupBudget = (id, amount, period = 'total') => appendEvent(id, 'GROUP_SETTINGS', { budget: amount > 0 ? amount : 0, budget_period: period });
+
 const memberJoinedPayload = () => ({
   member_email: app.user.email,
   member_name: app.user.name,
