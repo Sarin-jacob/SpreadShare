@@ -1,6 +1,6 @@
 <script>
   import { untrack } from 'svelte';
-  import { app, appendEvent } from '../lib/app.svelte.js';
+  import { app, appendEvent, savePreset, deletePreset } from '../lib/app.svelte.js';
   import { ledger } from '../lib/ledger.svelte.js';
   import { displayName, parsePayload } from '../lib/engine.js';
   import { CONFIG } from '../lib/config.js';
@@ -540,6 +540,44 @@
     { value: 'TRANSFER', label: 'Payment' },
     { value: 'LOAN', label: 'Loan' },
   ];
+  // ─── Split presets (saved for the whole group) ───
+  const presets = $derived(L.presets || []);
+  /** The current split as a preset, or null when it's the plain "everyone equally". */
+  const currentAsPreset = $derived.by(() => {
+    if (strategy === 'EQUALLY') {
+      const inSplit = members.filter((m) => !excluded[m]);
+      return inSplit.length && inSplit.length < members.length ? { strategy, members: inSplit } : null;
+    }
+    if (strategy === 'SHARES') {
+      const inputs = Object.fromEntries(members.map((m) => [m, (splitInputs[m] ?? '').trim() || '1']));
+      return Object.values(inputs).some((v) => v !== '1') ? { strategy, inputs } : null;
+    }
+    return null;
+  });
+  const describePreset = (p) =>
+    p.strategy === 'EQUALLY'
+      ? p.members.map(name).join(' + ')
+      : Object.entries(p.inputs).filter(([, v]) => v !== '0').map(([m, v]) => `${name(m)} ${v}`).join(' · ');
+
+  function applyPreset(p) {
+    strategy = p.strategy;
+    if (p.strategy === 'EQUALLY') excluded = Object.fromEntries(members.filter((m) => !p.members.includes(m)).map((m) => [m, true]));
+    else splitInputs = Object.fromEntries(members.map((m) => [m, p.inputs[m] ?? '0']));
+    toast(`Split: ${p.name}`, 'info');
+  }
+
+  async function saveCurrentPreset() {
+    const n = prompt('Name this split, e.g. "Rent 60/40"', strategy === 'EQUALLY' ? currentAsPreset.members.map(name).join(' + ') : '');
+    if (!n?.trim()) return;
+    await savePreset(groupId, { name: n, ...currentAsPreset });
+    toast(`Saved “${n.trim()}” for everyone in the group`);
+  }
+
+  async function removePreset(p) {
+    if (!confirm(`Delete the split “${p.name}” for everyone in the group?`)) return;
+    await deletePreset(groupId, p.id);
+  }
+
   const STRATEGIES = [
     { value: 'EQUALLY', label: 'Equally' },
     { value: 'SHARES', label: 'Shares' },
@@ -549,7 +587,7 @@
   ];
   const HINTS = {
     SHARES: 'Weights per person (blank = 1, 0 = not included)',
-    EXACT: 'Exact amounts , leave one blank to give it the remainder',
+    EXACT: 'Exact amounts. Leave one blank to give it the remainder.',
     ADJUSTMENT: 'Extra (+) or less (−) than an equal share',
     ITEMS: 'Tap who had each item. Tax, service and discounts are shared in proportion.',
   };
@@ -812,6 +850,19 @@
             {/each}
           </div>
         </div>
+        {#if presets.length || currentAsPreset}
+          <div class="flex flex-wrap items-center gap-1.5">
+            {#each presets as p (p.id)}
+              <span class="flex items-center rounded-full border border-slate-200 dark:border-slate-700 text-xs font-medium">
+                <button type="button" class="pl-2.5 pr-1.5 py-1" title={describePreset(p)} onclick={() => applyPreset(p)}>⭐ {p.name}</button>
+                <button type="button" class="pr-2 py-1 text-slate-400 hover:text-rose-500" aria-label="Delete split {p.name}" onclick={() => removePreset(p)}>×</button>
+              </span>
+            {/each}
+            {#if currentAsPreset}
+              <button type="button" class="px-2 py-1 text-xs font-semibold text-accent-600 dark:text-accent-400" onclick={saveCurrentPreset}>+ Save this split</button>
+            {/if}
+          </div>
+        {/if}
         {#if HINTS[strategy]}<p class="text-xs text-slate-400">{HINTS[strategy]}</p>{/if}
         {#if strategy === 'ITEMS'}
           {#if receiptItems.length === 0}

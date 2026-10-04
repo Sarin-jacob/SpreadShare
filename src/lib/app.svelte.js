@@ -374,6 +374,14 @@ export async function inviteLink(id, { as } = {}) {
   return url.toString();
 }
 
+// ─── Split presets ───
+
+/** Saves a split for the whole group: equal between some people, or by shares. */
+export const savePreset = (groupId, { name, strategy, members, inputs }) =>
+  appendEvent(groupId, 'SPLIT_PRESET', { name: name.trim().slice(0, 40), strategy, ...(strategy === 'EQUALLY' ? { members } : { inputs }) });
+
+export const deletePreset = (groupId, presetId) => appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: presetId });
+
 // ─── Members without Google accounts ───
 
 /** Adds someone by name; others log their expenses and payments for them. */

@@ -192,3 +192,14 @@ describe('members without Google accounts', () => {
     expect(displayName('guest:zz', {}, me)).toBe('Guest');
   });
 });
+
+describe('split presets', () => {
+  it('lists saved splits, skips deleted ones, and follows linked guests', () => {
+    const p1 = ev('SPLIT_PRESET', me, { name: 'Rent 60/40', strategy: 'SHARES', inputs: { [me]: '3', 'guest:g1': '2' } }, '2026-09-01T00:00:00.000Z', 'p1');
+    const p2 = ev('SPLIT_PRESET', me, { name: 'Just us', strategy: 'EQUALLY', members: [me, asha] }, '2026-09-01T00:00:01.000Z', 'p2');
+    const del = ev('EXPENSE_DELETE', me, { target_event_id: 'p2' }, '2026-09-02T00:00:00.000Z');
+    const link = ev('MEMBER_MERGED', me, { from: 'guest:g1', into: asha }, '2026-09-03T00:00:00.000Z');
+    const L = computeLedgerState([p1, p2, del, link]);
+    expect(L.presets).toEqual([{ id: 'p1', name: 'Rent 60/40', strategy: 'SHARES', members: [], inputs: { [me]: '3', [asha]: '2' } }]);
+  });
+});

@@ -36,7 +36,8 @@ export function deletedIds(events) {
 
 export function computeLedgerState(rawEvents) {
   // currency: the group's own currency (GROUP_SETTINGS), null = the app default
-  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {}, currency: null };
+  // presets: saved splits for the group ([{ id, name, strategy, members?, inputs? }])
+  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {}, currency: null, presets: [] };
   let sawMoney = false;
   const seen = new Set();
   let cacheDirty = false;
@@ -94,6 +95,17 @@ export function computeLedgerState(rawEvents) {
       continue;
     }
     if (type === 'MEMBER_MERGED') continue;
+    if (type === 'SPLIT_PRESET') {
+      if (!payload.name || !['EQUALLY', 'SHARES'].includes(payload.strategy)) continue;
+      state.presets.push({
+        id,
+        name: String(payload.name).slice(0, 40),
+        strategy: payload.strategy,
+        members: (payload.members || []).map(A),
+        inputs: Object.fromEntries(Object.entries(payload.inputs || {}).map(([k, v]) => [A(k), String(v)])),
+      });
+      continue;
+    }
     if (type === 'GROUP_SETTINGS') {
       // Amounts are stored in the group's currency, so it can only change before the first entry.
       if (payload.currency && !sawMoney) state.currency = String(payload.currency).toUpperCase();
