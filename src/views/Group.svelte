@@ -240,6 +240,9 @@
               {#each CURRENCIES as c (c)}<option value={c}>{c}</option>{/each}
             </select>
           </label>
+          <a class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" href="#/g/{groupId}/import">
+            <Icon name="image" class="w-4 h-4" /> Import transactions
+          </a>
           <a class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" href="#/g/{groupId}/statement">
             <Icon name="sheet" class="w-4 h-4" /> Monthly statement
           </a>

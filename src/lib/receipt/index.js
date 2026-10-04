@@ -14,6 +14,7 @@ import { runsToOcrItems, hasUsableText } from './pdfText.js';
 export * from './image.js';
 export * from './draft.js';
 export { isPdf } from './pdfText.js';
+export { readListLines } from './listReader.js';
 
 function solve(boxes, t0) {
   // eslint-disable-next-line no-unused-vars

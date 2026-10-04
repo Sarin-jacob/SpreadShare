@@ -617,6 +617,11 @@
             </label>
           {/if}
         </div>
+        {#if !editId}
+          <a href="#/g/{groupId}/import" class="mt-2 flex items-center gap-1.5 text-xs font-semibold text-accent-700 dark:text-accent-300 sm:ml-[3.25rem]">
+            <Icon name="plus" class="w-3.5 h-3.5" /> Many payments? Import a GPay / PhonePe / bank list
+          </a>
+        {/if}
         <div class="border-t border-accent-500/20 mt-3 pt-2.5">
           <button
             type="button"

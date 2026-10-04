@@ -23,6 +23,7 @@
   import Quick from './views/Quick.svelte';
   import Statement from './views/Statement.svelte';
   import Search from './views/Search.svelte';
+  import Import from './views/Import.svelte';
 
   const seg = $derived(route.segments);
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
@@ -188,6 +189,8 @@
               <ExpenseDetail {groupId} eventId={seg[3]} />
             {:else if seg[2] === 'statement'}
               <Statement {groupId} query={route.query} />
+            {:else if seg[2] === 'import'}
+              <Import {groupId} />
             {:else}
               <Group {groupId} />
             {/if}
