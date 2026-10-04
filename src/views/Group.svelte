@@ -1,5 +1,7 @@
 <script>
-  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv } from '../lib/app.svelte.js';
+  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency } from '../lib/app.svelte.js';
+  import { CONFIG } from '../lib/config.js';
+  import { CURRENCIES } from '../lib/currency.js';
   import { ledger } from '../lib/ledger.svelte.js';
   import { optimizeDebts, displayName } from '../lib/engine.js';
   import { processAnalytics } from '../lib/insights.js';
@@ -26,6 +28,15 @@
   let onlyMine = $state(false);
   let searchEl = $state();
   let qrFor = $state(null); // settlement shown as a UPI QR (desktop)
+
+  const groupCurrency = $derived(L.currency || CONFIG.DEFAULT_CURRENCY);
+  async function changeCurrency(e) {
+    const c = e.currentTarget.value;
+    menuOpen = false;
+    if (c === groupCurrency) return;
+    await setGroupCurrency(groupId, c);
+    toast(`Balances in this group are now kept in ${c}`);
+  }
 
   // Wide screens show balances in a side column instead of a tab.
   let vw = $state(window.innerWidth);
@@ -190,7 +201,7 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={vw} onclick={() => (menuOpen = false)} onkeydown={onKey} />
+<svelte:window bind:innerWidth={vw} onclick={(e) => !e.target.closest?.("[data-keep-menu]") && (menuOpen = false)} onkeydown={onKey} />
 
 <div class="space-y-5 pb-16">
   <!-- Header -->
@@ -222,6 +233,13 @@
           <button class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" onclick={refresh}>
             <Icon name="refresh" class="w-4 h-4" /> Refresh
           </button>
+          <label class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg {L.expenses.length ? 'opacity-60' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}" title={L.expenses.length ? 'The currency can only change before the first entry' : 'Currency the balances are kept in'} data-keep-menu>
+            <span class="w-4 text-center text-xs font-bold">¤</span>
+            <span class="flex-1">Currency</span>
+            <select class="bg-transparent text-right font-semibold" value={groupCurrency} disabled={!!L.expenses.length} onchange={changeCurrency}>
+              {#each CURRENCIES as c (c)}<option value={c}>{c}</option>{/each}
+            </select>
+          </label>
           <a class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700" href="#/g/{groupId}/statement">
             <Icon name="sheet" class="w-4 h-4" /> Monthly statement
           </a>
@@ -422,7 +440,7 @@
                 {#if s.to === me}
                   <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => remind(s)}><Icon name="bell" class="w-3.5 h-3.5" /> Remind</button>
                 {/if}
-                {#if s.from === me && L.profiles[s.to]?.upi}
+                {#if s.from === me && L.profiles[s.to]?.upi && groupCurrency === 'INR'}<!-- UPI is rupees only -->
                   <button class="btn btn-primary !px-3 !py-1.5 text-xs" onclick={() => payUpi(s)} title="Pay {L.profiles[s.to].upi}">Pay with UPI</button>
                 {/if}
                 <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => settle(s)}>Record payment</button>

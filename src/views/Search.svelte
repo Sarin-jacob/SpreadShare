@@ -26,8 +26,8 @@
       const out = [];
       for (const [groupId, events] of Object.entries(eventsByGroup(all))) {
         if (!app.directory.some((g) => g.id === groupId)) continue;
-        const { expenses, profiles } = computeLedgerState(events);
-        for (const x of expenses) out.push({ groupId, x, profiles });
+        const { expenses, profiles, currency } = computeLedgerState(events);
+        for (const x of expenses) out.push({ groupId, x, profiles, currency: currency || undefined });
       }
       entries = out.sort((a, b) => new Date(b.x.timestamp) - new Date(a.x.timestamp));
       loaded = true;
@@ -73,8 +73,8 @@
   const totals = $derived.by(() => {
     let all = 0;
     let mine = 0;
-    for (const { x } of results) {
-      if (x.type !== 'EXPENSE_ADD') continue;
+    for (const { x, currency } of results) {
+      if (x.type !== 'EXPENSE_ADD' || currency) continue; // totals in the default currency only
       all += x.amount;
       mine += memberEffect(x, me).share;
     }
@@ -96,7 +96,7 @@
   };
 </script>
 
-{#snippet row({ groupId, x, profiles })}
+{#snippet row({ groupId, x, profiles, currency })}
   {@const cat = x.type === 'EXPENSE_ADD' ? category(x.category) : category('Financial')}
   {@const shown = splitTags(x.title)}
   <li>
@@ -110,7 +110,7 @@
         {/if}
       </div>
       <div class="text-right shrink-0">
-        <div class="text-sm font-bold tabular-nums">{money(x.amount)}</div>
+        <div class="text-sm font-bold tabular-nums">{money(x.amount, currency)}</div>
         <div class="text-[11px] text-slate-400">{shortDate(x.timestamp)}</div>
       </div>
     </a>

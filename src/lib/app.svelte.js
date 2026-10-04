@@ -321,13 +321,17 @@ async function pushDirectory() {
 
 export const groupName = (id) => app.directory.find((g) => g.id === id)?.name || 'Group';
 
-export async function createGroup(name) {
+export async function createGroup(name, currency = CONFIG.DEFAULT_CURRENCY) {
   const id = await track(() => google.createGroupSpreadsheet(name));
   saveDirectory([...app.directory, { id, name }]);
   await pushDirectory();
   await appendEvent(id, 'MEMBER_JOINED', memberJoinedPayload());
+  if (currency !== CONFIG.DEFAULT_CURRENCY) await setGroupCurrency(id, currency);
   return id;
 }
+
+/** The currency balances are kept in. Only takes effect while the group has no entries (engine.js). */
+export const setGroupCurrency = (id, currency) => appendEvent(id, 'GROUP_SETTINGS', { currency });
 
 const memberJoinedPayload = () => ({
   member_email: app.user.email,

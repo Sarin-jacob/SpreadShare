@@ -1,23 +1,28 @@
 <script>
   import { app } from '../lib/app.svelte.js';
-  import { loadAllEvents, eventsByGroup } from '../lib/cache.svelte.js';
+  import { loadAllEvents, eventsByGroup, inCurrency, currencyByGroup } from '../lib/cache.svelte.js';
   import { computeLedgerState } from '../lib/engine.js';
   import { memberEffect } from '../lib/statement.js';
   import { tagsOf } from '../lib/tags.js';
   import BudgetsCard from '../components/BudgetsCard.svelte';
   import { processAnalytics } from '../lib/insights.js';
   import { money } from '../lib/format.js';
+  import { CONFIG } from '../lib/config.js';
   import Donut from '../components/Donut.svelte';
   import TrendChart from '../components/TrendChart.svelte';
 
   let days = $state(30);
   let events = $state.raw([]);
   let loaded = $state(false);
+  let otherCurrency = $state(0); // groups in another currency, not in these totals
 
   $effect(() => {
     app.cacheVersion; // re-read whenever any group's cache changes
     loadAllEvents().then((all) => {
-      events = all;
+      // Totals only add up in one currency: groups kept in another one are left out (and counted).
+      const cur = currencyByGroup(all);
+      otherCurrency = Object.values(cur).filter((c) => c !== CONFIG.DEFAULT_CURRENCY).length;
+      events = inCurrency(all);
       loaded = true;
     });
   });
@@ -64,7 +69,9 @@
 <div class="space-y-5">
   <div>
     <h1 class="text-2xl font-black tracking-tight">Insights</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400">Your share of spending across all groups.</p>
+    <p class="text-sm text-slate-500 dark:text-slate-400">
+      Your share of spending across all groups{otherCurrency ? ` in ${CONFIG.DEFAULT_CURRENCY} (${otherCurrency} group${otherCurrency > 1 ? 's' : ''} in other currencies not included)` : ''}.
+    </p>
   </div>
 
   <div class="seg lg:max-w-md">

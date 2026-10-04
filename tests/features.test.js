@@ -124,3 +124,26 @@ describe('UPI', () => {
     expect(L.expenses).toHaveLength(0);
   });
 });
+
+describe('group currency', () => {
+  it('takes the currency set before the first entry', () => {
+    const L = computeLedgerState([
+      ev('MEMBER_JOINED', me, { member_email: me }, '2026-09-01T00:00:00.000Z'),
+      ev('GROUP_SETTINGS', me, { currency: 'eur' }, '2026-09-01T00:00:01.000Z'),
+    ]);
+    expect(L.currency).toBe('EUR');
+  });
+
+  it('ignores a change once there are entries (amounts are stored in the old currency)', () => {
+    const L = computeLedgerState([
+      ev('GROUP_SETTINGS', me, { currency: 'EUR' }, '2026-09-01T00:00:00.000Z'),
+      expense('Dinner', 100, '2026-09-02T00:00:00.000Z'),
+      ev('GROUP_SETTINGS', me, { currency: 'USD' }, '2026-09-03T00:00:00.000Z'),
+    ]);
+    expect(L.currency).toBe('EUR');
+  });
+
+  it('defaults to none (the app currency)', () => {
+    expect(computeLedgerState([expense('x', 1, '2026-09-01T00:00:00.000Z')]).currency).toBeNull();
+  });
+});

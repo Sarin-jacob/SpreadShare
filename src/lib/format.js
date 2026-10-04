@@ -1,9 +1,10 @@
 // src/lib/format.js
-import { CONFIG } from './config.js';
+import { display } from './display.svelte.js';
 
 const moneyFmt = new Map();
 
-export function money(n, currency = CONFIG.DEFAULT_CURRENCY, { decimals = 2 } = {}) {
+/** Formats an amount; without a currency, in the open group's (see display.svelte.js). */
+export function money(n, currency = display.currency, { decimals = 2 } = {}) {
   const key = `${currency}:${decimals}`;
   if (!moneyFmt.has(key)) {
     try {

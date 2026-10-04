@@ -14,7 +14,7 @@
   import { takeShared } from '../lib/share.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import { monthToDate, budgetAlert } from '../lib/budgets.js';
-  import { loadAllEvents } from '../lib/cache.svelte.js';
+  import { loadAllEvents, inCurrency } from '../lib/cache.svelte.js';
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
   import { unitCount } from '../lib/receipt/draft.js';
@@ -29,7 +29,9 @@
 
   let { groupId, editId = null, prefill = {} } = $props();
 
-  const BASE = CONFIG.DEFAULT_CURRENCY;
+  // The group's currency: amounts are converted into it and balances are kept in it.
+  const BASE = ledger.current.currency || CONFIG.DEFAULT_CURRENCY;
+  const lastCurrencyKey = () => `ss_last_currency_${groupId}`;
   const me = app.user.email;
   const L = $derived(ledger.current);
   const members = $derived([...new Set([me, ...Object.keys(L.members)])]);
@@ -242,6 +244,21 @@
   });
 
   // ─── Actions ───
+  // New entries start in the currency you last used in this group (e.g. EUR on a trip kept in INR).
+  $effect(() => {
+    untrack(() => {
+      if (editId) return;
+      let last = null;
+      try {
+        last = localStorage.getItem(lastCurrencyKey());
+      } catch {}
+      if (last && last !== BASE && CURRENCIES.includes(last)) {
+        currency = last;
+        onCurrencyChange();
+      }
+    });
+  });
+
   async function onCurrencyChange() {
     if (currency === BASE) return (rateExpr = '1');
     rateLoading = true;
@@ -437,7 +454,8 @@
   /** After saving: a heads-up when this month's share of a budgeted category is near or over. */
   async function warnIfOverBudget(cat) {
     if (!Object.keys(prefs.budgets).length) return;
-    const data = monthToDate(await loadAllEvents(), me);
+    if (BASE !== CONFIG.DEFAULT_CURRENCY) return; // budgets are in your default currency
+    const data = monthToDate(inCurrency(await loadAllEvents()), me);
     const alert = budgetAlert(prefs.budgets, data, cat);
     if (!alert) return;
     const label = alert.category === '*' ? 'Your monthly budget' : `${category(alert.category).label} budget`;
@@ -506,6 +524,9 @@
       await appendEvent(groupId, type, payload, { actor });
       navigator.vibrate?.(12);
       toast(editId ? 'Changes saved' : 'Saved');
+      try {
+        localStorage.setItem(lastCurrencyKey(), currency);
+      } catch {}
       if (type === 'EXPENSE_ADD') warnIfOverBudget(payload.category);
       replace(`/g/${groupId}`);
     } catch (err) {

@@ -2,11 +2,14 @@
   import { app, createGroup } from '../lib/app.svelte.js';
   import { loadAllEvents, summarizeGroups } from '../lib/cache.svelte.js';
   import { money, shortDate } from '../lib/format.js';
+  import { CONFIG } from '../lib/config.js';
+  import { CURRENCIES } from '../lib/currency.js';
   import { go } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
 
   let name = $state('');
+  let newCurrency = $state(CONFIG.DEFAULT_CURRENCY);
   let creating = $state(false);
   let summary = $state({}); // groupId → { net, lastActivity, count }
 
@@ -20,6 +23,8 @@
     let owed = 0;
     let owe = 0;
     for (const g of app.directory) {
+      // Only groups in your default currency add up; others show in their own currency below.
+      if ((summary[g.id]?.currency || CONFIG.DEFAULT_CURRENCY) !== CONFIG.DEFAULT_CURRENCY) continue;
       const net = summary[g.id]?.net ?? 0;
       if (net > 0) owed += net;
       else owe -= net;
@@ -43,8 +48,9 @@
     if (!navigator.onLine) return toast('You need to be online to create a group', 'error');
     creating = true;
     try {
-      const id = await createGroup(n);
+      const id = await createGroup(n, newCurrency);
       name = '';
+      newCurrency = CONFIG.DEFAULT_CURRENCY;
       go(`/g/${id}`);
     } catch (err) {
       toast(`Couldn't create group: ${err.message}`, 'error');
@@ -83,7 +89,10 @@
   {/if}
 
   <form class="flex gap-2 lg:max-w-xl" onsubmit={create}>
-    <input class="field flex-1" bind:value={name} placeholder="New group name, e.g. Goa Trip" maxlength="80" disabled={creating} />
+    <input class="field flex-1 min-w-0" bind:value={name} placeholder="New group name, e.g. Goa Trip" maxlength="80" disabled={creating} />
+    <select class="field !w-24 shrink-0" bind:value={newCurrency} disabled={creating} aria-label="Group currency" title="Currency the group's balances are kept in">
+      {#each CURRENCIES as c (c)}<option value={c}>{c}</option>{/each}
+    </select>
     <button class="btn btn-primary shrink-0" disabled={creating || !name.trim()}>
       <Icon name="plus" class="w-4 h-4" />
       {creating ? 'Creating…' : 'Create'}
@@ -113,9 +122,9 @@
                 {#if !downloaded}
                   <span class="text-slate-400 animate-pulse">{app.sync.progress ? 'Downloading…' : 'Not downloaded yet'}</span>
                 {:else if bal > 0.009}
-                  <span class="text-emerald-600 dark:text-emerald-400 font-semibold">You're owed {money(bal)}</span>
+                  <span class="text-emerald-600 dark:text-emerald-400 font-semibold">You're owed {money(bal, s.currency)}</span>
                 {:else if bal < -0.009}
-                  <span class="text-rose-600 dark:text-rose-400 font-semibold">You owe {money(-bal)}</span>
+                  <span class="text-rose-600 dark:text-rose-400 font-semibold">You owe {money(-bal, s.currency)}</span>
                 {:else}
                   <span class="text-slate-400">Settled up</span>
                 {/if}

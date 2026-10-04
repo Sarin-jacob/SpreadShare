@@ -32,7 +32,7 @@
             <span class="flex-1 truncate">{g.name}</span>
             {#if Math.abs(net) > 0.009}
               <span class="text-xs tabular-nums font-semibold {net > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
-                {net > 0 ? '+' : '−'}{money(Math.abs(net), undefined, { decimals: 0 })}
+                {net > 0 ? '+' : '−'}{money(Math.abs(net), summary[g.id]?.currency, { decimals: 0 })}
               </span>
             {/if}
           </a>

@@ -3,6 +3,9 @@
   import { setBadge } from './lib/pwa.svelte.js';
   import { updates, applyUpdate } from './lib/updates.svelte.js';
   import { route } from './lib/router.svelte.js';
+  import { ledger } from './lib/ledger.svelte.js';
+  import { display } from './lib/display.svelte.js';
+  import { CONFIG } from './lib/config.js';
   import { toast } from './lib/toast.svelte.js';
   import Icon from './components/Icon.svelte';
   import Logo from './components/Logo.svelte';
@@ -74,6 +77,11 @@
   });
 
   $effect(() => setBadge(pendingIds.size));
+
+  // Amounts show in the open group's currency; pages across groups use the default currency.
+  $effect.pre(() => {
+    display.currency = (groupId && ledger.current.currency) || CONFIG.DEFAULT_CURRENCY;
+  });
 
   const NAV = [
     { href: '#/', label: 'Groups', icon: 'groups', match: (s) => !s[0] || s[0] === 'g' },

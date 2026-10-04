@@ -34,7 +34,9 @@ export function deletedIds(events) {
 }
 
 export function computeLedgerState(rawEvents) {
-  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {} };
+  // currency: the group's own currency (GROUP_SETTINGS), null = the app default
+  const state = { totalSpent: 0, members: {}, expenses: [], profiles: {}, currency: null };
+  let sawMoney = false;
   const seen = new Set();
   let cacheDirty = false;
 
@@ -80,6 +82,11 @@ export function computeLedgerState(rawEvents) {
       discover(payload.member_email, payload.member_name, payload.member_picture);
       continue;
     }
+    if (type === 'GROUP_SETTINGS') {
+      // Amounts are stored in the group's currency, so it can only change before the first entry.
+      if (payload.currency && !sawMoney) state.currency = String(payload.currency).toUpperCase();
+      continue;
+    }
     if (type === 'PROFILE') {
       // A member's own details for the group (UPI ID). The latest one wins.
       state.profiles[actor].upi = payload.upi_id ? String(payload.upi_id).trim().toLowerCase() : null;
@@ -87,6 +94,7 @@ export function computeLedgerState(rawEvents) {
     }
 
     const amount = round2(parseFloat(payload.evaluated_amount) || 0);
+    if (type === 'EXPENSE_ADD' || type === 'TRANSFER' || type === 'LOAN') sawMoney = true;
     const target = payload.target_peer_identity || '';
     if (target) discover(target);
 
