@@ -9,6 +9,22 @@
 import { readFileSync } from 'node:fs';
 import { Resvg } from '@resvg/resvg-js';
 import { brandIconSvg } from '../src/lib/brandIcon.js';
+import { ICON_PATHS } from '../src/lib/iconPaths.js';
+
+// Long-press shortcuts on the home-screen icon (Android shows the first four). Each opens in the
+// group used last (src/views/Quick.svelte) or its own page, and gets its own icon.
+const SHORTCUTS = [
+  { name: 'Add expense', short_name: 'Add', url: './#/quick/add', icon: 'plus' },
+  { name: 'Scan receipt', short_name: 'Scan', url: './#/quick/scan', icon: 'camera' },
+  { name: 'Record a payment', short_name: 'Payment', url: './#/quick/payment', icon: 'swap' },
+  { name: 'Search', short_name: 'Search', url: './#/search', icon: 'search' },
+  { name: 'Insights', short_name: 'Insights', url: './#/insights', icon: 'chart' },
+];
+
+/** A shortcut icon: the glyph in white on the accent colour (full bleed; launchers crop it). */
+const shortcutSvg = (shades, d) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="${shades[600]}"/>` +
+  `<g transform="translate(26 26) scale(1.8333)"><path d="${d}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></svg>`;
 
 const DEFAULT_ACCENT = 'indigo';
 const SHADES = [100, 200, 300, 500, 600, 700, 800];
@@ -41,11 +57,13 @@ function manifest(accent) {
       display: 'standalone',
       background_color: '#0f172a',
       theme_color: '#0f172a',
-      // Long-press the home-screen icon. Both open in the group used last (see src/views/Quick.svelte).
-      shortcuts: [
-        { name: 'Add expense', short_name: 'Add', url: './#/quick/add', icons: [{ src: `icons/${accent}-192.png`, sizes: '192x192', type: 'image/png' }] },
-        { name: 'Scan receipt', short_name: 'Scan', url: './#/quick/scan', icons: [{ src: `icons/${accent}-192.png`, sizes: '192x192', type: 'image/png' }] },
-      ],
+      // Long-press the home-screen icon (see SHORTCUTS above).
+      shortcuts: SHORTCUTS.map(({ name, short_name, url, icon }) => ({
+        name,
+        short_name,
+        url,
+        icons: [{ src: `icons/${accent}-sc-${icon}-96.png`, sizes: '96x96', type: 'image/png' }],
+      })),
       // Lets the installed app receive receipt photos / screenshots and payment messages from the
       // OS share sheet. Handled by public/sw.js, then the #/share screen.
       share_target: {
@@ -77,6 +95,9 @@ export function generateBrandFiles(cssPath) {
     files.set(`icons/${accent}-512.png`, { body: png(svg, 512), type: 'image/png' });
     files.set(`icons/${accent}-maskable-512.png`, { body: png(maskable, 512), type: 'image/png' });
     files.set(`icons/${accent}-180.png`, { body: png(maskable, 180), type: 'image/png' });
+    for (const { icon } of SHORTCUTS) {
+      files.set(`icons/${accent}-sc-${icon}-96.png`, { body: png(shortcutSvg(shades, ICON_PATHS[icon]), 96), type: 'image/png' });
+    }
     files.set(`manifest-${accent}.webmanifest`, { body: manifest(accent), type: 'application/manifest+json' });
   }
   files.set('manifest.webmanifest', { body: manifest(DEFAULT_ACCENT), type: 'application/manifest+json' });

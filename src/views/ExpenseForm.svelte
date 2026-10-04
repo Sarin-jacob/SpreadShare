@@ -18,7 +18,7 @@
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
   import { unitCount } from '../lib/receipt/draft.js';
-  import { batch, batchPosition, startBatch, nextInBatch, endBatch } from '../lib/batch.svelte.js';
+  import { batch, batchPosition, startBatch, nextInBatch, endBatch, handoff } from '../lib/batch.svelte.js';
   import { REPEATS } from '../lib/recurring.js';
   import { findDuplicates } from '../lib/duplicates.js';
   import { money, toLocalInput } from '../lib/format.js';
@@ -109,10 +109,33 @@
     });
   });
 
-  // Opened from the "Scan receipt" shortcut: the browser needs a tap to open the camera.
+  // "Scan a receipt": photos picked in the add menu arrive here; from the home-screen shortcut
+  // (a cold start, no tap to use) the camera opens if the browser still allows it, otherwise a
+  // big "Open camera" button does it in one tap.
+  let cameraEl = $state();
+  let pickEl = $state();
+  let scanPrompt = $state(false);
+  let scanTaken = false;
   $effect(() => {
-    if (ready && prefill.scan) untrack(() => toast('Tap Camera or Photos to scan your receipt', 'info'));
+    if (!ready || scanTaken) return;
+    if (handoff.files?.length) {
+      scanTaken = true;
+      const files = handoff.files;
+      handoff.files = null;
+      untrack(() => startScan(files.length > 1 ? startBatch(files) : files[0]));
+    } else if (prefill.scan) {
+      scanTaken = true;
+      untrack(() => {
+        if (navigator.userActivation?.isActive) (touch ? cameraEl : pickEl)?.click();
+        else scanPrompt = true;
+      });
+    }
   });
+
+  function openCamera() {
+    scanPrompt = false;
+    (touch ? cameraEl : pickEl)?.click();
+  }
   const source = $derived(sourceId ? app.events.find((e) => e.eventId === sourceId) : null);
 
   // Initialise once the data we need is available (events load asynchronously).
@@ -683,12 +706,22 @@
 
     <div class="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
   <div class="space-y-5 min-w-0">
+    {#if scanPrompt && type === 'EXPENSE_ADD'}
+      <div class="card p-5 text-center space-y-3 !border-accent-500/50">
+        <div class="text-4xl">🧾</div>
+        <button type="button" class="btn btn-primary w-full !py-4 text-base" onclick={openCamera}>
+          <Icon name={touch ? 'camera' : 'image'} class="w-5 h-5" /> {touch ? 'Open camera' : 'Choose a photo or PDF'}
+        </button>
+        <button type="button" class="text-xs text-slate-500" onclick={() => (scanPrompt = false)}>Type it in instead</button>
+      </div>
+    {/if}
+
     {#if type === 'EXPENSE_ADD'}
       <!-- Scan: one compact row. Drop or paste (Ctrl+V) a photo / PDF anywhere on the form too. -->
       <div
         class="rounded-2xl border border-dashed px-3 py-2 transition
           {dropping ? 'border-accent-500 bg-accent-500/15' : 'border-accent-500/50 bg-accent-500/5'}
-          {prefill.scan ? 'attention' : ''}"
+          {scanPrompt ? 'attention' : ''}"
         role="group"
         aria-label="Scan a receipt"
         title={touch ? '' : 'You can also drop a photo or PDF here, or paste one with Ctrl+V'}
@@ -706,7 +739,7 @@
           {#if touch}
             <label class="btn btn-soft !px-2.5 !py-1.5 text-xs cursor-pointer">
               <Icon name="camera" class="w-4 h-4" /> Camera
-              <input type="file" accept="image/*" capture="environment" class="hidden" onchange={onScanFile} />
+              <input type="file" accept="image/*" capture="environment" class="hidden" bind:this={cameraEl} onchange={onScanFile} />
             </label>
             <label class="btn btn-soft !px-2.5 !py-1.5 text-xs cursor-pointer">
               <Icon name="image" class="w-4 h-4" /> Photos
@@ -719,7 +752,7 @@
           {:else}
             <label class="btn btn-soft !px-3 !py-1.5 text-xs cursor-pointer">
               <Icon name="image" class="w-4 h-4" /> Image or PDF
-              <input type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" onchange={onScanFile} />
+              <input type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" bind:this={pickEl} onchange={onScanFile} />
             </label>
           {/if}
           <button

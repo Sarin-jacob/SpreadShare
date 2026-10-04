@@ -236,7 +236,7 @@
         {:else if seg[0] === 'search'}
           <Search query={route.query} />
         {:else if seg[0] === 'quick'}
-          {#key seg[1]}<Quick action={seg[1] === 'scan' ? 'scan' : 'add'} />{/key}
+          {#key seg[1]}<Quick action={['scan', 'payment'].includes(seg[1]) ? seg[1] : 'add'} />{/key}
         {:else if seg[0] === 'settings'}
           <Settings />
         {:else}

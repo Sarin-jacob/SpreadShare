@@ -1,20 +1,38 @@
 <script>
   // "Add" with options: a floating speed-dial on phones / tablets, a split button on desktop.
   import { go } from '../lib/router.svelte.js';
+  import { handoff } from '../lib/batch.svelte.js';
   import Icon from './Icon.svelte';
 
   /** variant: 'fab' | 'header' */
   let { groupId, variant = 'fab' } = $props();
   let open = $state(false);
+  let fileEl = $state();
+  const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+  // Scan opens the camera (phones) or file picker right here, during the tap: browsers only allow
+  // that in a tap, and navigating to the form first would use it up. The form takes the photo.
+  function scan() {
+    open = false;
+    fileEl.click();
+  }
+  function onPicked(e) {
+    const files = [...(e.currentTarget.files || [])];
+    e.currentTarget.value = '';
+    if (!files.length) return;
+    handoff.files = files;
+    go(`/g/${groupId}/add`, { scan: '1' });
+  }
 
   const OPTIONS = [
     { label: 'Expense', hint: 'Type it in', icon: 'edit', to: (id) => go(`/g/${id}/add`) },
-    { label: 'Scan a receipt', hint: 'Photo, screenshot or PDF', icon: 'scan', to: (id) => go(`/g/${id}/add`, { scan: '1' }) },
+    { label: 'Scan a receipt', hint: touch ? 'Opens the camera' : 'Pick a photo, screenshot or PDF', icon: 'scan', to: () => scan() },
     { label: 'Payment', hint: 'Someone paid someone back', icon: 'swap', to: (id) => go(`/g/${id}/add`, { type: 'TRANSFER' }) },
     { label: 'Import a list', hint: 'GPay / bank history, statements, Splitwise', icon: 'download', to: (id) => go(`/g/${id}/import`) },
   ];
 
   function pick(o) {
+    if (o.icon === 'scan') return scan();
     open = false;
     o.to(groupId);
   }
@@ -23,6 +41,16 @@
 </script>
 
 <svelte:window onkeydown={onKey} />
+
+<input
+  type="file"
+  class="hidden"
+  bind:this={fileEl}
+  onchange={onPicked}
+  accept={touch ? 'image/*' : 'image/*,application/pdf,.pdf'}
+  capture={touch ? 'environment' : undefined}
+  multiple={!touch}
+/>
 
 {#if variant === 'fab'}
   {#if open}

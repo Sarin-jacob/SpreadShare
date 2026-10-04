@@ -21,3 +21,9 @@ export function endBatch() {
   batch.files = [];
   batch.total = 0;
 }
+
+/**
+ * Photos picked before the form exists ("Scan a receipt" in the add menu opens the camera during
+ * the tap, since browsers only allow that in a tap). The form takes them when it opens.
+ */
+export const handoff = { files: null };
