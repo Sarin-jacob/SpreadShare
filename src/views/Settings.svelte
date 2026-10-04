@@ -1,5 +1,5 @@
 <script>
-  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi } from '../lib/app.svelte.js';
+  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi, grantPermissions } from '../lib/app.svelte.js';
   import { prefs, setUpi } from '../lib/prefs.svelte.js';
   import { isUpiId, normalizeUpiId } from '../lib/upi.js';
   import { lock, lockSupported, enableLock, disableLock, setLockAfter } from '../lib/lock.svelte.js';
@@ -31,6 +31,18 @@
     } else {
       disableLock();
       toast('App lock off', 'info');
+    }
+  }
+
+  let reviewing = $state(false);
+  async function reviewAccess() {
+    reviewing = true;
+    try {
+      toast((await grantPermissions()) ? 'Google access is complete' : 'Some access is still missing. Tick every box on Google’s screen.', 'info');
+    } catch (e) {
+      toast(e.message || 'Google didn’t give access', 'error');
+    } finally {
+      reviewing = false;
     }
   }
 
@@ -306,6 +318,19 @@
       SpreadShare has no server. Every group is a Google Sheet in your Drive's
       “SpreadShare_Workspaces” folder, and this app talks to Google directly from your device.
     </p>
+    <div class="pt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span class="flex-1 min-w-0 text-xs {app.sync.missingScopes.length ? 'text-amber-700 dark:text-amber-300 font-semibold' : 'text-slate-500'}">
+        {#if app.sync.missingScopes.length}
+          Missing Google access: {app.sync.missingScopes.map((s) => (s === 'sheets' ? 'Sheets' : 'Drive files')).join(' and ')}
+        {:else}
+          ✓ Access to Google Sheets and to the Drive files SpreadShare creates
+        {/if}
+      </span>
+      <button class="text-xs font-semibold text-accent-600 dark:text-accent-400" data-auth-action onclick={reviewAccess} disabled={reviewing}>
+        {app.sync.missingScopes.length ? 'Give access' : 'Review access'}
+      </button>
+      <a class="text-xs text-slate-500 underline underline-offset-2" href="https://myaccount.google.com/connections" target="_blank" rel="noopener">Manage on Google</a>
+    </div>
   </section>
 
   <button class="btn btn-danger w-full !py-3" onclick={signOut}><Icon name="logout" class="w-4 h-4" /> Sign out</button>

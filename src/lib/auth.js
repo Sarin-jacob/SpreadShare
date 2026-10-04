@@ -14,7 +14,31 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.profile',
 ].join(' ');
 
+// What the app can't work without. Google's consent screen lets people untick these.
+export const REQUIRED_SCOPES = {
+  sheets: 'https://www.googleapis.com/auth/spreadsheets',
+  drive: 'https://www.googleapis.com/auth/drive.file',
+};
+
+/** Which required permissions a granted-scopes string (space separated) lacks. */
+export function missingFromScope(scope) {
+  if (scope == null) return []; // not known (token from an older version): assume granted
+  const granted = String(scope).split(/\s+/);
+  return Object.entries(REQUIRED_SCOPES)
+    .filter(([, url]) => !granted.includes(url))
+    .map(([name]) => name);
+}
+
+/** Google refused a call because a permission wasn't granted (the box was unticked). */
+export class MissingPermissionError extends Error {
+  constructor(message = 'SpreadShare doesn’t have permission to use your Google Sheets / Drive') {
+    super(message);
+    this.name = 'MissingPermissionError';
+  }
+}
+
 const TOKEN_KEY = 'ss_oauth_token';
+const SCOPE_KEY = 'ss_oauth_scope';
 const EXPIRY_KEY = 'ss_oauth_expiry';
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
@@ -74,6 +98,8 @@ class AuthenticationService {
     const expiry = Date.now() + res.expires_in * 1000;
     localStorage.setItem(TOKEN_KEY, res.access_token);
     localStorage.setItem(EXPIRY_KEY, String(expiry));
+    // The permissions actually granted (people can untick Sheets / Drive on Google's screen).
+    if (res.scope) localStorage.setItem(SCOPE_KEY, res.scope);
     this.#settle(res.access_token);
   }
 
@@ -119,6 +145,20 @@ class AuthenticationService {
     return this.#request({ prompt: 'none', ...(hint ? { hint } : {}) }, REQUEST_TIMEOUT_MS.silent);
   }
 
+  /** Required permissions the current token lacks: [] when all are granted. */
+  missingScopes() {
+    return missingFromScope(localStorage.getItem(SCOPE_KEY));
+  }
+
+  /**
+   * Shows Google's consent screen again (with every box) so missing permissions can be granted.
+   * Must be called from a tap.
+   */
+  async requestPermissions(hint) {
+    await this.init();
+    return this.#request({ prompt: 'consent', ...(hint ? { hint } : {}) }, REQUEST_TIMEOUT_MS.interactive);
+  }
+
   /** Milliseconds until the cached token expires (≤ 0 when there is none or it has expired). */
   expiresIn() {
     if (!localStorage.getItem(TOKEN_KEY)) return 0;
@@ -161,6 +201,7 @@ class AuthenticationService {
     const token = localStorage.getItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(EXPIRY_KEY);
+    localStorage.removeItem(SCOPE_KEY);
     if (token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
   }
 

@@ -6,7 +6,7 @@
 //   read  → IndexedDB cache shown immediately → full sheet read merged with still-pending local events
 import { SvelteSet } from 'svelte/reactivity';
 import { CONFIG } from './config.js';
-import { AuthService, AuthRequiredError } from './auth.js';
+import { AuthService, AuthRequiredError, MissingPermissionError } from './auth.js';
 import * as db from './db.js';
 import * as google from './google.js';
 import { dataUrlToBlob } from './image.js';
@@ -50,6 +50,7 @@ export const app = $state({
     authExpired: false, // no usable Google token right now; changes wait in the queue
     needsSignIn: false, // a silent refresh failed: only the Reconnect button can help
     reconnecting: false, // silent refresh in progress
+    missingScopes: [], // required Google permissions not granted ('sheets', 'drive'): nothing can sync
     error: null,
     lastSyncedAt: null,
     progress: null, // { done, total } while refreshing all groups
@@ -73,6 +74,10 @@ async function track(fn) {
 }
 
 function handleError(err, context) {
+  if (err instanceof MissingPermissionError) {
+    app.sync.missingScopes = AuthService.missingScopes().length ? AuthService.missingScopes() : ['sheets', 'drive'];
+    return;
+  }
   if (isAuthError(err)) {
     app.sync.authExpired = true;
     if (err.needsUser) app.sync.needsSignIn = true;
@@ -102,7 +107,10 @@ export async function boot() {
   app.booted = true;
 
   if (profile) {
-    if (AuthService.cachedToken()) {
+    app.sync.missingScopes = AuthService.missingScopes();
+    if (AuthService.cachedToken() && app.sync.missingScopes.length) {
+      // Signed in, but Sheets / Drive access was unticked: wait for "Give access".
+    } else if (AuthService.cachedToken()) {
       onConnected();
     } else {
       // Expired since last time (tokens last an hour). Local data is usable right away; the next
@@ -153,7 +161,8 @@ export async function refreshSession() {
     app.sync.authExpired = false;
     app.sync.needsSignIn = false;
     app.sync.reconnecting = false; // the sync below shows its own progress
-    if (wasExpired) await onConnected();
+    app.sync.missingScopes = AuthService.missingScopes();
+    if (wasExpired && !app.sync.missingScopes.length) await onConnected();
     return true;
   } catch (err) {
     console.warn('Silent Google sign-in failed', err?.message);
@@ -181,7 +190,23 @@ export async function login() {
   await onConnected();
 }
 
+/**
+ * Google's consent screen again, to grant Sheets / Drive access that was left unticked.
+ * Call from a tap. Resolves true when everything needed is granted.
+ */
+export async function grantPermissions() {
+  await AuthService.requestPermissions(app.user?.email);
+  app.sync.missingScopes = AuthService.missingScopes();
+  app.sync.authExpired = false;
+  app.sync.needsSignIn = false;
+  if (app.sync.missingScopes.length) return false;
+  await onConnected();
+  return true;
+}
+
 async function onConnected() {
+  app.sync.missingScopes = AuthService.missingScopes();
+  if (app.sync.missingScopes.length) return; // the banner asks for access first
   await loadDirectory();
   syncPrefs().then(() => prefs.upi && publishUpi(prefs.upi));
   await handlePendingInvite();
@@ -265,7 +290,7 @@ let syncAllRunning = null;
  * @param staleOnly skip groups refreshed within the last couple of minutes
  */
 export function syncAll({ staleOnly = false } = {}) {
-  if (!app.user || app.sync.authExpired || !navigator.onLine) return Promise.resolve();
+  if (!app.user || app.sync.authExpired || app.sync.missingScopes.length || !navigator.onLine) return Promise.resolve();
   syncAllRunning ??= (async () => {
     try {
       await processQueue();
@@ -482,7 +507,7 @@ function rowToEvent(spreadsheetId, row) {
 
 /** Full read of the sheet, merged with local events that are still waiting in the queue. */
 export async function syncGroup(id) {
-  if (!navigator.onLine || app.sync.authExpired) return;
+  if (!navigator.onLine || app.sync.authExpired || app.sync.missingScopes.length) return;
   try {
     const rows = await track(() => google.readLedgerRows(id));
     const remote = rows.map((r) => rowToEvent(id, r)).filter(Boolean);
@@ -569,7 +594,7 @@ async function refreshPending() {
 let queueRunning = false;
 
 export async function processQueue() {
-  if (queueRunning || !app.user || app.sync.authExpired || !navigator.onLine) return;
+  if (queueRunning || !app.user || app.sync.authExpired || app.sync.missingScopes.length || !navigator.onLine) return;
   queueRunning = true;
   let blocked = null;
   try {

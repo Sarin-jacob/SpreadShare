@@ -1,7 +1,7 @@
 // src/lib/google.js
 // Raw Google Drive / Sheets calls. No app state here , see app.svelte.js for orchestration.
 import { CONFIG } from './config.js';
-import { AuthService, AuthRequiredError } from './auth.js';
+import { AuthService, AuthRequiredError, MissingPermissionError } from './auth.js';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -36,7 +36,12 @@ async function gfetch(url, { method = 'GET', body, headers = {}, raw = false } =
     AuthService.invalidate();
     throw new AuthRequiredError();
   }
-  if (!res.ok) throw new GoogleApiError(res.status, await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    // An unticked permission on Google's consent screen, not a sheet we lost access to.
+    if (res.status === 403 && /insufficient|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(text)) throw new MissingPermissionError();
+    throw new GoogleApiError(res.status, text);
+  }
   return raw ? res : res.status === 204 ? null : res.json();
 }
 

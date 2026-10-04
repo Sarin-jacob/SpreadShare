@@ -1,5 +1,5 @@
 <script>
-  import { app, openGroup, login, refreshSession, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
+  import { app, openGroup, login, refreshSession, grantPermissions, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
   import { setBadge } from './lib/pwa.svelte.js';
   import { updates, applyUpdate } from './lib/updates.svelte.js';
   import { route, go } from './lib/router.svelte.js';
@@ -125,6 +125,18 @@
     e.preventDefault();
   }
 
+  let granting = $state(false);
+  async function giveAccess() {
+    granting = true;
+    try {
+      toast((await grantPermissions()) ? 'Thanks! Syncing now.' : 'Both boxes need to be ticked for SpreadShare to work.', 'info');
+    } catch (e) {
+      toast(e.message || 'Google didn’t give access', 'error');
+    } finally {
+      granting = false;
+    }
+  }
+
   let reconnecting = $state(false);
   async function reconnect() {
     reconnecting = true;
@@ -199,6 +211,18 @@
           <button class="btn btn-primary !py-1.5 shrink-0" data-auth-action onclick={reconnect} disabled={reconnecting}>
             {reconnecting ? 'Connecting…' : 'Reconnect'}
           </button>
+        </div>
+      {/if}
+
+      {#if app.sync.missingScopes.length}
+        <div class="mx-4 mt-4 md:mx-8 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm space-y-2" role="alert">
+          <p class="font-semibold text-amber-900 dark:text-amber-100">SpreadShare needs access to your Google {app.sync.missingScopes.length > 1 ? 'Sheets and Drive' : app.sync.missingScopes[0] === 'sheets' ? 'Sheets' : 'Drive'}</p>
+          <p class="text-amber-800 dark:text-amber-200">
+            Your groups are Google Sheets in your Drive, so it can't sync without the
+            {#if app.sync.missingScopes.includes('sheets')}<b>Google Sheets</b>{/if}{#if app.sync.missingScopes.length > 1} and {/if}{#if app.sync.missingScopes.includes('drive')}<b>Google Drive</b>{/if}
+            permission{app.sync.missingScopes.length > 1 ? 's' : ''}. On Google's screen, tick {app.sync.missingScopes.length > 1 ? 'both boxes' : 'that box'}. (The Drive one only covers files SpreadShare creates or opens.) Your changes are saved on this device meanwhile.
+          </p>
+          <button class="btn btn-primary !py-1.5" data-auth-action onclick={giveAccess} disabled={granting}>{granting ? 'Opening Google…' : 'Give access'}</button>
         </div>
       {/if}
 
