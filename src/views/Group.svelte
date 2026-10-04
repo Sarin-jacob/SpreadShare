@@ -363,7 +363,7 @@
                 {@const shown = splitTags(x.title)}
                 {@const m = meta.get(x.eventId)}
                 {@const allTags = tagsOf(x.payload)}
-                <li>
+                <li class="relative group/row">
                   <a href="#/g/{groupId}/e/{x.eventId}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition">
                     <div class="w-8 text-center shrink-0">
                       <div class="text-[10px] uppercase font-semibold text-slate-400 leading-none">{new Date(x.timestamp).toLocaleDateString(undefined, { month: 'short' })}</div>
@@ -394,6 +394,14 @@
                       {#if imp.amount}<div class="text-sm font-bold tabular-nums">{money(imp.amount)}</div>{/if}
                     </div>
                   </a>
+                  <!-- Desktop: quick actions on hover / keyboard focus -->
+                  <div class="hidden lg:group-hover/row:flex lg:group-focus-within/row:flex absolute right-3 top-1/2 -translate-y-1/2 gap-0.5 rounded-xl bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700 p-0.5">
+                    <a class="btn btn-ghost !p-1.5" href="#/g/{groupId}/e/{x.eventId}/edit" title="Edit" aria-label="Edit {shown.text}"><Icon name="edit" class="w-4 h-4" /></a>
+                    {#if x.type === 'EXPENSE_ADD'}
+                      <a class="btn btn-ghost !p-1.5" href="#/g/{groupId}/add?copy={x.eventId}" title="Duplicate" aria-label="Duplicate {shown.text}"><Icon name="copy" class="w-4 h-4" /></a>
+                    {/if}
+                    <a class="btn btn-ghost !p-1.5" href="#/g/{groupId}/e/{x.eventId}?comment=1" title="Comment" aria-label="Comment on {shown.text}"><Icon name="message" class="w-4 h-4" /></a>
+                  </div>
                 </li>
               {/each}
             </ul>

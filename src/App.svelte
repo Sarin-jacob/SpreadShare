@@ -32,7 +32,7 @@
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
   const isSubPage = $derived((seg[0] === 'g' && seg.length > 2) || seg[0] === 'share' || seg[0] === 'quick');
   // Pages with lists, tables and charts use the extra room on desktop; forms stay narrow.
-  const widePage = $derived((seg[0] === 'g' && (seg.length === 2 || seg[2] === 'statement')) || seg[0] === 'insights' || !seg[0]);
+  const widePage = $derived((seg[0] === 'g' && (seg.length === 2 || ['statement', 'add'].includes(seg[2]) || seg[4] === 'edit')) || seg[0] === 'insights' || !seg[0]);
 
   // ─── Pull to refresh (phones; list screens only) ───
   const PULL_TRIGGER = 64;
@@ -220,7 +220,7 @@
             {:else if seg[2] === 'e' && seg[3] && seg[4] === 'edit'}
               <ExpenseForm {groupId} editId={seg[3]} />
             {:else if seg[2] === 'e' && seg[3]}
-              <ExpenseDetail {groupId} eventId={seg[3]} />
+              <ExpenseDetail {groupId} eventId={seg[3]} query={route.query} />
             {:else if seg[2] === 'statement'}
               <Statement {groupId} query={route.query} />
             {:else if seg[2] === 'import'}

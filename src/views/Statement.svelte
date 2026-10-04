@@ -141,6 +141,7 @@
             <tr class="border-b border-slate-100 dark:border-slate-700/60">
               <th class="px-3 py-2 font-semibold">Date</th>
               <th class="px-3 py-2 font-semibold">Entry</th>
+              <th class="px-3 py-2 font-semibold hidden lg:table-cell">Category</th>
               <th class="px-3 py-2 font-semibold text-right hidden sm:table-cell">Paid</th>
               <th class="px-3 py-2 font-semibold text-right hidden sm:table-cell">Share</th>
               <th class="px-3 py-2 font-semibold text-right">Effect</th>
@@ -152,8 +153,11 @@
               <tr>
                 <td class="px-3 py-2 whitespace-nowrap text-slate-500">{day(r.expense.timestamp)}</td>
                 <td class="px-3 py-2 min-w-0">
-                  <a href="#/g/{groupId}/e/{r.expense.eventId}" class="block truncate max-w-[10rem] sm:max-w-xs font-medium">{describe(r.expense)}</a>
-                  {#if r.expense.type === 'EXPENSE_ADD'}<span class="text-[11px] text-slate-400">{category(r.expense.category).label} · {money(r.expense.amount)}</span>{/if}
+                  <a href="#/g/{groupId}/e/{r.expense.eventId}" class="block truncate max-w-[10rem] sm:max-w-xs lg:max-w-sm font-medium">{describe(r.expense)}</a>
+                  {#if r.expense.type === 'EXPENSE_ADD'}<span class="text-[11px] text-slate-400"><span class="lg:hidden">{category(r.expense.category).label} · </span>{money(r.expense.amount)}</span>{/if}
+                </td>
+                <td class="px-3 py-2 whitespace-nowrap text-slate-500 hidden lg:table-cell">
+                  {#if r.expense.type === 'EXPENSE_ADD'}{category(r.expense.category).icon} {category(r.expense.category).label}{:else}{category('Financial').icon} Payment{/if}
                 </td>
                 <td class="px-3 py-2 text-right tabular-nums hidden sm:table-cell">{r.paid ? money(r.paid) : ''}</td>
                 <td class="px-3 py-2 text-right tabular-nums hidden sm:table-cell">{r.share ? money(r.share) : ''}</td>

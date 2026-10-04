@@ -13,7 +13,7 @@
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
 
-  let { groupId, eventId } = $props();
+  let { groupId, eventId, query = {} } = $props();
 
   const me = app.user.email;
   const L = $derived(ledger.current);
@@ -67,6 +67,13 @@
   });
 
   let commentText = $state('');
+  let commentEl = $state();
+  // Opened with ?comment=1 (feed quick action): straight to the comment box.
+  $effect(() => {
+    if (!query.comment || !commentEl) return;
+    commentEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    commentEl.focus({ preventScroll: true });
+  });
   let posting = $state(false);
   async function postComment(e) {
     e.preventDefault();
@@ -267,7 +274,7 @@
         <p class="text-xs text-slate-400">No comments yet. Ask about it or explain a change here; everyone in the group sees it.</p>
       {/each}
       <form class="flex gap-2" onsubmit={postComment}>
-        <input class="field !py-2 flex-1" bind:value={commentText} placeholder="Add a comment…" maxlength="1000" aria-label="Add a comment" />
+        <input class="field !py-2 flex-1" bind:this={commentEl} bind:value={commentText} placeholder="Add a comment…" maxlength="1000" aria-label="Add a comment" />
         <button class="btn btn-primary !py-2 shrink-0" disabled={!commentText.trim() || posting}>Post</button>
       </form>
     </section>
