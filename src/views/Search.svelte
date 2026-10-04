@@ -81,6 +81,20 @@
     return { all, mine };
   });
 
+  // Results per group (count, expense total); tap one to see only that group.
+  let groupFilter = $state(null);
+  const byGroup = $derived.by(() => {
+    const out = new Map();
+    for (const { groupId, x, currency } of results) {
+      const g = out.get(groupId) ?? { groupId, count: 0, total: 0, currency };
+      g.count++;
+      if (x.type === 'EXPENSE_ADD') g.total += x.amount;
+      out.set(groupId, g);
+    }
+    return [...out.values()].sort((a, b) => b.count - a.count);
+  });
+  const visible = $derived(groupFilter && byGroup.some((g) => g.groupId === groupFilter) ? results.filter((r) => r.groupId === groupFilter) : results);
+
   const topTags = $derived(tagCounts(entries.map((e) => e.x)).slice(0, 12));
   const recent = $derived(entries.slice(0, 8));
 
@@ -155,11 +169,25 @@
       {results.length} result{results.length === 1 ? '' : 's'}
       {#if totals.all}· {money(totals.all)} in expenses · your share {money(totals.mine)}{/if}
     </p>
-    {#if results.length}
+    {#if byGroup.length > 1}
+      <div class="flex flex-wrap gap-1.5">
+        {#each byGroup as g (g.groupId)}
+          {@const on = groupFilter === g.groupId}
+          <button
+            class="px-2.5 py-1 rounded-full text-xs font-semibold border transition {on ? 'border-accent-500 bg-accent-500/15 text-accent-700 dark:text-accent-300' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'}"
+            aria-pressed={on}
+            onclick={() => (groupFilter = on ? null : g.groupId)}
+          >
+            {groupName(g.groupId)} <span class="font-normal text-slate-400">· {g.count}{g.total ? ` · ${money(g.total, g.currency, { decimals: 0 })}` : ''}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    {#if visible.length}
       <ul class="card divide-y divide-slate-100 dark:divide-slate-700/60 overflow-hidden">
-        {#each results.slice(0, 200) as r (r.groupId + r.x.eventId)}{@render row(r)}{/each}
+        {#each visible.slice(0, 200) as r (r.groupId + r.x.eventId)}{@render row(r)}{/each}
       </ul>
-      {#if results.length > 200}<p class="text-xs text-center text-slate-400">Showing the newest 200. Narrow your search to see more.</p>{/if}
+      {#if visible.length > 200}<p class="text-xs text-center text-slate-400">Showing the newest 200. Narrow your search to see more.</p>{/if}
     {:else}
       <p class="text-sm text-center text-slate-400 py-8">Nothing matches. Try fewer words, or a #tag.</p>
     {/if}
