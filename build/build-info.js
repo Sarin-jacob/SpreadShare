@@ -3,8 +3,11 @@
 //  - The app gets __APP_VERSION__, __BUILD_ID__ and __BUILD_TIME__ (shown in Settings).
 //  - dist/sw.js gets the same ID in place of '__BUILD_ID__', so every deploy changes the service
 //    worker's bytes. That's what makes browsers notice an update and lets the app offer it.
+//  - dist/sw.js also gets the list of built JS/CSS files in place of '__PRECACHE__', so a new
+//    version installs with all its code, including lazy chunks (receipt reader glue, pdf.js) that
+//    would otherwise only be cached once used online.
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 function gitSha() {
@@ -37,7 +40,13 @@ export default function buildInfo() {
     closeBundle() {
       const sw = join(outDir, 'sw.js');
       if (!existsSync(sw)) return;
-      writeFileSync(sw, readFileSync(sw, 'utf8').replaceAll('__BUILD_ID__', id));
+      const assets = existsSync(join(outDir, 'assets')) ? readdirSync(join(outDir, 'assets')).map((f) => `./assets/${f}`) : [];
+      writeFileSync(
+        sw,
+        readFileSync(sw, 'utf8')
+          .replaceAll('__BUILD_ID__', id)
+          .replace("['__PRECACHE__']", JSON.stringify(['./manifest.webmanifest', ...assets.sort()]))
+      );
     },
   };
 }

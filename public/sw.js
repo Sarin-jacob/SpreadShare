@@ -12,6 +12,9 @@ const SHARE_CACHE = 'spreadshare-share';
 // Keep in sync with src/lib/ocrOffline.svelte.js. Bump when the vendored PaddleOCR version changes.
 const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
+// Every built JS/CSS file, filled in by build/build-info.js. Precached so the whole app, including
+// the receipt scanner's lazy chunks, works offline right after an update.
+const PRECACHE = ['__PRECACHE__'];
 const IMMUTABLE = /\/(assets|icons)\//;
 
 /** Version-pinned packages on jsDelivr ("/npm/name@1.2.3/…") and the PaddleOCR model bucket. */
@@ -23,7 +26,24 @@ function isOcrAsset(url) {
 // A new version installs in the background and then waits, so the app can offer "Update" instead
 // of swapping code under someone mid-entry. (The very first install activates straight away.)
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await cache.addAll(SHELL);
+      // Content-hashed files that didn't change are copied from the previous version's cache;
+      // the rest are downloaded. Best effort: one failed file must not block the update.
+      const files = PRECACHE.filter((u) => u !== '__PRECACHE__');
+      await Promise.allSettled(
+        files.map(async (u) => {
+          const url = new URL(u, self.registration.scope).href;
+          const old = IMMUTABLE.test(url) ? await caches.match(url) : null;
+          if (old) return cache.put(url, old);
+          const res = await fetch(url, { cache: 'no-cache' });
+          if (res.ok) await cache.put(url, res);
+        })
+      );
+    })()
+  );
 });
 
 self.addEventListener('message', (event) => {
