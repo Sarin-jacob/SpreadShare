@@ -44,18 +44,8 @@ export function receiptItems(receipt) {
     }));
 }
 
-/** Whole-unit quantity worth splitting into separate lines ("3 × Beer" → three ₹300 lines). */
+/** Whole-unit quantity worth counting per person ("3 × Beer": 2 for Asha, 1 for Ravi). */
 export const unitCount = (item) => (Number.isInteger(item?.qty) && item.qty >= 2 && item.qty <= 30 ? item.qty : 0);
-
-/** One line per unit, so each can go to a different person. Rounding lands on the last line. */
-export function splitUnits(name, total, qty) {
-  const cents = Math.round(total * 100);
-  const each = Math.floor(cents / qty);
-  return Array.from({ length: qty }, (_, i) => ({
-    name: `${name} (${i + 1}/${qty})`,
-    total: (i === qty - 1 ? cents - each * (qty - 1) : each) / 100,
-  }));
-}
 
 /**
  * What the receipt itself says about how many items / units it lists, compared with what was

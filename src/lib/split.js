@@ -58,11 +58,22 @@ export function exactWithRemainder(total, inputs, members, nameOf = (m) => m) {
   return { vals, auto };
 }
 
+/** Per-person weights for one item: its `shares` when set (counts or shares), else 1 each. */
+export function itemWeights(item) {
+  const members = item.members || [];
+  if (!item.shares) return Object.fromEntries(members.map((m) => [m, 1]));
+  return Object.fromEntries(members.map((m) => [m, Number(item.shares[m]) || 0]).filter(([, w]) => w > 0));
+}
+
+/** Sum of an item's counts (null when it's split equally). */
+export const itemCounted = (item) => (item.shares ? round2(sum(Object.values(itemWeights(item)))) : null);
+
 /**
- * Item-wise split: each item is shared equally by the people who had it, then the bill
- * total (tax, service, discounts, rounding included) is spread in proportion to each
- * person's item subtotal.
- * @param items [{ name, amount: string|number, members: string[] }]
+ * Item-wise split: each item is shared by the people who had it (equally, or by how many /
+ * what share each had), then the bill total (tax, service, discounts, rounding included) is
+ * spread in proportion to each person's item subtotal.
+ * @param items [{ name, amount: string|number, members: string[], shares?: Record<string,number>, qty?: number }]
+ *   With `shares` and `qty`, the counts must add up to qty ("2 beers for Asha, 1 for Ravi").
  * @returns {{ alloc: Record<string,number>, itemsTotal?: number, extras?: number, error?: string }}
  */
 export function splitByItems(total, items, nameOf = (m) => m) {
@@ -73,7 +84,13 @@ export function splitByItems(total, items, nameOf = (m) => m) {
     const v = typeof it.amount === 'number' ? it.amount : evaluate(it.amount);
     if (v === null) return { alloc: {}, error: `Check the price of ${label}` };
     if (!it.members?.length) return { alloc: {}, error: `Pick who had ${label}` };
-    const parts = distribute(Math.abs(v), Object.fromEntries(it.members.map((m) => [m, 1]))) || {};
+    const weights = itemWeights(it);
+    if (!Object.keys(weights).length) return { alloc: {}, error: `Pick who had ${label}` };
+    const counted = itemCounted(it);
+    if (counted != null && it.qty && Math.abs(counted - it.qty) > 0.009) {
+      return { alloc: {}, error: `${label}: ${counted} of ${it.qty} counted` };
+    }
+    const parts = distribute(Math.abs(v), weights) || {};
     for (const [m, share] of Object.entries(parts)) perMember[m] = round2((perMember[m] || 0) + Math.sign(v) * share);
   }
   const itemsTotal = round2(sum(Object.values(perMember)));

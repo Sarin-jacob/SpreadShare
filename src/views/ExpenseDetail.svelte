@@ -173,9 +173,17 @@
           <div class="flex items-center gap-3">
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium truncate">{it.name}{#if it.qty}<span class="text-xs font-normal text-slate-400"> · {it.qty} × {money(it.amount / it.qty, itemCur)}</span>{/if}</div>
-              <div class="flex -space-x-1.5 mt-1">
-                {#each it.members as m (m)}<Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />{/each}
-              </div>
+              {#if it.shares}
+                <div class="flex flex-wrap gap-x-2.5 gap-y-1 mt-1 text-xs text-slate-500">
+                  {#each it.members.filter((m) => it.shares[m] > 0) as m (m)}
+                    <span class="flex items-center gap-1"><Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />{name(m)} <b class="tabular-nums">×{it.shares[m]}</b></span>
+                  {/each}
+                </div>
+              {:else}
+                <div class="flex -space-x-1.5 mt-1">
+                  {#each it.members as m (m)}<Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />{/each}
+                </div>
+              {/if}
             </div>
             <span class="text-sm tabular-nums">{money(it.amount, itemCur)}</span>
           </div>

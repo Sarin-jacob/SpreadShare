@@ -7,7 +7,7 @@
   import { CATEGORIES } from '../lib/categories.js';
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
-  import { computeSplit, exactWithRemainder } from '../lib/split.js';
+  import { computeSplit, exactWithRemainder, itemCounted } from '../lib/split.js';
   import { suggestCategoryFor } from '../lib/categorize.js';
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
   import { parsePaymentText, looksLikePayment } from '../lib/paymentText.js';
@@ -17,7 +17,7 @@
   import { loadAllEvents } from '../lib/cache.svelte.js';
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
-  import { unitCount, splitUnits } from '../lib/receipt/draft.js';
+  import { unitCount } from '../lib/receipt/draft.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
@@ -58,7 +58,9 @@
   let to = $state('');
   let interestExpr = $state('');
   let receipt = $state(null);
-  let receiptItems = $state([]); // [{ name, amount: string, members: string[] }] for the 'ITEMS' split
+  // [{ name, amount: string, qty, members: string[], shares: null | { member: count }, fractions }] for the 'ITEMS' split.
+  // shares = null: split equally between members; otherwise by how many / what share each had.
+  let receiptItems = $state([]);
   let receiptScan = $state(null); // compact copy of a scanned receipt, kept on the expense
   let scanFile = $state(null);
   let dropping = $state(false); // an image is being dragged over the scan card
@@ -145,7 +147,15 @@
         const inSplit = new Set(p.split_members || allocs.filter((a) => a.value > 0).map((a) => a.user));
         excluded = Object.fromEntries(members.filter((m) => !inSplit.has(m)).map((m) => [m, true]));
       } else if (strategy === 'ITEMS' && p.receipt_items?.length) {
-        receiptItems = p.receipt_items.map((i) => ({ name: i.name, amount: String(i.amount), qty: i.qty ?? null, members: [...i.members] }));
+        receiptItems = p.receipt_items.map((i) => ({
+          name: i.name,
+          amount: String(i.amount),
+          qty: i.qty ?? null,
+          members: [...i.members],
+          shares: i.shares ? { ...i.shares } : null,
+          fractions: !!i.shares && Object.values(i.shares).some((v) => !Number.isInteger(v)),
+          byCount: !!i.shares && !!i.qty,
+        }));
       } else if (p.split_inputs) {
         splitInputs = { ...p.split_inputs };
       } else {
@@ -356,7 +366,7 @@
 
     const everyone = members.filter((m) => !excluded[m]);
     if (draft.items.length) {
-      receiptItems = draft.items.map((i) => ({ name: i.name, amount: String(i.total), qty: unitCount(i) || null, members: [...everyone] }));
+      receiptItems = draft.items.map((i) => ({ name: i.name, amount: String(i.total), qty: unitCount(i) || null, members: [...everyone], shares: null, fractions: false }));
     }
     if (mode === 'items') strategy = 'ITEMS';
 
@@ -364,21 +374,49 @@
     else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read. Check the details.', 'info');
   }
 
-  /** "3 × Beer ₹900" → three ₹300 lines, so each beer can go to someone different. */
-  function splitItemUnits(idx) {
-    const item = receiptItems[idx];
-    const lines = splitUnits(item.name.trim() || 'Item', evaluate(item.amount) ?? 0, item.qty);
-    receiptItems.splice(idx, 1, ...lines.map((l) => ({ name: l.name, amount: String(l.total), qty: null, members: [...item.members] })));
-  }
-
   function addItem() {
-    receiptItems.push({ name: '', amount: '', members: members.filter((m) => !excluded[m]) });
+    receiptItems.push({ name: '', amount: '', qty: null, members: members.filter((m) => !excluded[m]), shares: null, fractions: false });
   }
 
   function toggleItemMember(item, m) {
     const i = item.members.indexOf(m);
-    if (i === -1) item.members.push(m);
-    else item.members.splice(i, 1);
+    if (i === -1) {
+      item.members.push(m);
+      if (item.shares) item.shares[m] = 1;
+    } else {
+      item.members.splice(i, 1);
+      if (item.shares) delete item.shares[m];
+    }
+  }
+
+  /** "How many each?": per-person counts (or shares when the receipt gave no quantity), 1 each to start. */
+  function countItem(item) {
+    item.shares = Object.fromEntries(item.members.map((m) => [m, 1]));
+    item.byCount = !!item.qty; // counts against the receipt's quantity, else plain shares
+  }
+
+  function equalItem(item) {
+    item.shares = null;
+    item.fractions = false;
+  }
+
+  /** +1 / −1 (or ±½ once halves are allowed). Reaching 0 takes the person off the item. */
+  function stepShare(item, m, dir) {
+    const step = item.fractions ? 0.5 : 1;
+    const next = round2((item.shares[m] || 0) + dir * step);
+    if (next <= 0) {
+      delete item.shares[m];
+      item.members = item.members.filter((x) => x !== m);
+    } else {
+      item.shares[m] = next;
+      if (!item.members.includes(m)) item.members.push(m);
+    }
+  }
+
+  /** Turning halves off rounds any ½ counts back to whole ones. */
+  function setFractions(item, on) {
+    item.fractions = on;
+    if (!on) for (const m of Object.keys(item.shares)) item.shares[m] = Math.max(1, Math.round(item.shares[m]));
   }
 
   /** After saving: a heads-up when this month's share of a budgeted category is near or over. */
@@ -423,7 +461,13 @@
       });
       if (strategy === 'EQUALLY') payload.split_members = members.filter((m) => !excluded[m]);
       else if (strategy === 'ITEMS') {
-        payload.receipt_items = receiptItems.map((i) => ({ name: i.name.trim() || 'Item', amount: round2(evaluate(i.amount) ?? 0), ...(i.qty ? { qty: i.qty } : {}), members: [...i.members] }));
+        payload.receipt_items = receiptItems.map((i) => ({
+          name: i.name.trim() || 'Item',
+          amount: round2(evaluate(i.amount) ?? 0),
+          ...(i.qty ? { qty: i.qty } : {}),
+          members: [...i.members],
+          ...(i.shares ? { shares: Object.fromEntries(i.members.map((m) => [m, i.shares[m] || 0])) } : {}),
+        }));
       } else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
       if (receipt) payload.receipt_local_url = receipt;
       if (receiptScan) payload.receipt_scan = $state.snapshot(receiptScan);
@@ -709,29 +753,61 @@
                   <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={item.amount} inputmode="decimal" placeholder="0" aria-label="Item price" />
                   <button type="button" class="btn btn-ghost !p-1.5 shrink-0" aria-label="Remove item" onclick={() => receiptItems.splice(idx, 1)}><Icon name="x" class="w-4 h-4" /></button>
                 </div>
-                {#if item.qty}
-                  <div class="flex items-center gap-2 text-xs text-slate-500">
-                    <span class="tabular-nums">{item.qty} × {money((evaluate(item.amount) ?? 0) / item.qty)}</span>
-                    <button type="button" class="font-semibold text-accent-600 dark:text-accent-400" onclick={() => splitItemUnits(idx)}>
-                      Split into {item.qty} lines
-                    </button>
-                    <span class="text-slate-400">so different people can take one each</span>
-                  </div>
-                {/if}
                 <div class="flex flex-wrap gap-1.5">
                   {#each members as m (m)}
                     {@const on = item.members.includes(m)}
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      class="flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full border text-xs font-medium transition
-                        {on ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 opacity-50'}"
-                      onclick={() => toggleItemMember(item, m)}
-                    >
-                      <Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />
-                      {name(m)}
-                    </button>
+                    {#if item.shares && on}
+                      <!-- How many / what share this person had -->
+                      <span class="flex items-center gap-1 pl-0.5 pr-0.5 py-0.5 rounded-full border border-accent-500 bg-accent-500/10 text-xs font-medium">
+                        <Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />
+                        <span class="pl-0.5">{name(m)}</span>
+                        <button type="button" class="w-6 h-6 rounded-full grid place-items-center hover:bg-accent-500/20 text-base leading-none" aria-label="One less for {name(m)}" onclick={() => stepShare(item, m, -1)}>−</button>
+                        <span class="min-w-[1.5rem] text-center font-bold tabular-nums" aria-live="polite">{item.shares[m]}</span>
+                        <button type="button" class="w-6 h-6 rounded-full grid place-items-center hover:bg-accent-500/20 text-base leading-none" aria-label="One more for {name(m)}" onclick={() => stepShare(item, m, 1)}>+</button>
+                      </span>
+                    {:else}
+                      <button
+                        type="button"
+                        aria-pressed={on}
+                        class="flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full border text-xs font-medium transition
+                          {on ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700 opacity-50'}"
+                        onclick={() => toggleItemMember(item, m)}
+                      >
+                        <Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />
+                        {name(m)}
+                      </button>
+                    {/if}
                   {/each}
+                </div>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  {#if item.shares}
+                    {@const counted = itemCounted(item)}
+                    {#if item.byCount}
+                      <span class="tabular-nums {Math.abs(counted - (item.qty || 0)) > 0.009 ? 'text-amber-600 dark:text-amber-400 font-semibold' : ''}">
+                        {counted} of
+                        <input
+                          class="w-10 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-700 bg-transparent text-center tabular-nums"
+                          type="number" min="1" step={item.fractions ? 0.5 : 1}
+                          bind:value={item.qty}
+                          aria-label="Quantity on the receipt"
+                        /> counted
+                      </span>
+                    {:else}
+                      <span>Split by shares ({counted} in total)</span>
+                    {/if}
+                    <label class="flex items-center gap-1 cursor-pointer" title="Allow half portions, e.g. 1½ each">
+                      <input type="checkbox" class="w-3.5 h-3.5 accent-[var(--accent-500)]" checked={item.fractions} onchange={(e) => setFractions(item, e.currentTarget.checked)} />
+                      Allow ½
+                    </label>
+                    <button type="button" class="font-semibold text-accent-600 dark:text-accent-400" onclick={() => equalItem(item)}>Split equally</button>
+                  {:else}
+                    {#if item.qty}<span class="tabular-nums">{item.qty} × {money((evaluate(item.amount) ?? 0) / item.qty)}</span>{/if}
+                    {#if item.members.length}
+                      <button type="button" class="font-semibold text-accent-600 dark:text-accent-400" onclick={() => countItem(item)}>
+                        {item.qty ? 'How many each?' : 'Uneven shares'}
+                      </button>
+                    {/if}
+                  {/if}
                 </div>
               </li>
             {/each}

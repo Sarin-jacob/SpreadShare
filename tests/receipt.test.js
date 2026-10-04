@@ -3,7 +3,7 @@ import { toBoxes } from '../src/lib/receipt/ocr.js';
 import { solveReceipt } from '../src/lib/receipt/solver.js';
 import { normalize } from '../src/lib/receipt/schema.js';
 import { audit } from '../src/lib/receipt/audit.js';
-import { receiptToDraft, receiptDateTime, guessCategory, compactScan, unitCount, splitUnits, countMismatch, describeCheck } from '../src/lib/receipt/draft.js';
+import { receiptToDraft, receiptDateTime, guessCategory, compactScan, unitCount, countMismatch, describeCheck } from '../src/lib/receipt/draft.js';
 import { splitByItems } from '../src/lib/split.js';
 
 /** Builds PaddleOCR-shaped boxes from [text, x] runs per row (10 px per character, rows 30 px apart). */
@@ -120,6 +120,27 @@ describe('splitByItems', () => {
     expect(r.alloc).toEqual({ a: 45, b: 45 });
   });
 
+  it('splits an item by how many each person had', () => {
+    // 3 beers for 300: Asha had 2, Ravi 1; no tax.
+    const r = splitByItems(300, [{ name: 'Beer', amount: 300, qty: 3, members: ['a', 'r'], shares: { a: 2, r: 1 } }]);
+    expect(r.alloc).toEqual({ a: 200, r: 100 });
+  });
+
+  it('needs the counts to add up to the quantity', () => {
+    const r = splitByItems(300, [{ name: 'Beer', amount: 300, qty: 3, members: ['a', 'r'], shares: { a: 1, r: 1 } }]);
+    expect(r.error).toBe('Beer: 2 of 3 counted');
+  });
+
+  it('takes shares (and halves) when there is no quantity', () => {
+    const r = splitByItems(100, [{ name: 'Pizza', amount: 100, members: ['a', 'b'], shares: { a: 1.5, b: 0.5 } }]);
+    expect(r.alloc).toEqual({ a: 75, b: 25 });
+  });
+
+  it('ignores people whose count dropped to zero', () => {
+    const r = splitByItems(90, [{ name: 'Tea', amount: 90, members: ['a', 'b', 'c'], shares: { a: 1, b: 2, c: 0 } }]);
+    expect(r.alloc).toEqual({ a: 30, b: 60 });
+  });
+
   it('requires prices and people for every item', () => {
     expect(splitByItems(10, [{ name: 'x', amount: 'abc', members: ['a'] }]).error).toMatch(/price/);
     expect(splitByItems(10, [{ name: 'x', amount: 5, members: [] }]).error).toMatch(/Pick who/);
@@ -141,17 +162,11 @@ describe('quantities', () => {
     expect(it).toMatchObject({ name: 'Garlic Naan', qty: 3, unit_price: 60, total: 180 });
   });
 
-  it('offers a per-unit split only for whole counts', () => {
+  it('offers per-person counts only for whole quantities', () => {
     expect(unitCount({ qty: 3 })).toBe(3);
     expect(unitCount({ qty: 1 })).toBe(0);
     expect(unitCount({ qty: 0.5 })).toBe(0); // 0.5 kg
     expect(unitCount({ qty: 250 })).toBe(0); // grams, not units
-  });
-
-  it('splits into equal lines that add back to the amount', () => {
-    const lines = splitUnits('Beer', 100, 3);
-    expect(lines.map((l) => l.name)).toEqual(['Beer (1/3)', 'Beer (2/3)', 'Beer (3/3)']);
-    expect(lines.map((l) => l.total)).toEqual([33.33, 33.33, 33.34]);
   });
 });
 
