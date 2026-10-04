@@ -49,7 +49,7 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 ### Done
 - [x] **Receipt Auto-Parsing:** On-device OCR extracts totals, dates, merchant names, items and taxes from photos, screenshots and gallery images (camera, gallery, drag-and-drop or paste).
 - [x] **Item-Wise Bill Splitting:** Assign line items from a scanned receipt to specific members instead of splitting the grand total.
-- [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback.
+- [x] **Smart Auto-Categorization:** Predicts the category from the title, scanned shop and item names, using a model trained on your own past expenses with keyword rules as a fallback. The rules vote: what you typed counts most, then the shop, and items vote by amount, so a "Hotel" bill full of dosas is Food.
 - [x] **Offline receipt reader:** Downloaded on install and kept on the device, so scanning works without a connection.
 - [x] **Share to SpreadShare:** Share a receipt photo or screenshot, or a payment message, from Gallery, WhatsApp, Messages or a delivery app straight into a new expense (installed app, Web Share Target).
 - [x] **Paste a payment message:** Bank SMS, UPI notifications and payment emails ("Rs 450.00 debited … to SWIGGY on 01-10-26") become an expense with amount, merchant and date filled in.
@@ -79,6 +79,7 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [ ] **Reminders for recurring bills:** A nudge when rent or a subscription is due.
 
 ### Smarter on-device AI
+- [x] **Quantities on receipts:** Item quantity and rate are read, shown, kept on the expense, and "3 × Beer" can be split into three lines for three people.
 - [ ] **Learns from your corrections:** When you fix a scanned total or merchant, remember that shop's receipt layout.
 - [ ] **Richer category model:** Also use the amount, time of day and group to break ties.
 - [ ] **Duplicate detection:** Warn when someone in the group already added the same bill (same amount, date and shop).
@@ -92,6 +93,10 @@ Because SpreadShare has no backend, deployment consists entirely of serving stat
 2. A new project with the **Google Drive API** and **Google Sheets API** enabled.
 3. An OAuth 2.0 Client ID configured for "Web application".
 4. Add your deployment domain (e.g., `https://sarin-jacob.github.io`) or `http://localhost` for development to the Authorized JavaScript origins.
+5. Move the OAuth consent screen out of **Testing** (Google Auth Platform → Audience → Publish app) once it works. In Testing only listed test users can sign in, and Google treats their authorizations as temporary (it documents a 7-day expiry), so expect a fresh sign-in about once a week. An unverified app in production works for up to 100 users behind Google's "unverified app" warning; verification removes the warning.
+
+### Staying signed in
+There is no server, so there is no refresh token: Google access tokens last one hour. When one has expired (or is about to), the app gets a new one on your next tap or key press, the only time browsers allow Google's popup, which closes by itself because you've already agreed. You only see a **Reconnect** banner when Google really needs you: the authorization expired (see Testing above), you signed out of Google, or the popup was blocked or closed. Changes made meanwhile wait in the offline queue.
 
 ### Development
 1. Clone the repository and run `npm install`.
@@ -104,7 +109,7 @@ Because SpreadShare has no backend, deployment consists entirely of serving stat
 ```
 src/
   App.svelte            app shell + hash routing
-  views/                Groups, Group, ExpenseForm, ExpenseDetail, Insights, Settings, Login
+  views/                Groups, Group, ExpenseForm, ExpenseDetail, Insights, Search, Statement, Settings, Login
   components/           Avatar, Donut, TrendChart, SyncStatus, Toasts, ...
   lib/
     app.svelte.js       global state, offline queue, sync orchestration
@@ -128,14 +133,14 @@ The app icon lives in `src/lib/brandIcon.js`. At build time, `build/brand-icons.
 ### Receipt parser
 `src/lib/receipt/` runs entirely in the browser and is code-split, so it only loads when someone taps **Scan a receipt**:
 
-- `ocr.js`, `preprocess.js`, `solver.js`, `datetime.js`, `schema.js`, `audit.js` are **vendored unchanged** from the receipt_test bench (commit noted in each file header). Improve the parser there, measure it on the bench, then copy the files back.
+- `ocr.js`, `preprocess.js`, `solver.js`, `rows.js`, `meta.js`, `datetime.js`, `schema.js`, `audit.js` are **vendored unchanged** from the receipt_test bench (commit noted in each file header). Improve the parser there, measure it on the bench, then copy the files back.
 - `image.js` holds the scanner's photo handling (auto corners, perspective flattening, brightness / contrast).
-- `draft.js` maps a parsed receipt onto expense fields (amount, date, merchant, category guess, items).
+- `draft.js` maps a parsed receipt onto expense fields (amount, date, merchant, category guess, items with quantity and rate), splits a multi-unit item into one line per unit, and turns the self-check into plain-language warnings (including "the receipt lists 11 items, 10 were read").
 - `pdf.js` / `pdfText.js` open PDF bills with pdf.js (its own lazily-loaded chunk). Text PDFs have their positioned text turned into OCR-style boxes and go straight to the solver; scanned PDFs are rendered and OCR'd.
 - `paddle-lazy.js` stands in for the PaddleOCR CDN import (via an alias in `vite.config.js`) so the ~12 MB of OCR code downloads only when OCR actually runs. Text PDFs and the crop editor work without it, even offline.
 - `index.js` is the entry point the UI imports lazily.
 
-PaddleOCR is loaded from jsDelivr (pinned version). The service worker keeps PaddleOCR, OpenCV, the ONNX runtime and both models in a dedicated `spreadshare-ocr-…` cache that survives app updates; `src/lib/ocrOffline.svelte.js` downloads it in the background when the app is installed and powers the Settings row. Bump the cache name in `public/sw.js` and `ocrOffline.svelte.js` together if the PaddleOCR version changes. Unit tests feed synthetic OCR boxes through the real solver (`tests/receipt.test.js`); the CDN import is stubbed in `vitest.config.js`.
+PaddleOCR is loaded from jsDelivr (pinned version). The service worker keeps PaddleOCR, OpenCV, the ONNX runtime and both models in a dedicated `spreadshare-ocr-…` cache that survives app updates; `src/lib/ocrOffline.svelte.js` downloads it in the background when the app is installed and powers the Settings row. Bump the cache name in `public/sw.js` and `ocrOffline.svelte.js` together if the PaddleOCR version changes. Every build also lists its JS/CSS files in `sw.js`, and a new version precaches all of them (copying unchanged files from the old cache) before it takes over, so the scanner's lazily-loaded code is on the device even after an update you never scanned with. Unit tests feed synthetic OCR boxes through the real solver (`tests/receipt.test.js`); the CDN import is stubbed in `vitest.config.js`.
 
 ### Deploying to GitHub Pages
 ```bash
