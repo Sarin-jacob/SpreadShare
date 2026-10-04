@@ -18,6 +18,7 @@
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
   import { unitCount } from '../lib/receipt/draft.js';
+  import { batch, batchPosition, startBatch, nextInBatch, endBatch } from '../lib/batch.svelte.js';
   import { REPEATS } from '../lib/recurring.js';
   import { findDuplicates } from '../lib/duplicates.js';
   import { money, toLocalInput } from '../lib/format.js';
@@ -92,6 +93,20 @@
       if (out.length >= 12) break;
     }
     return out;
+  });
+
+  // A form opened any other way drops a batch that was left half done.
+  if (!untrack(() => prefill.batch)) endBatch();
+
+  // Next receipt of a batch: scan it as soon as the form is ready.
+  let batchTaken = false;
+  $effect(() => {
+    if (!ready || batchTaken || !prefill.batch) return;
+    batchTaken = true;
+    untrack(() => {
+      const file = nextInBatch();
+      if (file) startScan(file);
+    });
   });
 
   // Opened from the "Scan receipt" shortcut: the browser needs a tap to open the camera.
@@ -305,9 +320,29 @@
   }
 
   function onScanFile(e) {
-    const file = e.currentTarget.files?.[0];
+    const files = [...(e.currentTarget.files || [])].filter(isScannable);
     e.currentTarget.value = '';
-    startScan(file);
+    // Several at once: scan them one by one, each as its own expense.
+    startScan(files.length > 1 ? startBatch(files) : files[0]);
+  }
+
+  /** Opens a fresh form for the next receipt in the batch (or finishes it). */
+  function goToNext() {
+    if (batch.files.length) go(`/g/${groupId}/add`, { batch: String(Date.now()) });
+    else {
+      endBatch();
+      replace(`/g/${groupId}`);
+    }
+  }
+
+  function skipReceipt() {
+    toast('Skipped', 'info');
+    goToNext();
+  }
+
+  function stopBatch() {
+    endBatch();
+    toast('Stopped. The rest weren’t added.', 'info');
   }
 
   function onDrop(e) {
@@ -370,8 +405,8 @@
     sharedTaken = true;
     takeShared().then((shared) => {
       if (!shared) return;
-      const file = shared.files.find(isScannable);
-      if (file) return startScan(file);
+      const files = shared.files.filter(isScannable);
+      if (files.length) return startScan(files.length > 1 ? startBatch(files) : files[0]);
       const parsed = parsePaymentText(shared.text);
       if (parsed) applyPayment(parsed, { replaceTitle: true });
       else {
@@ -528,7 +563,11 @@
         localStorage.setItem(lastCurrencyKey(), currency);
       } catch {}
       if (type === 'EXPENSE_ADD') warnIfOverBudget(payload.category);
-      replace(`/g/${groupId}`);
+      if (batch.files.length) goToNext();
+      else {
+        endBatch();
+        replace(`/g/${groupId}`);
+      }
     } catch (err) {
       toast(`Couldn’t save: ${err.message}`, 'error');
       saving = false;
@@ -599,6 +638,15 @@
   <div class="py-20 text-center text-slate-400 text-sm">{editId ? 'Loading entry…' : ''}</div>
 {:else}
   <form class="space-y-5" onsubmit={save}>
+    {#if batch.total > 1 && !editId}
+      <div class="flex items-center gap-3 rounded-xl border border-accent-500/30 bg-accent-500/10 px-4 py-2.5 text-sm" role="status">
+        <span class="flex-1 font-semibold">Receipt {batchPosition()} of {batch.total}</span>
+        {#if batch.files.length}
+          <button type="button" class="text-xs font-semibold text-accent-700 dark:text-accent-300" onclick={skipReceipt}>Skip</button>
+          <button type="button" class="text-xs font-semibold text-slate-500" onclick={stopBatch}>Stop</button>
+        {/if}
+      </div>
+    {/if}
     <div class="flex items-center gap-2">
       <button type="button" class="btn btn-ghost !p-2 -ml-2" aria-label="Back" onclick={() => history.back()}><Icon name="back" /></button>
       <h1 class="text-xl font-black tracking-tight flex-1">{editId ? 'Edit entry' : prefill.copy ? 'Duplicate entry' : 'New entry'}</h1>
@@ -642,16 +690,16 @@
             </label>
             <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
               <Icon name="image" class="w-4 h-4" /> Photos
-              <input type="file" accept="image/*" class="hidden" onchange={onScanFile} />
+              <input type="file" accept="image/*" multiple class="hidden" onchange={onScanFile} />
             </label>
             <label class="btn btn-soft !px-2 !py-2 text-sm cursor-pointer">
               <Icon name="sheet" class="w-4 h-4" /> PDF
-              <input type="file" accept="application/pdf,.pdf" class="hidden" onchange={onScanFile} />
+              <input type="file" accept="application/pdf,.pdf" multiple class="hidden" onchange={onScanFile} />
             </label>
           {:else}
             <label class="btn btn-soft !py-2 text-sm cursor-pointer">
               <Icon name="image" class="w-4 h-4" /> Choose image or PDF
-              <input type="file" accept="image/*,application/pdf,.pdf" class="hidden" onchange={onScanFile} />
+              <input type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" onchange={onScanFile} />
             </label>
           {/if}
         </div>

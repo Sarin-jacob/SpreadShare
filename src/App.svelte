@@ -184,7 +184,7 @@
         {#if seg[0] === 'g' && groupId}
           {#key groupId}
             {#if seg[2] === 'add'}
-              <ExpenseForm {groupId} prefill={route.query} />
+              {#key route.query.batch}<ExpenseForm {groupId} prefill={route.query} />{/key}
             {:else if seg[2] === 'e' && seg[3] && seg[4] === 'edit'}
               <ExpenseForm {groupId} editId={seg[3]} />
             {:else if seg[2] === 'e' && seg[3]}
