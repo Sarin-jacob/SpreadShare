@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { findDuplicates } from '../src/lib/duplicates.js';
 import { dueOccurrences, nthOccurrence, periodKey, nextOccurrence, occurrenceId } from '../src/lib/recurring.js';
 import { isUpiId, upiPayLink } from '../src/lib/upi.js';
-import { computeLedgerState } from '../src/lib/engine.js';
+import { computeLedgerState, displayName } from '../src/lib/engine.js';
+import { mergeMap } from '../src/lib/members.js';
 import { describeChanges } from '../src/lib/history.js';
 
 const me = 'me@x.dev';
@@ -145,5 +146,49 @@ describe('group currency', () => {
 
   it('defaults to none (the app currency)', () => {
     expect(computeLedgerState([expense('x', 1, '2026-09-01T00:00:00.000Z')]).currency).toBeNull();
+  });
+});
+
+describe('members without Google accounts', () => {
+  const amma = 'guest:amma123456';
+  const joinAmma = ev('MEMBER_JOINED', me, { member_email: amma, member_name: 'Amma', guest: true }, '2026-09-01T00:00:00.000Z');
+  // Amma paid 600 for dinner, split three ways; I paid her back 200.
+  const dinner = ev('EXPENSE_ADD', amma, {
+    title: 'Dinner', evaluated_amount: 600, logged_by: me,
+    payers: [{ user: amma, value: 600 }],
+    allocations: [{ user: me, value: 200 }, { user: asha, value: 200 }, { user: amma, value: 200 }],
+    receipt_items: [{ name: 'Thali', amount: 600, members: [me, asha, amma], shares: { [amma]: 1, [me]: 1, [asha]: 1 } }],
+  }, '2026-09-02T00:00:00.000Z');
+  const payBack = ev('TRANSFER', me, { title: 'Payment', evaluated_amount: 200, target_peer_identity: amma }, '2026-09-03T00:00:00.000Z');
+
+  it('splits with a guest like any member', () => {
+    const L = computeLedgerState([joinAmma, dinner, payBack]);
+    expect(L.profiles[amma]).toMatchObject({ name: 'Amma', guest: true });
+    expect(L.members[amma].netBalance).toBe(200);
+    expect(L.members[me].netBalance).toBe(0);
+  });
+
+  it('moves everything to the account the guest is linked to', () => {
+    const mom = 'mom@x.dev';
+    const momJoins = ev('MEMBER_JOINED', mom, { member_email: mom, member_name: 'Mom' }, '2026-09-04T00:00:00.000Z');
+    const link = ev('MEMBER_MERGED', me, { from: amma, into: mom }, '2026-09-05T00:00:00.000Z');
+    const L = computeLedgerState([joinAmma, dinner, payBack, momJoins, link]);
+    expect(L.members[amma]).toBeUndefined();
+    expect(L.members[mom].netBalance).toBe(200);
+    expect(L.profiles[mom].name).toBe('Mom');
+    const x = L.expenses.find((e) => e.title === 'Dinner');
+    expect(x.payer).toBe(mom);
+    expect(x.payload.allocations.map((a) => a.user)).toContain(mom);
+    expect(x.payload.receipt_items[0].shares[mom]).toBe(1);
+  });
+
+  it('never merges a real account away, and ignores loops', () => {
+    expect(mergeMap([ev('MEMBER_MERGED', me, { from: asha, into: me })])).toEqual({});
+    expect(mergeMap([ev('MEMBER_MERGED', me, { from: 'guest:a', into: 'guest:b' }), ev('MEMBER_MERGED', me, { from: 'guest:b', into: 'guest:a' })])).toEqual({});
+    expect(mergeMap([ev('MEMBER_MERGED', me, { from: 'guest:a', into: 'guest:b' }), ev('MEMBER_MERGED', me, { from: 'guest:b', into: me })])).toEqual({ 'guest:a': me, 'guest:b': me });
+  });
+
+  it('names guests "Guest" before their name is known', () => {
+    expect(displayName('guest:zz', {}, me)).toBe('Guest');
   });
 });

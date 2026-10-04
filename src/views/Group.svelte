@@ -1,5 +1,6 @@
 <script>
-  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency } from '../lib/app.svelte.js';
+  import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency, addGuest, linkGuest, removeGuest } from '../lib/app.svelte.js';
+  import { isGuest } from '../lib/members.js';
   import { CONFIG } from '../lib/config.js';
   import { CURRENCIES } from '../lib/currency.js';
   import { ledger } from '../lib/ledger.svelte.js';
@@ -118,21 +119,57 @@
     return `${name(payers[0]?.user || x.payer)} paid`;
   }
 
-  async function invite() {
+  /** @param guest a guest's ID: a personal link that also hands them their entries when they join */
+  async function invite(guest = null) {
     sharing = true;
     try {
-      const url = await inviteLink(groupId);
+      const url = await inviteLink(groupId, guest ? { as: guest } : {});
+      const title = guest ? `${name(guest)}, join ${groupName(groupId)} on SpreadShare` : `Join ${groupName(groupId)} on SpreadShare`;
       if (navigator.share) {
-        await navigator.share({ title: `Join ${groupName(groupId)} on SpreadShare`, url }).catch(() => {});
+        await navigator.share({ title, url }).catch(() => {});
       } else {
         await navigator.clipboard.writeText(url);
-        toast('Invite link copied');
+        toast(guest ? `Invite link for ${name(guest)} copied. Joining with it links their entries to their account.` : 'Invite link copied', 'success', { ms: guest ? 5000 : 3000 });
       }
     } catch (e) {
       toast(e.status === 403 || e.status === 404 ? 'Only the group creator can create invite links' : `Invite failed: ${e.message}`, 'error');
     } finally {
       sharing = false;
     }
+  }
+
+  // ─── Members without Google ───
+  let guestName = $state('');
+  let addingGuest = $state(false);
+  let linking = $state(null); // guest ID whose "Link to account" form is open
+  let linkEmail = $state('');
+  const accounts = $derived(memberIds.filter((m) => !isGuest(m)));
+  /** A guest nobody has logged anything for yet can simply be removed. */
+  const unused = (m) => !L.expenses.some((x) => x.payer === m || x.target === m || (x.payload.allocations || []).some((a) => a.user === m) || (x.payload.payers || []).some((p) => p.user === m));
+
+  async function saveGuest(e) {
+    e.preventDefault();
+    if (!guestName.trim()) return;
+    await addGuest(groupId, guestName);
+    toast(`${guestName.trim()} added. You can split with them right away.`);
+    guestName = '';
+    addingGuest = false;
+  }
+
+  async function saveLink(e, guest) {
+    e.preventDefault();
+    const email = linkEmail.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Enter their Google email', 'error');
+    if (!confirm(`Count everything logged for ${name(guest)} as ${L.profiles[email]?.name || email}'s? This can't be undone from the app.`)) return;
+    await linkGuest(groupId, guest, email);
+    toast(`${name(guest)} is now linked to ${email}`);
+    linking = null;
+    linkEmail = '';
+  }
+
+  async function dropGuest(guest) {
+    if (!confirm(`Remove ${name(guest)} from the group?`)) return;
+    await removeGuest(groupId, guest, app.events);
   }
 
   async function refresh() {
@@ -221,7 +258,7 @@
     <button class="hidden lg:inline-flex btn btn-primary !px-3 !py-2 shrink-0" onclick={() => go(`/g/${groupId}/add`)} title="Add expense (N)">
       <Icon name="plus" class="w-4 h-4" /> Add expense
     </button>
-    <button class="btn btn-soft !px-3 !py-2 shrink-0" onclick={invite} disabled={sharing}>
+    <button class="btn btn-soft !px-3 !py-2 shrink-0" onclick={() => invite()} disabled={sharing}>
       <Icon name="share" class="w-4 h-4" /> <span class="hidden sm:inline">Invite</span>
     </button>
     <div class="relative shrink-0">
@@ -459,20 +496,56 @@
       <ul class="card divide-y divide-slate-100 dark:divide-slate-700/60">
         {#each memberIds as m (m)}
           {@const d = L.members[m]}
-          <li class="flex items-center gap-3 px-4 py-3">
-            <Avatar email={m} profile={L.profiles[m]} />
-            <div class="flex-1 min-w-0">
-              <div class="font-semibold text-sm truncate">{name(m)}</div>
-              <div class="text-xs text-slate-400 truncate">
-                {d.netBalance > 0.009 ? 'gets back' : d.netBalance < -0.009 ? 'owes' : 'settled up'}
+          <li class="px-4 py-3 space-y-2">
+            <div class="flex items-center gap-3">
+              <Avatar email={m} profile={L.profiles[m]} />
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-sm truncate">{name(m)}</div>
+                <div class="text-xs text-slate-400 truncate">
+                  {#if isGuest(m)}<span class="text-amber-600 dark:text-amber-400">No Google account</span> · {/if}{d.netBalance > 0.009 ? 'gets back' : d.netBalance < -0.009 ? 'owes' : 'settled up'}
+                </div>
+              </div>
+              <div class="text-sm font-bold tabular-nums {d.netBalance > 0.009 ? 'text-emerald-600 dark:text-emerald-400' : d.netBalance < -0.009 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
+                {d.netBalance > 0.009 ? '+' : d.netBalance < -0.009 ? '−' : ''}{money(Math.abs(d.netBalance))}
               </div>
             </div>
-            <div class="text-sm font-bold tabular-nums {d.netBalance > 0.009 ? 'text-emerald-600 dark:text-emerald-400' : d.netBalance < -0.009 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'}">
-              {d.netBalance > 0.009 ? '+' : d.netBalance < -0.009 ? '−' : ''}{money(Math.abs(d.netBalance))}
-            </div>
+            {#if isGuest(m)}
+              <div class="flex flex-wrap gap-x-4 gap-y-1 pl-11 text-xs font-semibold text-accent-600 dark:text-accent-400">
+                <button type="button" onclick={() => invite(m)} disabled={sharing} title="A link just for {name(m)}: joining with it links their entries to their account">Send them an invite</button>
+                <button type="button" onclick={() => { linking = linking === m ? null : m; linkEmail = ''; }}>Link to an account</button>
+                {#if unused(m)}<button type="button" class="text-rose-600 dark:text-rose-400" onclick={() => dropGuest(m)}>Remove</button>{/if}
+              </div>
+              {#if linking === m}
+                <form class="pl-11 space-y-2" onsubmit={(e) => saveLink(e, m)}>
+                  <p class="text-xs text-slate-500">Already joined with Google? Pick them, or enter the email they'll use. Their past entries move over.</p>
+                  {#if accounts.length}
+                    <div class="flex flex-wrap gap-1.5">
+                      {#each accounts as a (a)}
+                        <button type="button" class="px-2.5 py-1 rounded-full border text-xs {linkEmail === a ? 'border-accent-500 bg-accent-500/10' : 'border-slate-200 dark:border-slate-700'}" onclick={() => (linkEmail = a)}>{name(a)}</button>
+                      {/each}
+                    </div>
+                  {/if}
+                  <div class="flex gap-2">
+                    <input class="field !py-1.5 flex-1 text-sm" type="email" bind:value={linkEmail} placeholder="their.email@gmail.com" autocomplete="off" />
+                    <button class="btn btn-primary !py-1.5 text-sm shrink-0" disabled={!linkEmail.trim()}>Link</button>
+                  </div>
+                </form>
+              {/if}
+            {/if}
           </li>
         {/each}
       </ul>
+      {#if addingGuest}
+        <form class="card p-3 flex gap-2" onsubmit={saveGuest}>
+          <input class="field !py-2 flex-1" bind:value={guestName} placeholder="Name, e.g. Amma or Ravi" maxlength="60" aria-label="Name" />
+          <button class="btn btn-primary !py-2 shrink-0" disabled={!guestName.trim()}>Add</button>
+          <button type="button" class="btn btn-ghost !p-2 shrink-0" aria-label="Cancel" onclick={() => (addingGuest = false)}><Icon name="x" class="w-4 h-4" /></button>
+        </form>
+      {:else}
+        <button type="button" class="btn btn-soft w-full !py-2 text-xs" onclick={() => (addingGuest = true)}>
+          <Icon name="plus" class="w-4 h-4" /> Add someone without Google
+        </button>
+      {/if}
     </section>
 {/snippet}
 

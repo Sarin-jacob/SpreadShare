@@ -15,6 +15,7 @@ import { prefs, syncPrefs, clearPrefs } from './prefs.svelte.js';
 import { computeLedgerState, parsePayload } from './engine.js';
 import { dueOccurrences } from './recurring.js';
 import { disableLock } from './lock.svelte.js';
+import { newGuestId, isGuest, mergeMap } from './members.js';
 import { tagsOf } from './tags.js';
 
 const PROFILE_KEY = 'ss_profile';
@@ -361,12 +362,34 @@ export async function renameGroupLocally(id, name) {
   await pushDirectory();
 }
 
-export async function inviteLink(id) {
+/**
+ * Link that adds someone to the group. With `as` (a guest's ID), joining also links that guest
+ * to the account they join with, so everything logged for them becomes theirs.
+ */
+export async function inviteLink(id, { as } = {}) {
   await track(() => google.shareWithLink(id, 'writer'));
   const url = new URL(location.href);
   url.hash = '';
-  url.search = new URLSearchParams({ invite: id, name: groupName(id) }).toString();
+  url.search = new URLSearchParams({ invite: id, name: groupName(id), ...(as ? { as } : {}) }).toString();
   return url.toString();
+}
+
+// ─── Members without Google accounts ───
+
+/** Adds someone by name; others log their expenses and payments for them. */
+export async function addGuest(groupId, name) {
+  const id = newGuestId();
+  await appendEvent(groupId, 'MEMBER_JOINED', { member_email: id, member_name: name.trim().slice(0, 60), guest: true });
+  return id;
+}
+
+/** From now on (and for all past entries) the guest counts as `email`. */
+export const linkGuest = (groupId, guestId, email) => appendEvent(groupId, 'MEMBER_MERGED', { from: guestId, into: email.trim().toLowerCase() });
+
+/** Takes a guest who has no entries off the group. */
+export async function removeGuest(groupId, guestId, events) {
+  const joined = events.filter((e) => e.event_type === 'MEMBER_JOINED' && e.payload_json?.member_email === guestId);
+  for (const e of joined) await appendEvent(groupId, 'EXPENSE_DELETE', { target_event_id: e.eventId });
 }
 
 // ─── Invites (?invite=<sheetId>&name=<groupName>) ───
@@ -377,16 +400,24 @@ export function captureInvite() {
   const params = new URLSearchParams(location.search);
   const id = params.get('invite');
   if (!id) return;
-  pendingInvite = { id, name: params.get('name') || 'Shared group' };
+  pendingInvite = { id, name: params.get('name') || 'Shared group', as: isGuest(params.get('as')) ? params.get('as') : null };
   history.replaceState(null, '', location.pathname + location.hash);
 }
 
 async function handlePendingInvite() {
   if (!pendingInvite || !app.user) return;
-  const { id, name } = pendingInvite;
+  const { id, name, as } = pendingInvite;
   pendingInvite = null;
   try {
     await joinGroup(id, name);
+    if (as) {
+      // A personal invite for someone who was in the group as a guest: take over their entries.
+      await syncGroup(id);
+      const events = await db.getGroupEvents(id);
+      if (!mergeMap(events)[as] && events.some((e) => e.event_type === 'MEMBER_JOINED' && e.payload_json?.member_email === as)) {
+        await linkGuest(id, as, app.user.email);
+      }
+    }
     toast(`Joined “${name}”`);
     location.hash = `#/g/${id}`;
   } catch (e) {

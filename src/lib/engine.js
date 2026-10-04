@@ -1,6 +1,7 @@
 // src/lib/engine.js
 // Rebuilds group state (balances, feed, member profiles) from the raw event log.
 import { round2 } from './math.js';
+import { mergeMap, remapPayload } from './members.js';
 
 const PROFILE_CACHE_KEY = 'ss_profile_cache';
 let profileCache = {};
@@ -18,7 +19,7 @@ export const eventIdOf = (e) => e.eventId || e.event_id;
 export function displayName(email, profiles, selfEmail) {
   if (!email) return 'Unknown';
   if (email === selfEmail) return 'You';
-  return profiles?.[email]?.name || email.split('@')[0];
+  return profiles?.[email]?.name || (email.startsWith('guest:') ? 'Guest' : email.split('@')[0]);
 }
 
 /** IDs of events that were deleted (or superseded by an edit). */
@@ -56,6 +57,10 @@ export function computeLedgerState(rawEvents) {
 
   const events = [...rawEvents].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   const deleted = deletedIds(events);
+  // Guests later linked to a Google account: their entries count as that account's.
+  const alias = mergeMap(events, deleted);
+  const merged = Object.keys(alias).length > 0;
+  const A = (u) => alias[u] || u;
 
   for (const event of events) {
     const id = eventIdOf(event);
@@ -69,7 +74,8 @@ export function computeLedgerState(rawEvents) {
     } catch {
       continue; // skip a corrupt row rather than break the whole group
     }
-    const actor = event.actor_identity;
+    if (merged) payload = remapPayload(payload, A);
+    const actor = A(event.actor_identity);
 
     // actor_name/picture describe whoever *logged* the event. For transfers/loans logged on
     // someone else's behalf the actor differs, so only trust the name when they match.
@@ -79,9 +85,15 @@ export function computeLedgerState(rawEvents) {
     if (loggedBy && loggedBy !== actor) discover(loggedBy, payload.actor_name, payload.actor_picture);
 
     if (type === 'MEMBER_JOINED') {
-      discover(payload.member_email, payload.member_name, payload.member_picture);
+      if (alias[payload.member_email]) {
+        discover(alias[payload.member_email]); // a linked guest: keep the account's own name
+      } else {
+        discover(payload.member_email, payload.member_name, payload.member_picture);
+        if (payload.guest) state.profiles[payload.member_email].guest = true;
+      }
       continue;
     }
+    if (type === 'MEMBER_MERGED') continue;
     if (type === 'GROUP_SETTINGS') {
       // Amounts are stored in the group's currency, so it can only change before the first entry.
       if (payload.currency && !sawMoney) state.currency = String(payload.currency).toUpperCase();
