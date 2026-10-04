@@ -1,5 +1,5 @@
 <script>
-  import { app, openGroup, login, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
+  import { app, openGroup, login, refreshSession, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
   import { setBadge } from './lib/pwa.svelte.js';
   import { updates, applyUpdate } from './lib/updates.svelte.js';
   import { route } from './lib/router.svelte.js';
@@ -49,9 +49,9 @@
       pull = 0;
       return toast('You’re offline. Changes will sync when you’re back.', 'info');
     }
-    if (app.sync.authExpired) {
+    if (app.sync.authExpired && !(await refreshSession())) {
       pull = 0;
-      return toast('Reconnect to Google to sync', 'info');
+      return toast('Sign in to Google again to sync', 'info');
     }
     refreshing = true;
     pull = PULL_TRIGGER;
@@ -144,12 +144,12 @@
         <SyncStatus />
       </header>
 
-      {#if app.sync.authExpired}
+      {#if app.sync.authExpired && app.sync.needsSignIn}
         <div class="mx-4 mt-4 md:mx-8 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <span class="flex-1 text-amber-800 dark:text-amber-200">
-            Your Google session expired. Changes are saved on this device and will upload once you reconnect.
+            Google needs you to sign in again. Your changes are saved on this device and will upload once you do.
           </span>
-          <button class="btn btn-primary !py-1.5 shrink-0" onclick={reconnect} disabled={reconnecting}>
+          <button class="btn btn-primary !py-1.5 shrink-0" data-auth-action onclick={reconnect} disabled={reconnecting}>
             {reconnecting ? 'Connecting…' : 'Reconnect'}
           </button>
         </div>

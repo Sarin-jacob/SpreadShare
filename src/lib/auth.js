@@ -1,6 +1,11 @@
 // src/lib/auth.js
 // Google Identity Services token-model auth. Tokens are cached in localStorage so the
 // PWA reopens signed in; expired tokens are refreshed through a single shared request.
+//
+// Access tokens last one hour and there is no refresh token without a server. Getting a new one
+// opens a (usually instantly closing) Google popup, which browsers only allow during a tap or key
+// press. So refreshes happen on the user's next interaction (see app.svelte.js), never from a
+// background timer, which would only trip the popup blocker.
 
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
@@ -14,11 +19,21 @@ const EXPIRY_KEY = 'ss_oauth_expiry';
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export class AuthRequiredError extends Error {
-  constructor(message = 'Google session expired') {
+  /** needsUser: Google wants the user to pick an account / consent again (a silent refresh won't do). */
+  constructor(message = 'Google session expired', { needsUser = false } = {}) {
     super(message);
     this.name = 'AuthRequiredError';
+    this.needsUser = needsUser;
   }
 }
+
+// Errors from a silent (prompt: 'none') request that mean only an interactive sign-in can help.
+const NEEDS_USER = /interaction_required|consent_required|login_required|account_selection_required|access_denied/;
+// Without a reply the popup was blocked or closed; settle rather than hang every API call.
+const REQUEST_TIMEOUT_MS = { silent: 20_000, interactive: 180_000 };
+
+/** True while the page may open a popup (inside a tap / key press). */
+export const canOpenPopup = () => navigator.userActivation?.isActive ?? true;
 
 class AuthenticationService {
   tokenClient = null;
@@ -39,7 +54,7 @@ class AuthenticationService {
           client_id: clientId,
           scope: SCOPES,
           callback: (res) => this.#onToken(res),
-          error_callback: (err) => this.#settle(null, new Error(err?.message || err?.type || 'Sign-in cancelled')),
+          error_callback: (err) => this.#settle(null, new AuthRequiredError(err?.message || err?.type || 'Sign-in cancelled')),
         });
         resolve();
       };
@@ -53,7 +68,9 @@ class AuthenticationService {
   }
 
   #onToken(res) {
-    if (res.error) return this.#settle(null, new Error(res.error_description || res.error));
+    if (res.error) {
+      return this.#settle(null, new AuthRequiredError(res.error_description || res.error, { needsUser: NEEDS_USER.test(res.error) }));
+    }
     const expiry = Date.now() + res.expires_in * 1000;
     localStorage.setItem(TOKEN_KEY, res.access_token);
     localStorage.setItem(EXPIRY_KEY, String(expiry));
@@ -64,26 +81,48 @@ class AuthenticationService {
     const p = this.#pending;
     this.#pending = null;
     this.#inflight = null;
+    clearTimeout(this.#timer);
     if (!p) return;
     error ? p.reject(error) : p.resolve(token);
   }
 
-  #request(options) {
+  #timer = null;
+
+  #request(options, timeoutMs) {
     if (this.#inflight) return this.#inflight;
     if (!this.tokenClient) return Promise.reject(new AuthRequiredError('Google sign-in not loaded'));
     this.#inflight = new Promise((resolve, reject) => {
       this.#pending = { resolve, reject };
+      this.#timer = setTimeout(() => this.#settle(null, new AuthRequiredError('Google sign-in timed out')), timeoutMs);
       this.tokenClient.requestAccessToken(options);
     });
     return this.#inflight;
   }
 
-  /** Interactive sign-in. Must be called from a user gesture (click). */
-  async login() {
+  /**
+   * Interactive sign-in. Must be called from a user gesture (click).
+   * @param hint email of the account to reconnect, so Google can skip the account chooser
+   */
+  async login(hint) {
     await this.init();
-    const token = await this.#request({ prompt: '' });
+    const token = await this.#request({ prompt: '', ...(hint ? { hint } : {}) }, REQUEST_TIMEOUT_MS.interactive);
     const profile = await this.fetchUserProfile(token);
     return { token, profile };
+  }
+
+  /**
+   * New token without any Google UI when the account is still signed in and consented.
+   * Call it from a tap or key press: it opens a popup that closes by itself.
+   */
+  async refreshSilently(hint) {
+    await this.init();
+    return this.#request({ prompt: 'none', ...(hint ? { hint } : {}) }, REQUEST_TIMEOUT_MS.silent);
+  }
+
+  /** Milliseconds until the cached token expires (≤ 0 when there is none or it has expired). */
+  expiresIn() {
+    if (!localStorage.getItem(TOKEN_KEY)) return 0;
+    return parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10) - Date.now();
   }
 
   cachedToken(bufferMs = 0) {
@@ -92,19 +131,25 @@ class AuthenticationService {
     return token && Date.now() < expiry - bufferMs ? token : null;
   }
 
-  /** Returns a usable token, attempting a silent refresh if the cached one is about to expire. */
+  /**
+   * Returns a usable token. If the cached one is about to expire and the page may open a popup
+   * right now, refreshes it silently; otherwise uses what's left of it.
+   */
   async ensureValidToken(emailHint) {
     const cached = this.cachedToken(REFRESH_BUFFER_MS);
     if (cached) return cached;
-    try {
-      await this.init(); // the sign-in script now loads in the background at startup
-      return await this.#request({ prompt: 'none', hint: emailHint });
-    } catch {
-      // Silent refresh can fail (popup blocked, cookies cleared). Fall back to a still-valid token.
-      const stillValid = this.cachedToken();
-      if (stillValid) return stillValid;
-      throw new AuthRequiredError();
+    if (canOpenPopup()) {
+      try {
+        return await this.refreshSilently(emailHint);
+      } catch (e) {
+        const stillValid = this.cachedToken();
+        if (stillValid) return stillValid;
+        throw e instanceof AuthRequiredError ? e : new AuthRequiredError();
+      }
     }
+    const stillValid = this.cachedToken();
+    if (stillValid) return stillValid;
+    throw new AuthRequiredError();
   }
 
   /** Drop a token the server rejected so the next call refreshes it. */

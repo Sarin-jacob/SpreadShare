@@ -2,7 +2,10 @@
   import { app, pendingIds, syncAll } from '../lib/app.svelte.js';
 
   const status = $derived.by(() => {
-    if (app.sync.authExpired) return { dot: 'bg-amber-500', label: 'Reconnect needed' };
+    if (app.sync.reconnecting) return { dot: 'bg-accent-500 animate-pulse', label: 'Reconnecting…' };
+    if (app.sync.authExpired) {
+      return { dot: 'bg-amber-500', label: app.sync.needsSignIn ? 'Sign-in needed' : pendingIds.size ? `${pendingIds.size} waiting · tap to sync` : 'Tap to sync' };
+    }
     if (!app.sync.online) {
       return { dot: 'bg-slate-400', label: pendingIds.size ? `Offline · ${pendingIds.size} pending` : 'Offline' };
     }

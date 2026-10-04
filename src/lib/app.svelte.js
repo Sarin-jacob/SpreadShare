@@ -44,7 +44,9 @@ export const app = $state({
   sync: {
     online: navigator.onLine,
     busy: 0,
-    authExpired: false,
+    authExpired: false, // no usable Google token right now; changes wait in the queue
+    needsSignIn: false, // a silent refresh failed: only the Reconnect button can help
+    reconnecting: false, // silent refresh in progress
     error: null,
     lastSyncedAt: null,
     progress: null, // { done, total } while refreshing all groups
@@ -70,6 +72,7 @@ async function track(fn) {
 function handleError(err, context) {
   if (isAuthError(err)) {
     app.sync.authExpired = true;
+    if (err.needsUser) app.sync.needsSignIn = true;
     return;
   }
   if (!navigator.onLine) return; // offline: the queue will retry
@@ -99,9 +102,13 @@ export async function boot() {
     if (AuthService.cachedToken()) {
       onConnected();
     } else {
+      // Expired since last time (tokens last an hour). Local data is usable right away; the next
+      // tap gets a new token without any prompt (see refreshOnInteraction).
       app.sync.authExpired = true;
     }
   }
+  window.addEventListener('click', refreshOnInteraction, true);
+  window.addEventListener('keydown', refreshOnInteraction, true);
 
   window.addEventListener('online', () => {
     app.sync.online = true;
@@ -121,15 +128,52 @@ function setUser(profile) {
   writeJson(PROFILE_KEY, user);
 }
 
+// Refresh the token when it has expired or is about to, on a tap or key press: the only moment
+// the browser lets Google's (self-closing) popup open. Keeps the session going without prompts.
+const REFRESH_AHEAD_MS = 10 * 60_000;
+let lastRefreshAttempt = 0;
+
+function refreshOnInteraction(e) {
+  if (e.target?.closest?.('[data-auth-action]')) return; // sign-in buttons do their own request
+  if (AuthService.expiresIn() > REFRESH_AHEAD_MS || Date.now() - lastRefreshAttempt < 30_000) return;
+  refreshSession();
+}
+
+/** Silent token refresh. Call only from a user gesture handler. Resolves true when connected. */
+export async function refreshSession() {
+  if (!app.user || !navigator.onLine || app.sync.reconnecting || app.sync.needsSignIn) return !app.sync.authExpired;
+  lastRefreshAttempt = Date.now();
+  const wasExpired = app.sync.authExpired;
+  app.sync.reconnecting = true;
+  try {
+    await AuthService.refreshSilently(app.user.email);
+    app.sync.authExpired = false;
+    app.sync.needsSignIn = false;
+    app.sync.reconnecting = false; // the sync below shows its own progress
+    if (wasExpired) await onConnected();
+    return true;
+  } catch (err) {
+    console.warn('Silent Google sign-in failed', err?.message);
+    if (AuthService.expiresIn() <= 0) {
+      app.sync.authExpired = true;
+      app.sync.needsSignIn = true;
+    }
+    return !app.sync.authExpired;
+  } finally {
+    app.sync.reconnecting = false;
+  }
+}
+
 /** Interactive sign-in (must run from a click). Also used for "Reconnect". */
 export async function login() {
-  const { profile } = await AuthService.login();
+  const { profile } = await AuthService.login(app.user?.email);
   if (app.user && app.user.email !== profile.email) {
     // Different account on this device: drop the previous user's local data.
     await resetLocalData();
   }
   setUser(profile);
   app.sync.authExpired = false;
+  app.sync.needsSignIn = false;
   app.sync.error = null;
   await onConnected();
 }
@@ -147,6 +191,7 @@ export async function logout() {
   localStorage.removeItem(PROFILE_KEY);
   app.user = null;
   app.sync.authExpired = false;
+  app.sync.needsSignIn = false;
   location.hash = '#/';
 }
 
