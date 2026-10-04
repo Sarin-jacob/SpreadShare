@@ -15,8 +15,8 @@
       "url": "./#/quick/add",
       "icons": [
         {
-          "src": "icons/rose-192.png",
-          "sizes": "192x192",
+          "src": "icons/rose-sc-plus-96.png",
+          "sizes": "96x96",
           "type": "image/png"
         }
       ]
@@ -27,8 +27,44 @@
       "url": "./#/quick/scan",
       "icons": [
         {
-          "src": "icons/rose-192.png",
-          "sizes": "192x192",
+          "src": "icons/rose-sc-camera-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Record a payment",
+      "short_name": "Payment",
+      "url": "./#/quick/payment",
+      "icons": [
+        {
+          "src": "icons/rose-sc-swap-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "url": "./#/search",
+      "icons": [
+        {
+          "src": "icons/rose-sc-search-96.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Insights",
+      "short_name": "Insights",
+      "url": "./#/insights",
+      "icons": [
+        {
+          "src": "icons/rose-sc-chart-96.png",
+          "sizes": "96x96",
           "type": "image/png"
         }
       ]
