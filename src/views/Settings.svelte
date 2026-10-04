@@ -1,5 +1,7 @@
 <script>
-  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory } from '../lib/app.svelte.js';
+  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi } from '../lib/app.svelte.js';
+  import { prefs, setUpi } from '../lib/prefs.svelte.js';
+  import { isUpiId, normalizeUpiId } from '../lib/upi.js';
   import { settings, setTheme, setOled, setAccent, setScale, ACCENTS, SCALES } from '../lib/settings.svelte.js';
   import { pwa, promptInstall } from '../lib/pwa.svelte.js';
   import { ocrOffline, downloadOcr, removeOcr } from '../lib/ocrOffline.svelte.js';
@@ -11,6 +13,20 @@
   import Switch from '../components/Switch.svelte';
 
   let busy = $state(false);
+
+  let upiInput = $state(prefs.upi || '');
+  const upiChanged = $derived(normalizeUpiId(upiInput) !== (prefs.upi || ''));
+  const upiValid = $derived(!upiInput.trim() || isUpiId(upiInput));
+
+  async function saveUpi(e) {
+    e.preventDefault();
+    if (!upiValid) return;
+    const value = upiInput.trim() ? normalizeUpiId(upiInput) : null;
+    setUpi(value);
+    upiInput = value || '';
+    await publishUpi(value);
+    toast(value ? 'UPI ID saved. Friends can now pay you from Settle up.' : 'UPI ID removed', 'success');
+  }
 
   async function syncNow() {
     busy = true;
@@ -68,6 +84,16 @@
       <div class="text-sm text-slate-500 truncate">{app.user.email}</div>
     </div>
   </div>
+
+  <form class="card p-4 space-y-2" onsubmit={saveUpi}>
+    <label class="text-sm font-bold" for="upi-id">Your UPI ID</label>
+    <p class="text-xs text-slate-500">Shared with your groups so people who owe you can pay in one tap from Settle up. Also added to your reminders.</p>
+    <div class="flex gap-2">
+      <input id="upi-id" class="field flex-1" bind:value={upiInput} placeholder="name@okbank" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="email" />
+      <button class="btn btn-primary shrink-0" disabled={!upiChanged || !upiValid}>Save</button>
+    </div>
+    {#if !upiValid}<p class="text-xs text-rose-600 dark:text-rose-400">That doesn’t look like a UPI ID (name@bank).</p>{/if}
+  </form>
 
   <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
     <div class="p-4 space-y-3">

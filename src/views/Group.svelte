@@ -12,6 +12,8 @@
   import Donut from '../components/Donut.svelte';
   import { entryMeta } from '../lib/history.js';
   import { splitTags, tagsOf } from '../lib/tags.js';
+  import { prefs } from '../lib/prefs.svelte.js';
+  import { upiPayLink, canOpenUpi } from '../lib/upi.js';
 
   let { groupId } = $props();
 
@@ -137,15 +139,39 @@
     go(`/g/${groupId}/add`, { type: 'TRANSFER', from: s.from, to: s.to, amount: s.amount.toFixed(2) });
   }
 
+  /**
+   * Opens the phone's UPI app with the payee and amount filled in. When you come back, offers to
+   * record the payment (the UPI app doesn't tell us whether it went through).
+   */
+  function payUpi(s) {
+    const upiId = L.profiles[s.to]?.upi;
+    if (!canOpenUpi()) {
+      navigator.clipboard?.writeText(upiId).catch(() => {});
+      toast(`UPI ID ${upiId} copied. Pay ${money(s.amount)} from your phone, then record it here.`, 'info', {
+        ms: 8000,
+        action: { label: 'Record', run: () => settle(s) },
+      });
+      return;
+    }
+    const ask = () => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', ask);
+      toast(`Paid ${name(s.to)} ${money(s.amount)}?`, 'info', { ms: 15000, action: { label: 'Record payment', run: () => settle(s) } });
+    };
+    document.addEventListener('visibilitychange', ask);
+    location.href = upiPayLink({ upiId, name: L.profiles[s.to]?.name, amount: s.amount, note: `${groupName(groupId)} settle-up` });
+  }
+
   /** Friendly nudge via the OS share sheet (WhatsApp, SMS, …) or the clipboard. */
   async function remind(s) {
     const firstName = (L.profiles[s.from]?.name || s.from.split('@')[0]).split(' ')[0];
-    const text = `Hey ${firstName}! Quick reminder from SpreadShare: you owe me ${money(s.amount)} for “${groupName(groupId)}”.`;
+    const upi = prefs.upi || L.profiles[me]?.upi;
+    const text = `Hey ${firstName}! Quick reminder from SpreadShare: you owe me ${money(s.amount)} for “${groupName(groupId)}”.${upi ? ` My UPI ID is ${upi}.` : ''}`;
     try {
       if (navigator.share) await navigator.share({ text });
       else {
         await navigator.clipboard.writeText(text);
-        toast('Reminder copied , paste it in your chat');
+        toast('Reminder copied. Paste it in your chat.');
       }
     } catch {
       /* share sheet dismissed */
@@ -299,6 +325,7 @@
                           <span class="shrink-0 text-[11px] font-medium text-slate-400 flex items-center gap-0.5" title="{m.comments} comment{m.comments > 1 ? 's' : ''}"><Icon name="message" class="w-3.5 h-3.5" />{m.comments}</span>
                         {/if}
                         {#if m?.edited}<span class="shrink-0 text-[10px] font-medium text-slate-400">edited</span>{/if}
+                        {#if x.payload.recurring || x.payload.recurring_from}<span class="shrink-0 text-[11px]" title="Repeats">🔁</span>{/if}
                       </div>
                       {#if allTags.length}
                         <div class="flex gap-1 mt-0.5 overflow-hidden">
@@ -396,6 +423,9 @@
               <div class="flex flex-col sm:flex-row lg:flex-row gap-1.5 shrink-0 lg:w-full lg:justify-end">
                 {#if s.to === me}
                   <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => remind(s)}><Icon name="bell" class="w-3.5 h-3.5" /> Remind</button>
+                {/if}
+                {#if s.from === me && L.profiles[s.to]?.upi}
+                  <button class="btn btn-primary !px-3 !py-1.5 text-xs" onclick={() => payUpi(s)} title="Pay {L.profiles[s.to].upi}">Pay with UPI</button>
                 {/if}
                 <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => settle(s)}>Record payment</button>
               </div>

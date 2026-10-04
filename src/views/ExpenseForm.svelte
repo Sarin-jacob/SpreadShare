@@ -18,6 +18,8 @@
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
   import { unitCount } from '../lib/receipt/draft.js';
+  import { REPEATS } from '../lib/recurring.js';
+  import { findDuplicates } from '../lib/duplicates.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
@@ -62,6 +64,9 @@
   // shares = null: split equally between members; otherwise by how many / what share each had.
   let receiptItems = $state([]);
   let receiptScan = $state(null); // compact copy of a scanned receipt, kept on the expense
+  let repeat = $state(null); // null | 'week' | 'month' (see recurring.js)
+  let recurringMeta = $state(null); // { series, owner } of an edited template
+  let occurrenceMeta = $state(null); // { recurring_from, period, recurring_every } of an edited copy
   let scanFile = $state(null);
   let dropping = $state(false); // an image is being dragged over the scan card
   // Phones get separate Camera / Gallery buttons; desktops get a file picker + drag-and-drop + paste.
@@ -133,6 +138,9 @@
     if (type === 'EXPENSE_ADD') {
       categoryValue = p.category || 'General';
       categoryTouched = true;
+      repeat = p.recurring?.every ?? null;
+      recurringMeta = p.recurring ? { series: p.recurring.series, owner: p.recurring.owner } : null;
+      occurrenceMeta = p.recurring_from ? { recurring_from: p.recurring_from, period: p.period, recurring_every: p.recurring_every } : null;
       receiptScan = p.receipt_scan || null;
       const payers = p.payers || [];
       if (payers.length > 1) {
@@ -182,6 +190,13 @@
       const v = evaluate(i.amount);
       return { ...i, amount: v === null ? i.amount : v * rate };
     })
+  );
+
+  /** Same bill already in the group (same amount around then, or the same shop). Warning only. */
+  const duplicates = $derived(
+    type === 'EXPENSE_ADD' && total > 0 && when
+      ? findDuplicates(L.expenses, { amount: total, when, title, merchant: receiptScan?.merchant }, { excludeId: editId })
+      : []
   );
 
   const split = $derived(
@@ -471,6 +486,10 @@
       } else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
       if (receipt) payload.receipt_local_url = receipt;
       if (receiptScan) payload.receipt_scan = $state.snapshot(receiptScan);
+      if (repeat) {
+        // The owner's device adds a copy each period; the series ID ties the copies to this entry.
+        payload.recurring = { every: repeat, series: recurringMeta?.series || crypto.randomUUID().slice(0, 8), owner: recurringMeta?.owner || me };
+      } else if (occurrenceMeta) Object.assign(payload, occurrenceMeta);
     } else {
       payload.category = 'Financial';
       payload.target_peer_identity = to;
@@ -654,6 +673,22 @@
         <input id="f-when" class="field" type="datetime-local" bind:value={when} />
       </div>
     </div>
+
+    {#if type === 'EXPENSE_ADD' && !occurrenceMeta}
+      <div class="flex items-center gap-3 -mt-1">
+        <span class="label !mb-0">Repeats</span>
+        <div class="seg !p-0.5 flex-1 max-w-xs">
+          {#each REPEATS as r (r.label)}
+            <button type="button" aria-pressed={repeat === r.value} onclick={() => (repeat = r.value)}>{r.label}</button>
+          {/each}
+        </div>
+      </div>
+      {#if repeat}
+        <p class="-mt-2 text-xs text-slate-500">
+          A copy is added {repeat === 'week' ? 'every week' : 'every month'} from this date, split the same way, when {recurringMeta?.owner && recurringMeta.owner !== me ? 'its creator' : 'you'} next open{recurringMeta?.owner && recurringMeta.owner !== me ? 's' : ''} the app. Delete a copy to skip that time.
+        </p>
+      {/if}
+    {/if}
 
     {#if notesOpen}
       <div>
@@ -899,6 +934,23 @@
             <span class="text-sm text-slate-500">%</span>
           </div>
         {/if}
+      </div>
+    {/if}
+
+    {#if duplicates.length}
+      <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm space-y-1.5" role="status">
+        <p class="font-semibold text-amber-800 dark:text-amber-200">Already added? This looks like:</p>
+        <ul class="space-y-1">
+          {#each duplicates as d (d.eventId)}
+            <li>
+              <a href="#/g/{groupId}/e/{d.eventId}" class="text-amber-900 dark:text-amber-100 underline decoration-amber-500/40 underline-offset-2">
+                {d.title}</a>
+              <span class="text-xs text-amber-700 dark:text-amber-300">
+                · {money(d.amount)} by {name(d.payer)} on {new Date(d.timestamp).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+              </span>
+            </li>
+          {/each}
+        </ul>
       </div>
     {/if}
 

@@ -11,8 +11,9 @@ import * as db from './db.js';
 import * as google from './google.js';
 import { dataUrlToBlob } from './image.js';
 import { toast } from './toast.svelte.js';
-import { syncPrefs, clearPrefs } from './prefs.svelte.js';
-import { computeLedgerState } from './engine.js';
+import { prefs, syncPrefs, clearPrefs } from './prefs.svelte.js';
+import { computeLedgerState, parsePayload } from './engine.js';
+import { dueOccurrences } from './recurring.js';
 import { tagsOf } from './tags.js';
 
 const PROFILE_KEY = 'ss_profile';
@@ -180,9 +181,53 @@ export async function login() {
 
 async function onConnected() {
   await loadDirectory();
-  syncPrefs();
+  syncPrefs().then(() => prefs.upi && publishUpi(prefs.upi));
   await handlePendingInvite();
   await syncAll();
+}
+
+// ─── Recurring expenses & UPI ───
+
+const recurringRunning = new Set();
+
+/** Adds this period's copies of recurring expenses you created (see recurring.js). */
+async function addDueRecurring(id, events) {
+  if (!app.user || recurringRunning.has(id)) return;
+  recurringRunning.add(id);
+  try {
+    for (const due of dueOccurrences(events, app.user.email)) {
+      await appendEvent(id, 'EXPENSE_ADD', due.payload, { actor: due.actor, eventId: due.eventId });
+    }
+  } catch (e) {
+    console.warn('Adding recurring expenses failed', e);
+  } finally {
+    recurringRunning.delete(id);
+  }
+}
+
+/** Ends a series: the template is replaced by the same entry without `recurring`. Past copies stay. */
+export async function stopRecurring(spreadsheetId, expense) {
+  // eslint-disable-next-line no-unused-vars
+  const { recurring, logged_by, actor_name, actor_picture, ...payload } = expense.payload;
+  await appendEvent(spreadsheetId, 'EXPENSE_DELETE', { target_event_id: expense.eventId });
+  await appendEvent(spreadsheetId, 'EXPENSE_ADD', { ...payload, replaces: expense.eventId }, { actor: expense.payer });
+}
+
+/** Publishes your UPI ID to every group where it isn't current, so members can pay you. */
+export async function publishUpi(upiId) {
+  if (!app.user) return;
+  const value = upiId ? String(upiId).trim().toLowerCase() : null;
+  for (const g of app.directory) {
+    const events = await db.getGroupEvents(g.id);
+    if (!events.length) continue; // not downloaded yet; done on a later connect
+    const mine = events
+      .filter((e) => e.event_type === 'PROFILE' && e.actor_identity === app.user.email)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .at(-1);
+    const upi = mine ? parsePayload(mine).upi_id : null;
+    const current = upi ? String(upi).toLowerCase() : null;
+    if (current !== value) await appendEvent(g.id, 'PROFILE', { upi_id: value });
+  }
 }
 
 export async function logout() {
@@ -364,6 +409,8 @@ export async function openGroup(id) {
   if (app.groupId !== id) return;
   app.events = cached;
   app.groupLoading = cached.length === 0;
+  // Can't sync right now: add due copies from the local cache (fixed IDs keep this safe).
+  if (!navigator.onLine || app.sync.authExpired) await addDueRecurring(id, cached);
   await syncGroup(id);
   if (app.groupId === id) app.groupLoading = false;
 }
@@ -406,6 +453,7 @@ export async function syncGroup(id) {
     if (stale.length) await db.removeMany(db.STORES.events, stale);
 
     if (app.groupId === id) app.events = merged;
+    await addDueRecurring(id, merged);
     app.sync.lastSyncedAt = Date.now();
     app.groupSyncedAt[id] = app.sync.lastSyncedAt;
     writeJson(GROUP_SYNC_KEY, app.groupSyncedAt);
@@ -426,10 +474,15 @@ export async function syncGroup(id) {
  * Records an event locally and queues it for upload.
  * @param actor who the event is attributed to (defaults to the signed-in user)
  */
-export async function appendEvent(spreadsheetId, eventType, payload, { actor } = {}) {
+/**
+ * Writes an event locally and queues it for Sheets.
+ * @param opts.actor whose entry it is (defaults to the signed-in user)
+ * @param opts.eventId a fixed ID, for events several devices might create (recurring copies)
+ */
+export async function appendEvent(spreadsheetId, eventType, payload, { actor, eventId } = {}) {
   const record = {
     spreadsheetId,
-    eventId: crypto.randomUUID(),
+    eventId: eventId || crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     event_type: eventType,
     actor_identity: actor || app.user.email,

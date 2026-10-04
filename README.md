@@ -36,7 +36,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 
 SpreadShare operates on a double-entry ledger system. Every action (Expense, Transfer, Loan) is recorded as an immutable event node in a Google Sheet. The application fetches these raw events and reconstructs the group's mathematical state on the client side.
 
-Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE` and `COMMENT`. An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
+Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT` and `PROFILE` (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
 
 1.  **Authentication:** The user logs in via Google. The app requests scopes exclusively for Sheets and Drive files created by the application itself.
 2.  **Provisioning:** Upon creating a new group, the app provisions a hidden configuration file in Drive and a new Spreadsheet formatted to accept ledger entries.
@@ -63,8 +63,8 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 
 ### Faster everyday use
 - [x] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
-- [ ] **Recurring expenses:** Rent, subscriptions, house help. A pre-filled entry appears each period, created on device when the app opens.
-- [ ] **Pay with UPI:** "Record payment" can open your UPI app with the payee and amount filled in (members add their UPI ID once), then records the payment when you return.
+- [x] **Recurring expenses:** Rent, subscriptions, house help repeat weekly or monthly. The creator's device adds each period's copy when it opens the group; copies have a fixed ID per period, so they can't be counted twice, and deleting one skips that period.
+- [x] **Pay with UPI:** Members add their UPI ID once in Settings (published to their groups). "Pay with UPI" in Settle up opens the UPI app with payee and amount filled in, then offers to record the payment when you return. Reminders include your UPI ID.
 - [ ] **Members without Google accounts:** Add people by name (family, a friend who won't sign in) and merge them into their account if they join later.
 - [ ] **Voice entry:** "Paid 600 for dinner with Asha and Ravi", understood on device.
 - [ ] **Split presets:** Save splits you use often, like "me + Asha 60/40", per group.
@@ -79,10 +79,10 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [ ] **Reminders for recurring bills:** A nudge when rent or a subscription is due.
 
 ### Smarter on-device AI
-- [x] **Quantities on receipts:** Item quantity and rate are read, shown, kept on the expense, and "3 × Beer" can be split into three lines for three people.
+- [x] **Quantities on receipts:** Item quantity and rate are read, shown and kept on the expense. "How many each?" splits "3 × Beer" as 2 for Asha and 1 for Ravi (halves only when you allow them); items without a quantity can use uneven shares.
 - [ ] **Learns from your corrections:** When you fix a scanned total or merchant, remember that shop's receipt layout.
 - [ ] **Richer category model:** Also use the amount, time of day and group to break ties.
-- [ ] **Duplicate detection:** Warn when someone in the group already added the same bill (same amount, date and shop).
+- [x] **Duplicate detection:** The form warns when the group already has the same amount around the same time, or the same shop's bill that week.
 
 ## Setup & Deployment
 
@@ -122,6 +122,9 @@ src/
     statement.js        per-person statements (opening → entries → closing)
     budgets.js, prefs.svelte.js   monthly budgets; prefs synced to .spreadshare_prefs.json in Drive
     tags.js             #tags in titles and notes
+    recurring.js        repeating expenses (templates → one copy per period, fixed IDs)
+    duplicates.js       "already added?" matching
+    upi.js              UPI ID validation and upi://pay links
     receipt/            receipt scanner , see "Receipt parser" below
     auth.js, db.js, math.js, currency.js, ...
 build/brand-icons.js    Vite plugin: renders the icon + manifest for every accent in app.css

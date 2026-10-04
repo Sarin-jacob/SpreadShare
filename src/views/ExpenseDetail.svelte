@@ -1,5 +1,6 @@
 <script>
-  import { app, appendEvent, pendingIds, restoreEvent, addComment, deleteComment } from '../lib/app.svelte.js';
+  import { app, appendEvent, pendingIds, restoreEvent, addComment, deleteComment, stopRecurring } from '../lib/app.svelte.js';
+  import { nextOccurrence } from '../lib/recurring.js';
   import { versionChain, commentsFor, describeChanges, latestVersionId } from '../lib/history.js';
   import { tagsOf, splitTags } from '../lib/tags.js';
   import { ledger } from '../lib/ledger.svelte.js';
@@ -33,6 +34,18 @@
   const itemCur = $derived(p.foreign_currency || undefined);
   const billTotal = $derived(p.foreign_amount ?? x?.amount ?? 0);
   const itemsTotal = $derived((p.receipt_items || []).reduce((sum, it) => sum + (it.amount || 0), 0));
+
+  // ─── Repeats ───
+  const EVERY = { week: 'weekly', month: 'monthly' };
+  const next = $derived(p.recurring ? nextOccurrence(x.timestamp, p.recurring.every) : null);
+  /** The current entry that starts the series this copy belongs to. */
+  const template = $derived(p.recurring_from ? L.expenses.find((e) => e.payload.recurring?.series === p.recurring_from) : null);
+
+  async function stopRepeating() {
+    if (!confirm('Stop repeating this expense? Copies already added stay.')) return;
+    await stopRecurring(groupId, x);
+    toast('This expense no longer repeats');
+  }
 
   // ─── Notes, tags, comments, history ───
   const tags = $derived(x ? tagsOf(p) : []);
@@ -125,6 +138,21 @@
           {/if}
         </div>
       </div>
+      {#if p.recurring}
+        <div class="flex items-center gap-2 rounded-xl bg-accent-500/10 px-3 py-2 text-sm">
+          <span>🔁</span>
+          <span class="flex-1">Repeats {EVERY[p.recurring.every]}{next ? ` · next on ${next.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : ''}</span>
+          {#if p.recurring.owner === me}
+            <button class="text-xs font-semibold text-accent-700 dark:text-accent-300" onclick={stopRepeating}>Stop</button>
+          {:else}
+            <span class="text-xs text-slate-500">added by {name(p.recurring.owner)}</span>
+          {/if}
+        </div>
+      {:else if p.recurring_from}
+        <p class="text-xs text-slate-500">
+          🔁 Added automatically ({EVERY[p.recurring_every] || 'repeating'}){#if template}, from <a class="underline" href="#/g/{groupId}/e/{template.eventId}">{splitTags(template.title).text}</a>{/if}. Delete it to skip this time.
+        </p>
+      {/if}
       {#if p.notes}
         <p class="text-sm whitespace-pre-wrap break-words rounded-xl bg-slate-50 dark:bg-slate-900/60 px-3 py-2.5 text-slate-700 dark:text-slate-300">{p.notes}</p>
       {/if}

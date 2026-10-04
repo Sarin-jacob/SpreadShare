@@ -80,6 +80,11 @@ export function computeLedgerState(rawEvents) {
       discover(payload.member_email, payload.member_name, payload.member_picture);
       continue;
     }
+    if (type === 'PROFILE') {
+      // A member's own details for the group (UPI ID). The latest one wins.
+      state.profiles[actor].upi = payload.upi_id ? String(payload.upi_id).trim().toLowerCase() : null;
+      continue;
+    }
 
     const amount = round2(parseFloat(payload.evaluated_amount) || 0);
     const target = payload.target_peer_identity || '';

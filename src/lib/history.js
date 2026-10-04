@@ -117,5 +117,7 @@ export function describeChanges(prev, next, fmt) {
   }
   if ((prev.notes || '') !== (next.notes || '')) out.push(next.notes ? (prev.notes ? 'Note edited' : 'Note added') : 'Note removed');
   if ((prev.receipt_local_url || '') !== (next.receipt_local_url || '')) out.push(next.receipt_local_url ? 'Receipt changed' : 'Receipt removed');
+  const every = (q) => ({ week: 'weekly', month: 'monthly' })[q.recurring?.every] || 'never';
+  if (every(prev) !== every(next)) out.push(`Repeats ${every(prev)} → ${every(next)}`);
   return out.length ? out : ['No visible changes'];
 }
