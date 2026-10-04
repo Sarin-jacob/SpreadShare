@@ -1,7 +1,10 @@
 <script>
   // Bulk add from a list of transactions: GPay / PhonePe / Paytm / bank app history screenshots,
-  // bank statement PDFs, or pasted messages. Read on the device, reviewed here, added in one go.
-  import { app, appendEvent } from '../lib/app.svelte.js';
+  // bank statement PDFs or CSVs, a Splitwise export, or pasted messages. Read on the device,
+  // reviewed here, added in one go.
+  import { app, appendEvent, addGuest } from '../lib/app.svelte.js';
+  import { parseCsv, isSplitwise, readSplitwise, splitwiseToEntry, splitwiseCategory, guessPeople, readGenericCsv } from '../lib/csvImport.js';
+  import { isGuest } from '../lib/members.js';
   import { ledger } from '../lib/ledger.svelte.js';
   import { displayName } from '../lib/engine.js';
   import { CONFIG } from '../lib/config.js';
@@ -30,7 +33,10 @@
   const name = (email) => displayName(email, L.profiles, me);
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
-  let step = $state('pick'); // pick | reading | review
+  let step = $state('pick'); // pick | reading | people (Splitwise names) | review
+  let swPeople = $state([]); // Splitwise names to match
+  let swMap = $state({}); // Splitwise name → member ID, or 'new' (add without Google)
+  let swEntries = []; // waiting for the names to be matched
   let progress = $state({ done: 0, total: 0, note: '' });
   let rows = $state([]);
   let pasteText = $state('');
@@ -59,21 +65,54 @@
         direction: t.direction,
         failed: t.failed,
         dup,
-        category: suggestCategoryFor({ title }, model)?.category || 'General',
+        category: splitwiseCategory(t.category) || suggestCategoryFor({ title }, model)?.category || 'General',
+        sw: t.sw || null, // Splitwise entry: carries its own payers and shares
+        paidBy: t.paidBy || null, // name from a CSV "Paid by" column
       };
     });
   }
 
+  const isCsv = (f) => f.type === 'text/csv' || /\.csv$/i.test(f.name);
+
+  /** CSV: a Splitwise export goes through name matching first; anything else straight to review. */
+  async function readCsv(f, found) {
+    const rows = parseCsv(await f.text());
+    if (rows.length && isSplitwise(rows[0])) {
+      const sw = readSplitwise(rows);
+      swEntries.push(...sw.entries);
+      const guess = guessPeople(sw.people, members, L.profiles, me);
+      for (const p of sw.people) if (!swPeople.includes(p)) swPeople.push(p);
+      for (const p of sw.people) swMap[p] ??= guess[p] || 'new';
+      return;
+    }
+    const txs = readGenericCsv(rows);
+    if (!txs) throw new Error(`Couldn’t find Date and Amount columns in ${f.name}`);
+    found.push(...txs);
+  }
+
+  /** After matching Splitwise names: rows that keep each entry's own split. */
+  function swToRows() {
+    const txs = swEntries.map((e) => ({ title: e.title, amount: e.cost, currency: e.currency, direction: e.kind === 'payment' ? 'payment' : null, date: e.date, failed: false, category: e.category, sw: e }));
+    swEntries = [];
+    finish(txs, { dedupe: false });
+  }
+
   async function readFiles(files) {
-    files = [...files].filter((f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+    files = [...files].filter((f) => f.type.startsWith('image/') || f.type === 'application/pdf' || /\.(pdf|csv)$/i.test(f.name) || f.type === 'text/csv');
     if (!files.length) return;
     model = await getCategoryModel();
     step = 'reading';
     progress = { done: 0, total: files.length, note: '' };
-    const found = [];
+    const found = []; // from screenshots / PDFs: repeats across overlapping screenshots merge
+    const exact = []; // from CSV exports: every row counts
     try {
       const R = await import('../lib/receipt/index.js');
       for (const f of files) {
+        if (isCsv(f)) {
+          await readCsv(f, exact);
+          progress.done++;
+          continue;
+        }
         const needsOcr = !R.isPdf(f);
         if (needsOcr && !R.isOcrReady()) {
           if ((await checkOcrOffline()) !== 'ready' && !navigator.onLine) throw new Error('offline-no-reader');
@@ -95,7 +134,12 @@
         { ms: 6000 }
       );
     }
-    finish(found);
+    if (exact.length) rows = [...rows, ...toRows(exact)];
+    if (swEntries.length) {
+      // Splitwise export: match its names to members before reviewing.
+      if (found.length) rows = [...rows, ...toRows(dedupeTransactions(found))];
+      step = 'people';
+    } else finish(found);
   }
 
   function readPasted() {
@@ -124,21 +168,28 @@
     });
   }
 
-  function finish(txs) {
-    const unique = dedupeTransactions(txs);
+  /** dedupe: merge repeats from overlapping screenshots (off for exports, where repeats are real) */
+  function finish(txs, { dedupe = true } = {}) {
+    const unique = dedupe ? dedupeTransactions(txs) : txs;
     rows = [...rows, ...toRows(unique)].sort((a, b) => b.date.localeCompare(a.date));
     step = rows.length ? 'review' : 'pick';
-    if (!unique.length) toast('No transactions found. Try a clearer screenshot or a text PDF.', 'info', { ms: 5000 });
+    if (!rows.length) toast('No transactions found. Try a clearer screenshot or a text PDF.', 'info', { ms: 5000 });
   }
 
   const chosen = $derived(rows.filter((r) => r.include && Number(r.amount) > 0));
   const chosenTotal = $derived(chosen.reduce((s, r) => s + Number(r.amount), 0));
   const splitMembers = $derived(members.filter((m) => !excluded[m]));
 
+  const needsSplit = $derived(chosen.some((r) => !r.sw));
+
   async function addAll() {
-    if (!chosen.length || !splitMembers.length || saving) return;
+    if (!chosen.length || (needsSplit && !splitMembers.length) || saving) return;
     saving = true;
     try {
+      // Splitwise names that become members without Google.
+      const used = new Set(chosen.filter((r) => r.sw).flatMap((r) => Object.keys(r.sw.nets)));
+      for (const p of used) if (swMap[p] === 'new') swMap[p] = await addGuest(groupId, p);
+      const who = (p) => (swMap[p] && swMap[p] !== 'new' && swMap[p] !== 'skip' ? swMap[p] : null);
       const rates = {};
       for (const cur of new Set(chosen.map((r) => r.currency))) rates[cur] = cur === BASE ? 1 : (await getMultiplier(cur, BASE)) ?? null;
       const missing = Object.entries(rates).find(([, r]) => !r);
@@ -147,6 +198,31 @@
         const amount = round2(Number(r.amount));
         const rate = rates[r.currency];
         const total = round2(amount * rate);
+        const when = new Date(`${r.date}T12:00`).toISOString();
+        const money_ = { raw_amount_string: String(amount), evaluated_amount: total, foreign_amount: amount, foreign_currency: r.currency, exchange_rate: rate, currency: BASE, custom_timestamp: when };
+        if (r.sw) {
+          const entry = splitwiseToEntry(r.sw, who);
+          if (!entry) continue;
+          const conv = (v) => round2(v * rate);
+          if (entry.type === 'TRANSFER') {
+            await appendEvent(groupId, 'TRANSFER', { title: 'Payment', ...money_, evaluated_amount: conv(entry.amount), category: 'Financial', target_peer_identity: entry.to, import_source: 'splitwise' }, { actor: entry.from });
+          } else {
+            const allocations = entry.allocations.map((a) => ({ user: a.user, value: conv(a.value) }));
+            await appendEvent(groupId, 'EXPENSE_ADD', {
+              title: r.title.trim() || 'Expense',
+              ...money_,
+              category: r.category,
+              split_strategy: 'EXACT',
+              split_inputs: Object.fromEntries(allocations.map((a) => [a.user, String(a.value)])),
+              allocations,
+              payers: entry.payers.map((p) => ({ user: p.user, value: conv(p.value) })),
+              import_source: 'splitwise',
+            });
+          }
+          continue;
+        }
+        // A CSV "Paid by" column, matched to a member by name.
+        const paidBy = (r.paidBy && guessPeople([r.paidBy], members, L.profiles, me)[r.paidBy]) || payer;
         const split = computeSplit('EQUALLY', total, members, { excluded });
         await appendEvent(groupId, 'EXPENSE_ADD', {
           title: r.title.trim() || 'Payment',
@@ -156,12 +232,12 @@
           foreign_currency: r.currency,
           exchange_rate: rate,
           currency: BASE,
-          custom_timestamp: new Date(`${r.date}T12:00`).toISOString(),
+          custom_timestamp: when,
           category: r.category,
           split_strategy: 'EQUALLY',
           split_members: splitMembers,
           allocations: Object.entries(split.alloc).filter(([, v]) => v > 0).map(([user, value]) => ({ user, value })),
-          payers: [{ user: payer, value: total }],
+          payers: [{ user: paidBy, value: total }],
           import_source: 'list',
         });
       }
@@ -185,8 +261,8 @@
 
   {#if step !== 'review'}
     <p class="text-sm text-slate-500 dark:text-slate-400">
-      Add many expenses at once from a screenshot of your GPay, PhonePe, Paytm or bank app history, or a bank statement PDF.
-      Everything is read on this device.
+      Add many expenses at once from a screenshot of your GPay, PhonePe, Paytm or bank app history, a bank statement
+      (PDF or CSV), a Splitwise export or your own spreadsheet saved as CSV. Everything is read on this device.
     </p>
   {/if}
 
@@ -205,13 +281,13 @@
             <input type="file" accept="image/*" multiple class="hidden" onchange={(e) => readFiles(e.currentTarget.files)} />
           </label>
           <label class="btn btn-soft !py-2.5 cursor-pointer">
-            <Icon name="sheet" class="w-4 h-4" /> Statement PDF
-            <input type="file" accept="application/pdf,.pdf" multiple class="hidden" onchange={(e) => readFiles(e.currentTarget.files)} />
+            <Icon name="sheet" class="w-4 h-4" /> PDF or CSV
+            <input type="file" accept="application/pdf,.pdf,text/csv,.csv" multiple class="hidden" onchange={(e) => readFiles(e.currentTarget.files)} />
           </label>
         {:else}
           <label class="btn btn-soft !py-2.5 cursor-pointer sm:col-span-2">
-            <Icon name="image" class="w-4 h-4" /> Choose screenshots or PDFs
-            <input type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" onchange={(e) => readFiles(e.currentTarget.files)} />
+            <Icon name="image" class="w-4 h-4" /> Choose screenshots, PDFs or CSVs
+            <input type="file" accept="image/*,application/pdf,.pdf,text/csv,.csv" multiple class="hidden" onchange={(e) => readFiles(e.currentTarget.files)} />
           </label>
         {/if}
       </div>
@@ -221,6 +297,27 @@
         <textarea class="field mt-2 min-h-24 text-sm" bind:value={pasteText} placeholder="Paste several messages, with a blank line between them"></textarea>
         <button type="button" class="btn btn-soft w-full !py-2 mt-2 text-sm" disabled={!pasteText.trim()} onclick={readPasted}>Read messages</button>
       </details>
+    </div>
+  {/if}
+
+  {#if step === 'people'}
+    <div class="card p-4 space-y-3">
+      <div>
+        <h2 class="font-bold">Who's who?</h2>
+        <p class="text-xs text-slate-500">Match the people in the Splitwise export to this group. Anyone not here yet can be added without a Google account and linked later.</p>
+      </div>
+      <ul class="space-y-2">
+        {#each swPeople as p (p)}
+          <li class="flex items-center gap-3">
+            <span class="flex-1 min-w-0 truncate text-sm font-medium">{p}</span>
+            <select class="field !w-52 !py-1.5 text-sm" bind:value={swMap[p]} aria-label="Member for {p}">
+              {#each members as m (m)}<option value={m}>{m === me ? `You (${app.user.name || me})` : name(m)}{isGuest(m) ? ' · no Google' : ''}</option>{/each}
+              <option value="new">Add “{p}” (no Google account)</option>
+            </select>
+          </li>
+        {/each}
+      </ul>
+      <button class="btn btn-primary w-full" onclick={swToRows}>Continue</button>
     </div>
   {/if}
 
@@ -239,7 +336,7 @@
           <div class="flex items-center gap-2">
             <input type="checkbox" class="w-5 h-5 shrink-0 accent-[var(--accent-500)]" bind:checked={r.include} aria-label="Add {r.title}" />
             <input class="field !py-1.5 flex-1 min-w-0" bind:value={r.title} aria-label="Title" />
-            <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={r.amount} inputmode="decimal" aria-label="Amount" />
+            <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={r.amount} inputmode="decimal" aria-label="Amount" readonly={!!r.sw} title={r.sw ? 'Splitwise splits keep their amounts' : ''} />
           </div>
           <div class="flex flex-wrap items-center gap-2 pl-7 text-xs">
             <input type="date" class="field !w-auto !py-1 !px-2 text-xs {r.undated ? '!border-amber-500' : ''}" bind:value={r.date} aria-label="Date" title={r.undated ? 'No date found: check it' : ''} />
@@ -247,6 +344,8 @@
               {#each CATEGORIES as c (c.value)}<option value={c.value}>{c.icon} {c.label}</option>{/each}
             </select>
             {#if r.currency !== BASE}<span class="text-slate-500">{r.currency}</span>{/if}
+            {#if r.sw}<span class="px-1.5 py-0.5 rounded-full bg-accent-500/10 text-accent-700 dark:text-accent-300 font-semibold">{r.sw.kind === 'payment' ? 'Payment' : 'Splitwise split'}</span>{/if}
+            {#if r.paidBy}<span class="text-slate-500">paid by {r.paidBy}</span>{/if}
             {#if r.direction === 'credit'}<span class="px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold">Received</span>{/if}
             {#if r.failed}<span class="px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 font-semibold">Failed</span>{/if}
             {#if r.dup}
@@ -257,6 +356,7 @@
       {/each}
     </ul>
 
+    {#if needsSplit}
     <div class="card p-4 space-y-3">
       <div class="flex items-center gap-3">
         <label class="label !mb-0 w-20" for="imp-payer">Paid by</label>
@@ -282,11 +382,12 @@
           {/each}
         </div>
       </div>
-      <p class="text-xs text-slate-400">You can change any of them afterwards like a normal expense.</p>
+      <p class="text-xs text-slate-400">You can change any of them afterwards like a normal expense.{chosen.some((r) => r.paidBy) ? ' Rows with a “Paid by” name use that person when it matches a member.' : ''}</p>
     </div>
+    {/if}
 
     <div class="sticky bottom-0 -mx-4 px-4 py-3 md:static md:mx-0 md:px-0 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur md:bg-transparent pb-safe">
-      <button class="btn btn-primary w-full !py-3.5 text-base" disabled={!chosen.length || !splitMembers.length || saving} onclick={addAll}>
+      <button class="btn btn-primary w-full !py-3.5 text-base" disabled={!chosen.length || (needsSplit && !splitMembers.length) || saving} onclick={addAll}>
         {saving ? 'Adding…' : `Add ${chosen.length} expense${chosen.length === 1 ? '' : 's'} · ${money(chosenTotal, chosen.every((r) => r.currency === chosen[0]?.currency) ? chosen[0]?.currency : undefined)}`}
       </button>
     </div>
