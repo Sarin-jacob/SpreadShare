@@ -82,7 +82,7 @@
     </div>
   {/if}
 
-  <form class="flex gap-2" onsubmit={create}>
+  <form class="flex gap-2 lg:max-w-xl" onsubmit={create}>
     <input class="field flex-1" bind:value={name} placeholder="New group name, e.g. Goa Trip" maxlength="80" disabled={creating} />
     <button class="btn btn-primary shrink-0" disabled={creating || !name.trim()}>
       <Icon name="plus" class="w-4 h-4" />
@@ -97,7 +97,7 @@
       <p class="text-sm text-slate-500 dark:text-slate-400">Create one above, or open an invite link a friend sent you.</p>
     </div>
   {:else}
-    <ul class="space-y-2">
+    <ul class="grid gap-2 lg:grid-cols-2 lg:gap-3">
       {#each groups as group (group.id)}
         {@const s = summary[group.id]}
         {@const downloaded = !!s || !!app.groupSyncedAt[group.id]}

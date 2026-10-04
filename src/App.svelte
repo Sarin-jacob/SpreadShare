@@ -8,6 +8,7 @@
   import Logo from './components/Logo.svelte';
   import Toasts from './components/Toasts.svelte';
   import SyncStatus from './components/SyncStatus.svelte';
+  import SidebarGroups from './components/SidebarGroups.svelte';
   import Login from './views/Login.svelte';
   import Groups from './views/Groups.svelte';
   import Group from './views/Group.svelte';
@@ -23,6 +24,8 @@
   const seg = $derived(route.segments);
   const groupId = $derived(seg[0] === 'g' ? seg[1] : null);
   const isSubPage = $derived((seg[0] === 'g' && seg.length > 2) || seg[0] === 'share' || seg[0] === 'quick');
+  // Pages with lists, tables and charts use the extra room on desktop; forms stay narrow.
+  const widePage = $derived((seg[0] === 'g' && (seg.length === 2 || seg[2] === 'statement')) || seg[0] === 'insights' || !seg[0]);
 
   // ─── Pull to refresh (phones; list screens only) ───
   const PULL_TRIGGER = 64;
@@ -112,9 +115,9 @@
     </div>
   {/if}
 
-  <div class="md:flex max-w-6xl mx-auto min-h-dvh">
+  <div class="md:flex max-w-7xl mx-auto min-h-dvh">
     <!-- Desktop sidebar -->
-    <aside class="hidden md:flex md:w-60 shrink-0 flex-col gap-8 p-6 border-r border-slate-200 dark:border-slate-800 sticky top-0 h-dvh">
+    <aside class="hidden md:flex md:w-60 shrink-0 flex-col gap-6 p-6 border-r border-slate-200 dark:border-slate-800 sticky top-0 h-dvh">
       <a href="#/" class="flex items-center gap-2.5">
         <Logo class="w-8 h-8" />
         <span class="text-lg font-black tracking-tight">SpreadShare</span>
@@ -132,6 +135,7 @@
           </a>
         {/each}
       </nav>
+      <SidebarGroups active={groupId} />
       <div class="mt-auto"><SyncStatus /></div>
     </aside>
 
@@ -165,7 +169,7 @@
         </div>
       {/if}
 
-      <main class="flex-1 w-full max-w-2xl mx-auto px-4 md:px-8 pt-4 md:pt-8 {isSubPage ? 'pb-10' : 'pb-28 md:pb-10'}">
+      <main class="flex-1 w-full max-w-2xl {widePage ? 'lg:max-w-5xl' : ''} mx-auto px-4 md:px-8 pt-4 md:pt-8 {isSubPage ? 'pb-10' : 'pb-28 md:pb-10'}">
         {#if seg[0] === 'g' && groupId}
           {#key groupId}
             {#if seg[2] === 'add'}

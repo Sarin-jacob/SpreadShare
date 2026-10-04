@@ -23,6 +23,13 @@
   let onlyMine = $state(false);
   let searchEl = $state();
 
+  // Wide screens show balances in a side column instead of a tab.
+  let vw = $state(window.innerWidth);
+  const wide = $derived(vw >= 1024); // Tailwind's lg
+  $effect(() => {
+    if (wide && tab === 'balances') tab = 'activity';
+  });
+
   const me = $derived(app.user.email);
   const L = $derived(ledger.current);
   const memberIds = $derived(Object.keys(L.members).sort((a, b) => (a === me ? -1 : b === me ? 1 : 0)));
@@ -159,7 +166,7 @@
   }
 </script>
 
-<svelte:window onclick={() => (menuOpen = false)} onkeydown={onKey} />
+<svelte:window bind:innerWidth={vw} onclick={() => (menuOpen = false)} onkeydown={onKey} />
 
 <div class="space-y-5 pb-16">
   <!-- Header -->
@@ -176,6 +183,9 @@
         {/if}
       </div>
     </div>
+    <button class="hidden lg:inline-flex btn btn-primary !px-3 !py-2 shrink-0" onclick={() => go(`/g/${groupId}/add`)} title="Add expense (N)">
+      <Icon name="plus" class="w-4 h-4" /> Add expense
+    </button>
     <button class="btn btn-soft !px-3 !py-2 shrink-0" onclick={invite} disabled={sharing}>
       <Icon name="share" class="w-4 h-4" /> <span class="hidden sm:inline">Invite</span>
     </button>
@@ -209,27 +219,13 @@
     <p class="text-xs rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 px-3 py-2">{app.sync.error}</p>
   {/if}
 
-  <!-- Summary -->
-  <div class="rounded-2xl p-5 text-white bg-gradient-to-br from-accent-600 to-accent-800 shadow-lg shadow-accent-900/20">
-    <div class="text-xs font-semibold uppercase tracking-wider text-white/70">Your balance</div>
-    <div class="text-3xl font-black tracking-tight mt-1 tabular-nums">
-      {#if myNet > 0.009}
-        +{money(myNet)}
-      {:else if myNet < -0.009}
-        −{money(-myNet)}
-      {:else}
-        All settled
-      {/if}
-    </div>
-    <div class="text-sm text-white/80 mt-0.5">
-      {#if myNet > 0.009}you are owed overall{:else if myNet < -0.009}you owe overall{:else}nothing owed either way{/if}
-      · group spent {money(L.totalSpent, undefined, { decimals: 0 })}
-    </div>
-  </div>
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:gap-8 lg:items-start">
+  <div class="space-y-5 min-w-0">
+  {#if !wide}{@render summaryCard()}{/if}
 
   <div class="seg" role="tablist">
     <button aria-pressed={tab === 'activity'} onclick={() => (tab = 'activity')}>Activity</button>
-    <button aria-pressed={tab === 'balances'} onclick={() => (tab = 'balances')}>Balances</button>
+    {#if !wide}<button aria-pressed={tab === 'balances'} onclick={() => (tab = 'balances')}>Balances</button>{/if}
     <button aria-pressed={tab === 'insights'} onclick={() => (tab = 'insights')}>Insights</button>
   </div>
 
@@ -324,6 +320,60 @@
       </div>
     {/if}
   {:else if tab === 'balances'}
+    {@render balancesPanel()}
+  {:else}
+    <div class="seg">
+      <button aria-pressed={scope === 'group'} onclick={() => (scope = 'group')}>Whole group</button>
+      <button aria-pressed={scope === 'you'} onclick={() => (scope = 'you')}>Your share</button>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="card p-4">
+        <div class="label !mb-0.5">Total</div>
+        <div class="text-xl font-black tabular-nums">{money(analytics.total)}</div>
+      </div>
+      <div class="card p-4">
+        <div class="label !mb-0.5">Expenses</div>
+        <div class="text-xl font-black tabular-nums">{analytics.count}</div>
+      </div>
+    </div>
+    <div class="card p-4">
+      <h2 class="label">By category</h2>
+      <Donut data={analytics.categories} />
+    </div>
+  {/if}
+  </div>
+
+  {#if wide}
+    <!-- Desktop: balances stay in view next to the activity feed -->
+    <div class="space-y-5 sticky top-8">
+      {@render summaryCard()}
+      {@render balancesPanel()}
+    </div>
+  {/if}
+  </div>
+</div>
+
+{#snippet summaryCard()}
+  <div class="rounded-2xl p-5 text-white bg-gradient-to-br from-accent-600 to-accent-800 shadow-lg shadow-accent-900/20">
+    <div class="text-xs font-semibold uppercase tracking-wider text-white/70">Your balance</div>
+    <div class="text-3xl font-black tracking-tight mt-1 tabular-nums">
+      {#if myNet > 0.009}
+        +{money(myNet)}
+      {:else if myNet < -0.009}
+        −{money(-myNet)}
+      {:else}
+        All settled
+      {/if}
+    </div>
+    <div class="text-sm text-white/80 mt-0.5">
+      {#if myNet > 0.009}you are owed overall{:else if myNet < -0.009}you owe overall{:else}nothing owed either way{/if}
+      · group spent {money(L.totalSpent, undefined, { decimals: 0 })}
+    </div>
+  </div>
+
+{/snippet}
+
+{#snippet balancesPanel()}
     <section class="space-y-2">
       <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">Settle up</h2>
       {#if settlements.length === 0}
@@ -332,7 +382,7 @@
         <ul class="space-y-2">
           {#each settlements as s (s.from + s.to)}
             {@const involved = s.from === me || s.to === me}
-            <li class="card p-3 flex items-center gap-3 {involved ? '!border-accent-500/40' : ''}">
+            <li class="card p-3 flex flex-wrap items-center gap-3 {involved ? '!border-accent-500/40' : ''}">
               <div class="flex -space-x-2 shrink-0">
                 <Avatar email={s.from} profile={L.profiles[s.from]} />
                 <Avatar email={s.to} profile={L.profiles[s.to]} />
@@ -343,7 +393,7 @@
                 <span class="font-semibold">{name(s.to)}</span>
                 <div class="font-bold tabular-nums">{money(s.amount)}</div>
               </div>
-              <div class="flex flex-col sm:flex-row gap-1.5 shrink-0">
+              <div class="flex flex-col sm:flex-row lg:flex-row gap-1.5 shrink-0 lg:w-full lg:justify-end">
                 {#if s.to === me}
                   <button class="btn btn-soft !px-3 !py-1.5 text-xs" onclick={() => remind(s)}><Icon name="bell" class="w-3.5 h-3.5" /> Remind</button>
                 {/if}
@@ -375,31 +425,11 @@
         {/each}
       </ul>
     </section>
-  {:else}
-    <div class="seg">
-      <button aria-pressed={scope === 'group'} onclick={() => (scope = 'group')}>Whole group</button>
-      <button aria-pressed={scope === 'you'} onclick={() => (scope = 'you')}>Your share</button>
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="card p-4">
-        <div class="label !mb-0.5">Total</div>
-        <div class="text-xl font-black tabular-nums">{money(analytics.total)}</div>
-      </div>
-      <div class="card p-4">
-        <div class="label !mb-0.5">Expenses</div>
-        <div class="text-xl font-black tabular-nums">{analytics.count}</div>
-      </div>
-    </div>
-    <div class="card p-4">
-      <h2 class="label">By category</h2>
-      <Donut data={analytics.categories} />
-    </div>
-  {/if}
-</div>
+{/snippet}
 
 <!-- Floating add button -->
 <button
-  class="fixed z-20 right-5 bottom-24 md:bottom-8 md:right-[max(2rem,calc(50vw-36rem+2rem))] w-14 h-14 rounded-2xl grid place-items-center text-white bg-accent-600 dark:bg-accent-500 shadow-xl shadow-accent-900/30 active:scale-95 transition"
+  class="lg:hidden fixed z-20 right-5 bottom-24 md:bottom-8 md:right-8 w-14 h-14 rounded-2xl grid place-items-center text-white bg-accent-600 dark:bg-accent-500 shadow-xl shadow-accent-900/30 active:scale-95 transition"
   aria-label="Add expense"
   onclick={() => go(`/g/${groupId}/add`)}
 >

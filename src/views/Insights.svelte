@@ -67,7 +67,7 @@
     <p class="text-sm text-slate-500 dark:text-slate-400">Your share of spending across all groups.</p>
   </div>
 
-  <div class="seg">
+  <div class="seg lg:max-w-md">
     {#each RANGES as r}
       <button aria-pressed={days === r.value} onclick={() => (days = r.value)}>{r.label}</button>
     {/each}
@@ -88,6 +88,7 @@
     <p class="text-sm text-center text-slate-400 py-4">No expenses in this period.</p>
   {/if}
 
+  <div class="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
   {#if loaded}<BudgetsCard {events} email={me} />{/if}
 
   <div class="card p-4">
@@ -136,5 +137,6 @@
         <span class="w-20 text-right font-semibold tabular-nums">{money(v, undefined, { decimals: 0 })}</span>
       </div>
     {/each}
+  </div>
   </div>
 </div>
