@@ -36,7 +36,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 
 SpreadShare operates on a double-entry ledger system. Every action (Expense, Transfer, Loan) is recorded as an immutable event node in a Google Sheet. The application fetches these raw events and reconstructs the group's mathematical state on the client side.
 
-Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT`, `GROUP_SETTINGS` (the group's currency, only before its first entry) and `PROFILE` (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
+Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT`, `GROUP_SETTINGS` (the group's currency, only before its first entry), `PROFILE`, `SPLIT_PRESET` and `MEMBER_MERGED` (a member without Google linked to an account: their entries count as that account's) (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
 
 1.  **Authentication:** The user logs in via Google. The app requests scopes exclusively for Sheets and Drive files created by the application itself.
 2.  **Provisioning:** Upon creating a new group, the app provisions a hidden configuration file in Drive and a new Spreadsheet formatted to accept ledger entries.
@@ -57,19 +57,19 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 
 ### Import from anywhere
 - [x] **Transaction lists:** Screenshots of GPay / PhonePe / Paytm / bank app history, bank statement PDFs or pasted bank messages become a list to tick, fix and add in one go; auto-categorised, already-added ones flagged, received / failed ones left out.
-- [ ] **Bank & card statement files:** CSV / XLSX / OFX downloads.
-- [ ] **Switch from Splitwise, Tricount or Settle Up:** Import their CSV exports, match names to group members, and carry balances over.
+- [x] **Bank statement CSVs:** Finds the table under the account details; withdrawal / deposit columns. (XLSX / OFX still to do.)
+- [x] **Switch from Splitwise:** Import its group CSV export, match names to members (or add them without Google). Payers, exact shares and payments carry over, so balances match. (Tricount / Settle Up still to do.)
 - [ ] **Existing spreadsheets:** Map the columns of a Google Sheet you already use for expenses and import its rows.
-- [ ] **Batch scan:** Pick several receipts at once; each becomes a draft to review and save.
+- [x] **Batch scan:** Pick or share several receipts at once; each opens as its own draft to check and save ("Receipt 2 of 4", Skip / Stop).
 
 ### Faster everyday use
 - [x] **Home-screen shortcuts:** Long-press the app icon for "Add expense" or "Scan receipt", opening in the group you used last.
 - [x] **Recurring expenses:** Rent, subscriptions, house help repeat weekly or monthly. The creator's device adds each period's copy when it opens the group; copies have a fixed ID per period, so they can't be counted twice, and deleting one skips that period.
 - [x] **App lock:** Fingerprint, face or device PIN (WebAuthn platform authenticator) when opening the app, again after a chosen time in the background. A privacy lock: it doesn't encrypt local data.
 - [x] **Pay with UPI:** Members add their UPI ID once in Settings (published to their groups). "Pay with UPI" in Settle up opens the UPI app with payee and amount filled in, then offers to record the payment when you return; on a computer it shows a UPI QR code to scan with your phone. Reminders include your UPI ID.
-- [ ] **Members without Google accounts:** Add people by name (family, a friend who won't sign in) and merge them into their account if they join later.
+- [x] **Members without Google accounts:** Add people by name. A personal invite link (or "Link to an account") later moves everything logged for them to their Google account.
 - [ ] **Voice entry:** "Paid 600 for dinner with Asha and Ravi", understood on device.
-- [ ] **Split presets:** Save splits you use often, like "me + Asha 60/40", per group.
+- [x] **Split presets:** Save splits you use often ("Rent 60/40") for the whole group and apply them in one tap.
 - [x] **Currency per group:** A group can keep its balances in its own currency (set when creating it, or before its first entry). New entries start in the currency last used in that group. Totals across groups never mix currencies.
 
 ### Stay organised
