@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 , bench/lib/datetime.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@b9dd94a , bench/lib/datetime.js. Keep in sync with that repo; avoid local edits.
 // Date and time of a receipt from its OCR lines.
 //
 // Every date/time-looking string becomes a candidate; candidates are scored by
@@ -30,7 +30,7 @@ const weekday = (y, m, d) => WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay(
 function unglue(text) {
   return text
     .replace(/(\d{1,2}[-/.]\d{1,2}[-/.](?:19|20)\d{2})(?=\d{1,2}[:.]\d{2})/g, '$1 ')
-    .replace(/(\d{1,2}[:.]\d{2})(?=[AaPp][Mm]\b)/g, '$1 ')
+    .replace(/(\d{1,2}[:.]\d{2})(?=[AaPp]\.?[Mm](?![a-z]))/g, '$1 ')
     .replace(new RegExp(String.raw`\b${MON}([a-z]*\.?\s+)(\d{1,2})((?:19|20)\d{2})\b`, 'gi'), '$1$2$3 $4') // "Jul 142024"
     .replace(/@/g, ' @ ');
 }
@@ -64,7 +64,7 @@ function dateCandidates(text) {
 // Times on one line: 22:08, 09:10 PM, 13:29:17, 15:10 hrs, 1.25 PM.
 function timeCandidates(text) {
   const out = [];
-  const rx = /(?<![\d.])(?<!\d:)([01]?\d|2[0-3])\s?([:.])\s?([0-5]\d)(?:\2([0-5]\d))?(?:\s*([AaPp])\.?\s?[Mm]\.?\b)?(\s*hrs?\b)?(?![\d])/g;
+  const rx = /(?<![\d.])(?<!\d:)([01]?\d|2[0-3])\s?([:.])\s?([0-5]\d)(?:\2([0-5]\d))?(?:\s*([AaPp])\.?\s?[Mm]\.?(?![a-z]))?(\s*hrs?\b)?(?![\d])/g;
   let m;
   while ((m = rx.exec(text))) {
     const [, hh, sep, mm, ss, ap, hrs] = m;

@@ -150,6 +150,10 @@
   const r = $derived(result?.receipt);
   const draft = $derived(r && R ? R.receiptToDraft(r) : null);
   const failed = $derived(result?.check.checks.filter((c) => !c.ok) ?? []);
+  const problems = $derived(R ? failed.map((c) => R.describeCheck(c)).filter(Boolean) : []);
+  const counts = $derived(r && R ? R.countMismatch(r) : null);
+  const totalQty = $derived(r ? Math.round(r.items.reduce((s, i) => s + (i.qty ?? 1), 0) * 100) / 100 : 0);
+  const PAY = { cash: 'Cash', card: 'Card', upi: 'UPI', wallet: 'Wallet', netbanking: 'Net banking' };
   const cur = $derived(r?.currency || undefined);
   const summaryRows = $derived(
     r
@@ -279,20 +283,32 @@
             class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {result.check.ok ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}"
             title={failed.map((c) => `${c.name}: ${c.detail}`).join('\n')}
           >
-            {result.check.ok ? 'Numbers add up ✓' : 'Please check'}
+            {result.check.ok && !counts ? 'Numbers add up ✓' : 'Please check'}
           </span>
         </div>
 
         {#if r.items.length}
-          <ul class="divide-y divide-slate-100 dark:divide-slate-700/60 text-sm">
-            {#each r.items as it, i (i)}
-              <li class="flex items-center gap-3 py-1.5">
-                <span class="flex-1 min-w-0 truncate">{it.name}</span>
-                {#if it.qty && it.qty !== 1}<span class="text-xs text-slate-400 tabular-nums">×{it.qty}</span>{/if}
-                <span class="tabular-nums font-medium">{money(it.total, cur)}</span>
-              </li>
-            {/each}
-          </ul>
+          <div>
+            <div class="flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-400 pb-1">
+              <span>{r.items.length} item{r.items.length === 1 ? '' : 's'}{totalQty !== r.items.length ? ` · ${totalQty} units` : ''}</span>
+              <span>Amount</span>
+            </div>
+            <ul class="divide-y divide-slate-100 dark:divide-slate-700/60 text-sm">
+              {#each r.items as it, i (i)}
+                <li class="flex items-center gap-3 py-1.5">
+                  <span class="flex-1 min-w-0">
+                    <span class="block truncate">{R.tidyName(it.name) || 'Item'}</span>
+                    {#if (it.qty && it.qty !== 1) || it.discount}
+                      <span class="block text-xs text-slate-400 tabular-nums">
+                        {#if it.qty && it.qty !== 1}{it.qty}{it.unit ? ` ${it.unit}` : ''}{it.unit_price != null ? ` × ${money(it.unit_price, cur)}` : ' units'}{/if}{#if it.discount}{it.qty && it.qty !== 1 ? ' · ' : ''}discount {money(Math.abs(it.discount), cur)}{/if}
+                      </span>
+                    {/if}
+                  </span>
+                  <span class="tabular-nums font-medium">{money(it.total, cur)}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
         {/if}
 
         {#if summaryRows.length}
@@ -304,10 +320,22 @@
           </dl>
         {/if}
 
-        {#if failed.length}
-          <ul class="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 rounded-lg px-3 py-2 space-y-0.5">
-            {#each failed as c (c.name)}<li>{c.name}: {c.detail}</li>{/each}
+        {#if counts || problems.length}
+          <ul class="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 rounded-lg px-3 py-2 space-y-1">
+            {#if counts}
+              <li>
+                The receipt lists {counts.printed} {counts.kind === 'items' ? 'items' : 'units'} but {counts.read} were read.
+                {counts.printed > counts.read ? 'Add the missing one in the form.' : 'Check for a line read twice.'}
+              </li>
+            {/if}
+            {#each problems as p, i (i)}<li>{p}</li>{/each}
           </ul>
+        {/if}
+
+        {#if r.invoice_number || r.payment_method}
+          <p class="text-xs text-slate-500">
+            {[r.invoice_number && `Bill no. ${r.invoice_number}`, r.payment_method && `Paid by ${PAY[r.payment_method] || r.payment_method}`].filter(Boolean).join(' · ')}
+          </p>
         {/if}
 
         {#if result.fromText}

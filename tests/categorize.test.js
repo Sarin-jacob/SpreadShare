@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tokenize, trainModel, predict, suggestCategory, keywordCategory, expenseText } from '../src/lib/categorize.js';
+import { tokenize, trainModel, predict, suggestCategory, suggestCategoryFor, keywordCategory, keywordVotes, expenseText } from '../src/lib/categorize.js';
 
 const history = [
   ['Instamart order', 'Groceries'],
@@ -76,5 +76,42 @@ describe('expenseText', () => {
   it('combines title, scanned merchant and item names', () => {
     const text = expenseText({ title: 'Bakery run', receipt_scan: { merchant: 'Moonlight Cake House', items: [{ name: 'x' }] }, receipt_items: [{ name: 'Honey Walnut' }] });
     expect(text).toBe('Bakery run Moonlight Cake House Honey Walnut');
+  });
+});
+
+describe('keywordVotes', () => {
+  it('lets the bill decide when the shop name is ambiguous', () => {
+    // "Hotel" is a restaurant on many Indian bills.
+    const dosaBill = [{ name: 'Masala Dosa', total: 90 }, { name: 'Filter Coffee', total: 40 }];
+    expect(keywordVotes({ title: 'Hotel Saravana Bhavan', merchant: 'Hotel Saravana Bhavan', items: dosaBill })).toBe('Food');
+    expect(keywordVotes({ title: 'Hotel Sea View', items: [{ name: 'Room charges', total: 4000 }, { name: 'Water bottle', total: 40 }] })).toBe('Stay');
+  });
+
+  it('weighs items by amount', () => {
+    const items = [{ name: 'Paracetamol tablets', total: 30 }, { name: 'Shampoo', total: 300 }, { name: 'Bread', total: 40 }];
+    expect(keywordVotes({ merchant: 'Corner store', items })).toBe('Groceries');
+  });
+
+  it('trusts what you typed over the shop', () => {
+    expect(keywordVotes({ title: 'Team lunch', merchant: 'Shell Select' })).toBe('Food');
+  });
+
+  it('knows more shops and dishes', () => {
+    expect(keywordCategory('Uber Eats')).toBe('Food');
+    expect(keywordCategory('Chicken fried rice')).toBe('Food');
+    expect(keywordCategory('BESCOM')).toBe('Utilities');
+    expect(keywordCategory('IndiGo 6E 204')).toBe('Travel');
+    expect(keywordCategory('Swiggy Instamart')).toBe('Groceries');
+  });
+});
+
+describe('suggestCategoryFor', () => {
+  it('uses the scanned shop and items when the title says nothing', () => {
+    const s = suggestCategoryFor({ title: 'Saturday', receipt_scan: { merchant: 'Udupi Grand' }, receipt_items: [{ name: 'Idli Vada', amount: 70 }] });
+    expect(s).toMatchObject({ category: 'Food', source: 'keywords' });
+  });
+
+  it('still prefers confident history', () => {
+    expect(suggestCategoryFor({ title: 'swiggy instamart' }, model)).toMatchObject({ category: 'Groceries', source: 'history' });
   });
 });

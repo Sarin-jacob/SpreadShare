@@ -7,20 +7,47 @@
 
 /** Ordered: the first matching rule wins, so more specific categories come first. */
 export const CATEGORY_RULES = [
-  ['Groceries', /grocer|supermarket|hypermarket|\bmart\b|blinkit|zepto|bigbasket|instamart|dmart|reliance\s*(fresh|smart)|more\s*retail|kirana|provision|walmart|costco|aldi|lidl|tesco|sainsbury|whole\s*foods|trader\s*joe|fairprice|giant|\bvegetables?\b|\bveggies\b|\bfruits?\b|\bmilk\b|\beggs?\b|\bration\b/i],
-  ['Food', /restaurant|\bcaf[eé]\b|coffee|kitchen|dhaba|bakery|pizza|burger|biryani|swiggy|zomato|\bbar\b|\bpub\b|eatery|\bfoods?\b|starbucks|mcdonald|\bkfc\b|domino|subway|chai|\btea\b|\bdine|bistro|grill|canteen|\bmess\b|breakfast|brunch|lunch|dinner|snacks?|dessert|ice\s*cream|drinks|beers?|takeaway|take\s*out|meal/i],
-  ['Health', /pharma|chemist|medical|medicine|hospital|clinic|apollo|medplus|1mg|netmeds|\bdrug|diagnostic|\blab\b|dental|doctor|\bgym\b|physio/i],
-  ['Travel', /\buber\b|\bola\b|rapido|\bfuel\b|petrol|diesel|\bhpcl\b|\bbpcl\b|indian\s*oil|\bshell\b|parking|\btoll\b|\bmetro\b|railway|irctc|airline|airways|\bcab\b|taxi|\bauto\b|rickshaw|\bbus\b|train|flight|airport|\bferry\b|scooter|bike\s*rental|car\s*rental/i],
-  ['Stay', /\bhotel\b|resort|\binn\b|hostel|lodge|\boyo\b|airbnb|homestay|\brent\b|\bpg\b|maintenance|deposit/i],
-  ['Utilities', /electric|electricity|\bpower\b|water\s*(board|bill|can)|broadband|wi-?fi|internet|recharge|airtel|\bjio\b|vodafone|bsnl|\bgas\b|\blpg\b|cylinder|\bbill\s*pay|\bmaid\b|cleaning|laundry/i],
-  ['Entertainment', /cinema|\bpvr\b|\binox\b|movie|theatre|theater|bookmyshow|netflix|spotify|prime\s*video|hotstar|gaming|bowling|amusement|concert|tickets?|museum|\bclub\b|party|parasail|trek|safari|adventure/i],
-  ['Shopping', /fashion|apparel|clothing|clothes|shoes|footwear|electronics|amazon|flipkart|myntra|ajio|meesho|decathlon|ikea|\bmall\b|lifestyle|pantaloons|zara|h\s*&\s*m|gift|souvenir/i],
+  // Grocery apps and supermarkets before Food: "Swiggy Instamart" sells groceries.
+  ['Groceries', /instamart|blinkit|zepto|bigbasket|jiomart|dmart|supermarket|hypermarket/i],
+  // Food before the other ambiguous ones: "fried rice", "chicken biryani" and "Uber Eats" are meals.
+  ['Food', /restaurant|\bcaf[eé]\b|coffee|kitchen|dhaba|bakery|pizza|burger|biryani|swiggy|zomato|uber\s*eats|eatsure|\bbar\b|\bpub\b|brew|eatery|\bfoods?\b|starbucks|mcdonald|\bkfc\b|domino|subway|chai|\btea\b|\bdine|bistro|grill|canteen|\bmess\b|breakfast|brunch|lunch|dinner|snacks?|dessert|ice\s*cream|drinks|beers?|takeaway|take\s*out|meals?\b|bhava?n\b|bhawan|udupi|darshini|sagar\b|tiffin|thali|dosa|idli|idly|vada|paneer|naan|\broti\b|paratha|parotta|masala|tikka|curry|chicken|mutton|\bfish\b|prawns?|momos?|noodles|fried\s*rice|manchurian|samosa|chaat|pani\s*puri|lassi|juice|shake|mocktail|cocktail|whisky|vodka|\brum\b|\bwine\b|sandwich|pasta|fries|\bwrap\b|shawarma|kebab|sweets|mithai|cappuccino|latte|espresso|mojito|\bsoup\b|starter|haldiram|barbeque|bbq/i],
+  ['Groceries', /grocer|supermarket|hypermarket|\bmart\b|blinkit|zepto|bigbasket|instamart|dmart|jiomart|reliance\s*(fresh|smart)|more\s*retail|spencer|nature'?s\s*basket|ratnadeep|kirana|provision|walmart|costco|aldi|lidl|tesco|sainsbury|whole\s*foods|trader\s*joe|fairprice|giant|\bvegetables?\b|\bveggies\b|\bfruits?\b|\bmilk\b|\beggs?\b|\bration\b|\batta\b|\bdal\b|\bflour\b|\bsugar\b|\bghee\b|\bcurd\b|\bdahi\b|\bbread\b|biscuits?|detergent|\bsoap\b|shampoo|toothpaste|tissue|amul|britannia|aashirvaad|tata\s*salt|surf\s*excel|onions?|tomato(es)?|potato(es)?/i],
+  ['Health', /pharma|chemist|medical|medicine|hospital|clinic|apollo|medplus|1mg|netmeds|pharmeasy|practo|\bdrug|diagnostic|\blab\b|dental|doctor|\bgym\b|cult\.?\s*fit|physio|tablets?\b|syrup|capsules?|optical|spectacles|lenskart/i],
+  ['Travel', /\buber\b|\bola\b|rapido|namma\s*yatri|blablacar|zoomcar|yulu|\bfuel\b|petrol|diesel|\bhpcl\b|\bbpcl\b|indian\s*oil|\bshell\b|fastag|parking|\btoll\b|\bmetro\b|railway|irctc|redbus|abhibus|airline|airways|indigo|vistara|air\s*india|spicejet|akasa|\bcab\b|taxi|\bauto\b|rickshaw|\bbus\b|train|flight|airport|\bferry\b|scooter|bike\s*rental|car\s*rental|boarding/i],
+  ['Stay', /\bhotel\b|resort|\binn\b|hostel|zostel|lodge|\boyo\b|treebo|fabhotel|airbnb|agoda|booking\.com|homestay|\brent\b|\bpg\b|room\s*(charges?|tariff|rent)|\btariff\b|maintenance|deposit|check-?in/i],
+  ['Utilities', /electric|electricity|\bpower\b|bescom|tneb|msedcl|tata\s*power|adani\s*electricity|water\s*(board|bill|can|tax)|broadband|fibernet|hathway|wi-?fi|internet|recharge|postpaid|prepaid|airtel|\bjio\b|vodafone|bsnl|\bdth\b|tata\s*play|\bgas\b|\blpg\b|\bigl\b|\bmgl\b|cylinder|\bbill\s*pay|\bmaid\b|cook\s*salary|cleaning|laundry|dry\s*clean|society/i],
+  ['Entertainment', /cinema|\bpvr\b|\binox\b|movie|theatre|theater|bookmyshow|district|insider|netflix|spotify|prime\s*video|hotstar|jiocinema|sonyliv|zee5|youtube\s*premium|apple\s*tv|gaming|playstation|\bsteam\b|bowling|amusement|wonderla|concert|tickets?|museum|\bclub\b|party|parasail|trek|safari|adventure|\bzoo\b/i],
+  ['Shopping', /fashion|apparel|clothing|clothes|shoes|footwear|electronics|amazon|flipkart|myntra|ajio|meesho|nykaa|tata\s*cliq|croma|reliance\s*digital|vijay\s*sales|decathlon|ikea|pepperfry|\bmall\b|lifestyle|pantaloons|westside|max\s*fashion|uniqlo|zara|h\s*&\s*m|gift|souvenir|books?\b|stationery|hardware|furniture|headphones|charger|t-?shirt|jeans|kurta|saree/i],
 ];
 
 export function keywordCategory(text) {
   if (!text) return null;
   for (const [value, re] of CATEGORY_RULES) if (re.test(text)) return value;
   return null;
+}
+
+const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+/**
+ * Keyword category from the parts of an expense rather than one blob of text. What the user
+ * typed counts most (3), then the shop name (2, nothing extra when the title is the shop name),
+ * and the items share 4 votes in proportion to their amounts. So "Hotel Saravana Bhavan" with
+ * dosa and coffee on the bill is Food, while a hotel bill with room charges stays Stay.
+ * @param parts { title?, merchant?, items?: [{ name, total?|amount? }] }
+ */
+export function keywordVotes({ title, merchant, items = [] } = {}) {
+  const votes = new Map();
+  const add = (c, w) => c && w > 0 && votes.set(c, (votes.get(c) || 0) + w);
+  add(keywordCategory(title), 3);
+  if (merchant && squash(merchant) !== squash(title)) add(keywordCategory(merchant), 2);
+  const matched = items
+    .map((i) => ({ c: keywordCategory(i?.name), w: Math.abs(Number(i?.total ?? i?.amount)) || 1 }))
+    .filter((i) => i.c);
+  const weight = matched.reduce((s, i) => s + i.w, 0);
+  for (const i of matched) add(i.c, (4 * i.w) / weight);
+  let best = null;
+  for (const [value] of CATEGORY_RULES) if (votes.has(value) && (!best || votes.get(value) > votes.get(best) + 1e-9)) best = value;
+  return best;
 }
 
 const STOPWORDS = new Set(
@@ -95,6 +122,23 @@ export function suggestCategory(text, model = null) {
   const top = ranked[0];
   if (top && top.p >= MIN_P && top.evidence >= 2) return { category: top.category, source: 'history', confidence: top.p };
   const kw = keywordCategory(text);
+  if (kw) return { category: kw, source: 'keywords', confidence: 0.5 };
+  if (top && top.p >= MIN_P && top.evidence >= 1) return { category: top.category, source: 'history', confidence: top.p };
+  return null;
+}
+
+/**
+ * Category for an expense from its parts (title, scanned shop, items); see suggestCategory and
+ * keywordVotes. `parts` is payload-shaped: { title, receipt_scan, receipt_items }.
+ */
+export function suggestCategoryFor(parts, model = null) {
+  const text = expenseText(parts);
+  if (!text.trim()) return null;
+  const ranked = model && model.docs >= MIN_DOCS ? predict(model, text) : [];
+  const top = ranked[0];
+  if (top && top.p >= MIN_P && top.evidence >= 2) return { category: top.category, source: 'history', confidence: top.p };
+  const items = parts?.receipt_items?.length ? parts.receipt_items : parts?.receipt_scan?.items || [];
+  const kw = keywordVotes({ title: parts?.title, merchant: parts?.receipt_scan?.merchant, items });
   if (kw) return { category: kw, source: 'keywords', confidence: 0.5 };
   if (top && top.p >= MIN_P && top.evidence >= 1) return { category: top.category, source: 'history', confidence: top.p };
   return null;

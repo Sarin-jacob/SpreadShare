@@ -1,7 +1,7 @@
 // src/lib/receipt/index.js
 // On-device receipt scanning: PaddleOCR (PP-OCRv6 small) + an arithmetic line solver.
 // This module is imported lazily by the scanner so the OCR code and model download only
-// happen when someone actually scans. Parser modules are vendored from receipt_test@8125280.
+// happen when someone actually scans. Parser modules are vendored from receipt_test@b9dd94a.
 // Same specifier as ocr.js, so both share one module instance.
 import { PaddleOCR } from 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
 import { getOcr, OCR_MODELS, toBoxes } from './ocr.js';

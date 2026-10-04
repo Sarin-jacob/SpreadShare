@@ -172,7 +172,7 @@
         {#each p.receipt_items as it, i (i)}
           <div class="flex items-center gap-3">
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium truncate">{it.name}</div>
+              <div class="text-sm font-medium truncate">{it.name}{#if it.qty}<span class="text-xs font-normal text-slate-400"> · {it.qty} × {money(it.amount / it.qty, itemCur)}</span>{/if}</div>
               <div class="flex -space-x-1.5 mt-1">
                 {#each it.members as m (m)}<Avatar email={m} profile={L.profiles[m]} size="w-5 h-5" />{/each}
               </div>
@@ -185,6 +185,7 @@
             {billTotal > itemsTotal ? 'Tax & extras' : 'Discounts'} of {money(Math.abs(billTotal - itemsTotal), itemCur)} shared in proportion to each person's items.
           </p>
         {/if}
+        {#if p.receipt_scan?.invoice_number}<p class="text-xs text-slate-400">Bill no. {p.receipt_scan.invoice_number}</p>{/if}
       </section>
     {:else if p.receipt_scan?.items?.length}
       <section class="card p-4 space-y-1.5">
@@ -196,6 +197,7 @@
             <span class="tabular-nums">{money(it.total, p.receipt_scan.currency || undefined)}</span>
           </div>
         {/each}
+        {#if p.receipt_scan.invoice_number}<p class="text-xs text-slate-400 pt-1">Bill no. {p.receipt_scan.invoice_number}</p>{/if}
       </section>
     {/if}
 

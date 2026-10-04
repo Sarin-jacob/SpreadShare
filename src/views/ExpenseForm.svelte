@@ -8,7 +8,7 @@
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
   import { computeSplit, exactWithRemainder } from '../lib/split.js';
-  import { suggestCategory, expenseText } from '../lib/categorize.js';
+  import { suggestCategoryFor } from '../lib/categorize.js';
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
   import { parsePaymentText, looksLikePayment } from '../lib/paymentText.js';
   import { takeShared } from '../lib/share.js';
@@ -17,6 +17,7 @@
   import { loadAllEvents } from '../lib/cache.svelte.js';
   import { category } from '../lib/categories.js';
   import { compressImage } from '../lib/image.js';
+  import { unitCount, splitUnits } from '../lib/receipt/draft.js';
   import { money, toLocalInput } from '../lib/format.js';
   import { go, replace } from '../lib/router.svelte.js';
   import { toast } from '../lib/toast.svelte.js';
@@ -144,7 +145,7 @@
         const inSplit = new Set(p.split_members || allocs.filter((a) => a.value > 0).map((a) => a.user));
         excluded = Object.fromEntries(members.filter((m) => !inSplit.has(m)).map((m) => [m, true]));
       } else if (strategy === 'ITEMS' && p.receipt_items?.length) {
-        receiptItems = p.receipt_items.map((i) => ({ name: i.name, amount: String(i.amount), members: [...i.members] }));
+        receiptItems = p.receipt_items.map((i) => ({ name: i.name, amount: String(i.amount), qty: i.qty ?? null, members: [...i.members] }));
       } else if (p.split_inputs) {
         splitInputs = { ...p.split_inputs };
       } else {
@@ -182,8 +183,7 @@
   // Suggest a category from the description, scanned shop and item names as they change.
   $effect(() => {
     if (type !== 'EXPENSE_ADD' || categoryTouched) return;
-    const text = expenseText({ title, receipt_scan: receiptScan, receipt_items: receiptItems });
-    const s = suggestCategory(text, categoryModel);
+    const s = suggestCategoryFor({ title, receipt_scan: receiptScan, receipt_items: receiptItems }, categoryModel);
     untrack(() => {
       autoCategory = s;
       categoryValue = s?.category ?? 'General';
@@ -356,12 +356,19 @@
 
     const everyone = members.filter((m) => !excluded[m]);
     if (draft.items.length) {
-      receiptItems = draft.items.map((i) => ({ name: i.name, amount: String(i.total), members: [...everyone] }));
+      receiptItems = draft.items.map((i) => ({ name: i.name, amount: String(i.total), qty: unitCount(i) || null, members: [...everyone] }));
     }
     if (mode === 'items') strategy = 'ITEMS';
 
-    if (draft.amount == null) toast('No total found on the receipt , enter the amount', 'info');
-    else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read , check the details', 'info');
+    if (draft.amount == null) toast('No total found on the receipt. Enter the amount.', 'info');
+    else toast(mode === 'items' ? 'Now tap who had each item' : 'Receipt read. Check the details.', 'info');
+  }
+
+  /** "3 × Beer ₹900" → three ₹300 lines, so each beer can go to someone different. */
+  function splitItemUnits(idx) {
+    const item = receiptItems[idx];
+    const lines = splitUnits(item.name.trim() || 'Item', evaluate(item.amount) ?? 0, item.qty);
+    receiptItems.splice(idx, 1, ...lines.map((l) => ({ name: l.name, amount: String(l.total), qty: null, members: [...item.members] })));
   }
 
   function addItem() {
@@ -416,7 +423,7 @@
       });
       if (strategy === 'EQUALLY') payload.split_members = members.filter((m) => !excluded[m]);
       else if (strategy === 'ITEMS') {
-        payload.receipt_items = receiptItems.map((i) => ({ name: i.name.trim() || 'Item', amount: round2(evaluate(i.amount) ?? 0), members: [...i.members] }));
+        payload.receipt_items = receiptItems.map((i) => ({ name: i.name.trim() || 'Item', amount: round2(evaluate(i.amount) ?? 0), ...(i.qty ? { qty: i.qty } : {}), members: [...i.members] }));
       } else payload.split_inputs = Object.fromEntries(Object.entries(splitInputs).filter(([, v]) => v?.trim()));
       if (receipt) payload.receipt_local_url = receipt;
       if (receiptScan) payload.receipt_scan = $state.snapshot(receiptScan);
@@ -702,6 +709,15 @@
                   <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={item.amount} inputmode="decimal" placeholder="0" aria-label="Item price" />
                   <button type="button" class="btn btn-ghost !p-1.5 shrink-0" aria-label="Remove item" onclick={() => receiptItems.splice(idx, 1)}><Icon name="x" class="w-4 h-4" /></button>
                 </div>
+                {#if item.qty}
+                  <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <span class="tabular-nums">{item.qty} × {money((evaluate(item.amount) ?? 0) / item.qty)}</span>
+                    <button type="button" class="font-semibold text-accent-600 dark:text-accent-400" onclick={() => splitItemUnits(idx)}>
+                      Split into {item.qty} lines
+                    </button>
+                    <span class="text-slate-400">so different people can take one each</span>
+                  </div>
+                {/if}
                 <div class="flex flex-wrap gap-1.5">
                   {#each members as m (m)}
                     {@const on = item.members.includes(m)}
@@ -729,7 +745,7 @@
               {/if}
             </p>
             {#if Math.abs(split.extras) > split.itemsTotal * 0.35}
-              <p class="text-xs text-amber-600 dark:text-amber-400 text-center">Items and total are quite far apart : check for missing or misread items.</p>
+              <p class="text-xs text-amber-600 dark:text-amber-400 text-center">Items and total are quite far apart. Check for missing or misread items.</p>
             {/if}
           {/if}
         {/if}

@@ -3,7 +3,7 @@ import { toBoxes } from '../src/lib/receipt/ocr.js';
 import { solveReceipt } from '../src/lib/receipt/solver.js';
 import { normalize } from '../src/lib/receipt/schema.js';
 import { audit } from '../src/lib/receipt/audit.js';
-import { receiptToDraft, receiptDateTime, guessCategory, compactScan } from '../src/lib/receipt/draft.js';
+import { receiptToDraft, receiptDateTime, guessCategory, compactScan, unitCount, splitUnits, countMismatch, describeCheck } from '../src/lib/receipt/draft.js';
 import { splitByItems } from '../src/lib/split.js';
 
 /** Builds PaddleOCR-shaped boxes from [text, x] runs per row (10 px per character, rows 30 px apart). */
@@ -131,5 +131,46 @@ describe('item names', () => {
   it('drops trailing tax flags and fixes SHOUTY caps', () => {
     const items = receiptToDraft({ items: [{ name: 'T-Saha Bread *#', total: 4.14 }, { name: 'MASALA DOSA', total: 90 }] }).items;
     expect(items.map((i) => i.name)).toEqual(['T-Saha Bread', 'Masala Dosa']);
+    expect(receiptToDraft({ items: [{ name: '- JIANYU STEEL RULER 30CM', total: 3.3 }] }).items[0].name).toBe('Jianyu Steel Ruler 30CM');
+  });
+});
+
+describe('quantities', () => {
+  it('keeps qty and rate on draft items', () => {
+    const [it] = receiptToDraft({ items: [{ name: 'Garlic Naan', qty: 3, unit_price: 60, total: 180 }] }).items;
+    expect(it).toMatchObject({ name: 'Garlic Naan', qty: 3, unit_price: 60, total: 180 });
+  });
+
+  it('offers a per-unit split only for whole counts', () => {
+    expect(unitCount({ qty: 3 })).toBe(3);
+    expect(unitCount({ qty: 1 })).toBe(0);
+    expect(unitCount({ qty: 0.5 })).toBe(0); // 0.5 kg
+    expect(unitCount({ qty: 250 })).toBe(0); // grams, not units
+  });
+
+  it('splits into equal lines that add back to the amount', () => {
+    const lines = splitUnits('Beer', 100, 3);
+    expect(lines.map((l) => l.name)).toEqual(['Beer (1/3)', 'Beer (2/3)', 'Beer (3/3)']);
+    expect(lines.map((l) => l.total)).toEqual([33.33, 33.33, 33.34]);
+  });
+});
+
+describe('receipt self-check messages', () => {
+  it('compares printed item counts with what was read', () => {
+    const r = { items: [{}, {}], details: { counts: { printed_items: 3, items: 2, qty: 2 } } };
+    expect(countMismatch(r)).toEqual({ kind: 'items', printed: 3, read: 2 });
+    expect(countMismatch({ items: [{}], details: { counts: { printed_items: 1, items: 1, qty: 1 } } })).toBeNull();
+    expect(countMismatch({ items: [{}], details: { counts: { printed_qty: 4, items: 1, qty: 2 } } })).toMatchObject({ kind: 'qty', printed: 4 });
+  });
+
+  it('turns failed checks into plain language', () => {
+    expect(describeCheck({ name: 'items = subtotal', detail: '500 vs 530' })).toMatch(/Items add up to 500, but the subtotal reads 530/);
+    expect(describeCheck({ name: 'qty×price "Naan"', detail: '3×60 vs 200' })).toBe('Check Naan: quantity × price doesn’t match its amount.');
+    expect(describeCheck({ name: 'item count', detail: '' })).toBeNull();
+  });
+
+  it('keeps the bill number and payment method on the stored scan', () => {
+    const c = compactScan({ merchant: 'X', items: [], taxes: [], charges: [], discounts: [], total: 10, invoice_number: 'INV-42', payment_method: 'upi' });
+    expect(c).toMatchObject({ invoice_number: 'INV-42', payment_method: 'upi' });
   });
 });

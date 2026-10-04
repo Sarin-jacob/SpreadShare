@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 , bench/lib/schema.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@b9dd94a , bench/lib/schema.js. Keep in sync with that repo; avoid local edits.
 // The output shape every engine must return, plus helpers to coerce
 // whatever a model produced into it.
 
@@ -89,6 +89,9 @@ export function normalize(raw) {
     unit_price: toNumber(it?.unit_price ?? it?.price),
     total: toNumber(it?.total ?? it?.total_price ?? it?.amount),
     discount: toNumber(it?.discount),
+    ...(it?.unit ? { unit: it.unit } : {}),
+    ...(it?.code ? { code: it.code } : {}),
+    ...(it?.description ? { description: it.description } : {}),
   })).filter(it => it.name || it.total != null);
   const taxes = labelledList(r.taxes ?? r.tax).map(t => ({ ...t, rate: toNumber(t.rate), inclusive: !!t.inclusive }));
   return {
@@ -103,6 +106,11 @@ export function normalize(raw) {
     taxes,
     total: toNumber(r.total ?? r.grand_total),
     payment_method: r.payment_method ?? r.payment?.method ?? null,
+    // Receipt metadata (solver output; LLM engines may omit it).
+    invoice_number: r.invoice_number ?? r.document?.number ?? null,
+    phones: Array.isArray(r.phones) ? r.phones : r.phone ? [r.phone] : [],
+    tax_ids: Array.isArray(r.tax_ids) ? r.tax_ids : r.tax_id ? [r.tax_id] : [],
+    details: r.details ?? null,
   };
 }
 

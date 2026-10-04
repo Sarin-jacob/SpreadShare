@@ -1,4 +1,4 @@
-// Vendored from receipt_test@8125280 , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@b9dd94a , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
 // Receipt structure from OCR boxes without a generative model.
 // 1. group boxes into lines, pull money values out of each line
 // 2. tag lines (total / subtotal / tax / discount / charge / payment / item)
@@ -10,14 +10,17 @@
 // specific test receipt.
 import { toLines } from './ocr.js';
 import { extractDateTime } from './datetime.js';
+import { extractMeta } from './meta.js';
+import { parseRow, headerRoles, splitRow } from './rows.js';
 
 // Word boundaries that still work when digits touch the word ("SGST2.5", "MwSt:").
 const kw = src => new RegExp(String.raw`(?<![a-z])(?:${src})(?![a-z])`, 'i');
 const KW = {
-  subtotal: kw(String.raw`sub\s*-?\s*total|subtotal|sous[\s-]total|zwischensumme|gross\s*total|item\s*total|net\s*amount|mrp|taxable\s*amount|total\s*before\s*tax`),
-  total: kw(String.raw`grand\s*total|total|amount\s*due|balance\s*due|amount\s*payable|net\s*payable|to\s*pay|bill\s*total|summe|gesamt|betrag|totale|montant|importe|jumlah`),
-  tax: kw(String.raw`tax|taxes|vat|gst|hst|pst|qst|cgst|sgst|igst|utgst|mwst|ust|tva|iva|btw|moms|sst|ppn`),
-  discount: kw(String.raw`discount|savings?|saved|coupon|cpn|promo|loyalty|voucher|rebate|rabatt|remise|descuento|markdown|you\s*saved|member\s*price|off`),
+  subtotal: kw(String.raw`su[brk]\s*-?\s*total|subtotal|sous[\s-]total|zwischensumme|gross\s*(total|amt|amount|value)|item\s*total|items?\s*value|mrp|taxable\s*(amount|amt|value)|basic\s*(amt|amount)|total\s*before\s*tax|food\s*(amt|amount)|ticket\s*total|total\s*sales\s*\(?excl`),
+  total: kw(String.raw`grand\s*total|total|amount\s*due|balance\s*due|amount\s*payable|net\s*payable|to\s*pay|bill\s*total|bill\s*amount|net\s*(amt|amount)|invoice\s*value|amount\s*incl\w*|amount\s*after\s*tax|summe|gesamt|betrag|totale|montant|importe|jumlah`),
+  // (with OCR spellings next to a rate: "VAI @18.9%", "C6ST @9%", "CG8ST @ 0.5%")
+  tax: kw(String.raw`tax|taxes|vat|gst|hst|pst|qst|cgst|sgst|igst|utgst|mwst|ust|tva|iva|btw|moms|sst|ppn|va[i1l](?=\s*@)|[cs]\s?[g6]\s?8?[s5]\s?[t71](?=\s*[@\d])`),
+  discount: kw(String.raw`discount|disc\.?|dis(?=\s*[:@.])|savings?|saved|coupon|cpn|promo|loyalty|voucher|rebate|rabatt|remise|descuento|markdown|you\s*saved|member\s*price|off|less`),
   charge: kw(String.raw`tip|gratuity|service(\s*charge)?|(serv|svc)\.?\s*(charge|chg)|svc|fee|delivery|surge|packaging|bag\s*charge|rounding|round\s*off|adjustment|handling|small\s*cart`),
   payment: kw(String.raw`cash|change|tender(ed)?|visa|master\s*card|mastercard|amex|discover|debit|credit\s*card|card\s*(no|number|type)|upi|paid|bank|eftpos|balance`),
   ignore: kw(String.raw`tota?l?\s*(qty|quantity|items?|savings?)|items?\s*(count|sold)|no\.?\s*of\s*items|in\s*words|only|approval|auth|terminal|merchant\s*id|transaction|invoice\s*(no|number|#)|receipt\s*(no|number|#)|tel|phone|fax|gstin|(vat|tax|gst|mwst|ust|tva|iva)\s*(-?\s*(nr|no|number|reg|id)\b|#)|tax\s*id|ntn|strn|abn|expires?|entspricht|equivalent|exchange\s*rate`),
@@ -27,11 +30,17 @@ const KW = {
 };
 // Labels that unambiguously mean "the amount to pay".
 const FINAL = kw(String.raw`grand\s*total|(total\s*)?(amount\s*)?payable|amount\s*due|balance\s*due|total\s*due|nett?\s*total|total\s*after|to\s*pay|bill\s*total|final\s*total`);
-const SUMMARY_TAGS =['total', 'subtotal', 'tax', 'charge', 'discount', 'payment'];
+const SUMMARY_TAGS = ['total', 'subtotal', 'tax', 'charge', 'discount', 'payment'];
+// Item names that are really summary lines whose keyword the tagger missed
+// (incl. OCR spellings of GST: "C6ST", "SG8T").
+const SUMMARY_NAME = kw(String.raw`sub\s*-?\s*total|grand\s*total|total|gross\s*(amt|amount)|net\s*(amt|amount)|amount|inclusive\s*of|tot\.?\s*(items?|qty)|total\s*qty|items?\s*[:.]\s*\d|qty\s*[:.]\s*\d|taxable|bill\s*amount|round\s*off|balance|[cs]\s?[g6]\s?[s5]\s?[t71]|igst|gst\s*@`);
+// Column-heading vocabulary, with common OCR spellings ("Oty", "Vaiue", "Iten").
+const HEADER_WORDS = /^(qty|qnty|oty|qly|quantity|rate|price|mrp|amount|amt|anount|value|vaiue|total|description|descr|iption|particulars|item|iten|items|hsn|code|net|uom|unit|disc|discount|tax|gst|no\.?|sl|si|sr|#)$/i;
+const headerWords = text => new Set(text.toLowerCase().replace(/[^a-z#\s.]/g, ' ').split(/\s+/).filter(w => HEADER_WORDS.test(w.replace(/\.$/, '')))).size;
 
 const CUR = String.raw`(?:US\$|USD\$?|CHF|EUR|GBP|INR|PKR|MYR|RM|Rs\.?|₹|\$|€|£|¥)`;
 const CUR_RE = new RegExp(CUR, 'g');
-// Money: optional currency, digit groups, 2-decimal part (or 1 decimal, "800.0") ,
+// Money: optional currency, digit groups, 2-decimal part (or 1 decimal, "800.0") —
 // or a bare integer right after a currency symbol (₹424), or Indian "120/-".
 const MONEY_RE = new RegExp(String.raw`(-\s*)?(${CUR}\s*)?(\d{1,3}(?:[,.']\d{3})+|\d+)([.,]\d{2}|\.\d(?![\d.,]))(?!\d)(\s*-(?!\d))?|(-\s*)?(${CUR})\s*(\d{1,3}(?:[.,]\d{3})+|\d+)(?![\d.,])|(?<![\d.,])(\d{1,6})\s*\/-`, 'g');
 
@@ -130,9 +139,9 @@ function tag(line) {
 }
 // OCR slips in the words that matter most ("fotal", "Tota1", "SUBTOTAI"): snap
 // words within one edit of a summary keyword back to the keyword.
-const FIX_WORDS = ['total', 'subtotal', 'amount', 'round', 'cash', 'change', 'grand', 'payable', 'discount', 'balance', 'tender'];
+const FIX_WORDS = ['total', 'subtotal', 'amount', 'round', 'cash', 'change', 'grand', 'payable', 'discount', 'balance', 'tender', 'items'];
 // Real words one edit away from a keyword: never "correct" these.
-const REAL_WORDS = new Set(['charge', 'charges', 'brand', 'mount', 'rounds', 'totals', 'chance', 'tenders', 'render', 'fender', 'grant']);
+const REAL_WORDS = new Set(['item', 'charge', 'charges', 'brand', 'mount', 'rounds', 'totals', 'chance', 'tenders', 'render', 'fender', 'grant']);
 function editDistance1(a, b) {
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0, j = 0, edits = 0;
@@ -155,7 +164,7 @@ function fixKeywords(text) {
 function tagText(line, label) {
   const t = label.toLowerCase(), full = line.ktext.toLowerCase();
   if (KW.ignore.test(line.amount ? t : full)) return 'ignore';
-  if (KW.header.test(full) && !line.amount) return 'header';
+  if ((KW.header.test(full) && !line.amount) || headerWords(full) >= 4) return 'header';
   if (KW.subtotal.test(t)) return 'subtotal';
   if (/total\s*(tax|gst|vat|hst|mwst|tva|iva|sst)|(tax|gst|vat)\s*total/.test(t)) return 'tax';
   if (KW.tax.test(t) && KW.total.test(t)) {
@@ -180,7 +189,7 @@ function itemName(line) {
     .replace(new RegExp(String.raw`(^|\s)${CUR}(?=\s|$)`, 'g'), ' ')
     .replace(/(?:^|\s)(?:[A-Z]{1,2}|[*#@xX]|à|a)(?=\s*$)/, ' ')
     .replace(/^\s*\d{1,3}\s*[xX×*]\s*/, '')
-    .replace(/^\s*\d{1,3}\s+(?=[A-Za-z])/, '')
+    .replace(/^\s*\d{1,2}\s+(?=[A-Za-z])/, '') // qty / serial prefix ("2 KIWI"), but keep "100 PIPERS"
     .replace(/\s+[@à]\s*$/, '')
     .replace(/[↓↑|]+/g, ' ')
     .replace(/(\s+\d{1,3}(?:\.\d+)?)+\s*$/, '')
@@ -195,7 +204,8 @@ function qtyInfo(line) {
   if ((m = t.match(/(\d+(?:\.\d+)?)\s*(kg|lb|g)\b.*?(\d+[.,]\d{2})\s*\/\s*(kg|lb|g)\b/i)) || (m = t.match(/(\d+(?:\.\d+)?)\s*(kg|lb|g)\b.*?@\s*\D{0,3}(\d+[.,]\d{2})/i)))
     return { qty: +m[1], unit: m[2].toLowerCase(), unit_price: +m[3].replace(',', '.'), weight: true };
   if ((m = t.match(/(?:^|\s)(\d{1,3})\s*(?:@|x|×|à)\s*\D{0,4}?(\d+[.,]\d{2})/i))) return { qty: +m[1], unit_price: +m[2].replace(',', '.') };
-  if ((m = t.match(/^\s*(\d{1,3})\s*\$(\d+[.,]\d{2})\s*(ea|each)\b/i))) return { qty: +m[1], unit_price: +m[2].replace(',', '.') }; // "2 $2.99 ea" (lost @)
+  // "2 @ ₹859/ea" (whole-number price), "3 0 $1.50 ea" / "2 $2.99 ea" (OCR turned @ into 0 or dropped it)
+  if ((m = t.match(/(?:^|\s)(\d{1,3})\s*(?:[@©®]|0(?=\s))?\s*(?:₹|\$|rs\.?|€|£)?\s*(\d+(?:[.,]\d{2})?)\s*\/?\s*(ea|each)\b/i))) return { qty: +m[1], unit_price: +m[2].replace(',', '.') };
   if ((m = t.match(/^\s*(\d{1,3})\s*[xX×]\s*[A-Za-z]/))) return { qty: +m[1] };
   if ((m = t.match(/^\s*(\d{1,2})\s+[A-Za-z]{2,}/))) return { qty: +m[1], soft: true };
   return null;
@@ -207,6 +217,12 @@ function isDetailLine(line, name) {
   if (!q || q.soft) return false;
   return q.weight || !name || !lettered(name.replace(DETAIL_WORDS, ''));
 }
+
+// A narrow printer breaks words anywhere: "LADIES NIGH" + "T SANGRIA". The next
+// line then starts with a lone letter (not the words "A"/"I") that finishes the
+// previous line's last word.
+const hardWrap = (prevName, name) => /[A-Z]$/.test(prevName.trim()) && /^[B-HJ-Z]\s+[A-Z]/.test(name.trim());
+const joinWrapped = (prevName, name) => /^\(/.test(name.trim()) ? `${prevName.trim()} ${name.trim()}` : hardWrap(prevName, name) ? prevName.trim() + name.trim() : `${prevName.trim()} ${name.trim()}`;
 
 // For table rows (price qty tax total) find qty/unit_price that multiply to the total.
 function tableRow(line) {
@@ -227,17 +243,34 @@ function detectCurrency(text) {
 }
 
 const NOT_MERCHANT = /\b(invoice|receipt|tax\s*invoice|bill|order|date|time|table|cashier|server|welcome|copy|branch|my\s*cart|cart|details?|customer|guest|tel|phone|www|http|edit|print|send|mail|attach|comments?|history|customi[sz]e|paid|checkout|see\s*more)\b|@/i;
-const COMPANY = /\b(sdn\.?\s*bhd|bhd|ltd|llc|inc|corp|co\.|gmbh|pte|plc|pvt|enterprise|trading|store|stores|mart|market|supermarket|restaurant|cafe|café|hotel|bakery|pharmacy|hardware|services?)\b/i;
-const ADDRESS = /\b(jalan|jln|street|st\.|road|rd\.?|avenue|ave|lane|blvd|lot|floor|flr|level|lvl|suite|taman|tmn|block|blk|no\.|colony|nagar|plaza|mall|centre|center)\b|\b\d{5,6}\b/i;
+const COMPANY = /\b(sdn\.?\s*bhd|bhd|ltd|llc|inc|corp|co\.|gmbh|pte|plc|pvt|enterprises?|trading|traders|store|stores|mart|market|supermarket|restaurant|cafe|café|hotel|bakery|pharmacy|medicals?|hardware|services?|food|foods|dhaba|kitchen|bhavan|sweets|bar|grill|bistro|diner|canteen|shop|retail|agency|agencies|electronics|electrostore|textiles|garments|studio|salon|clinic|hospital)\b/i;
+// Strap lines under a name ("A CLASSIC MULTICUSINE FAMILY RESTAURANT", "Pure Veg", "Since 1985").
+const SUBTITLE = /^\s*(a|an|the\s+best)\s|multi\s*-?cuisine|family\s+restaurant|pure\s+veg|since\s+\d|welcome|expect\s+more/i;
+const ADDRESS_WORD = /\b(jalan|jln|street|st\.|road|rd\.?|avenue|ave|lane|blvd|lot|floor|flr|level|lvl|suite|taman|tmn|block|blk|no\.|colony|nagar|plaza|mall|centre|center|marg|sector|unit|plot|bldg|building|complex|chowk|opp\.?|near)\b/i;
+// An address line: an address word plus a number or a comma ("11/2 Sector- 37,", "Nathalal Parekh Marg,Matunga"),
+// or a postcode. "Liquor Street" on its own is a name.
+const ADDRESS = { test: t => /\b\d{5,6}\b/.test(t) || (ADDRESS_WORD.test(t) && /[\d,]/.test(t)) || (t.match(new RegExp(ADDRESS_WORD.source, 'gi')) || []).length >= 2 };
 function findMerchant(lines) {
   const top = lines.slice(0, Math.max(6, Math.ceil(lines.length * 0.2)));
   const billTo = new Set();
   lines.forEach((l, i) => { if (/(bill(ed)?\s*to|invoice\s*to|ship\s*to|sold\s*to|customer|deliver\s*to)/i.test(l.text)) for (let k = 1; k <= 3; k++) billTo.add(i + k); });
-  const cands = top.filter(l => l.tag === 'text' && !billTo.has(l.idx) && /[A-Za-z]{3,}/.test(l.text) && !NOT_MERCHANT.test(l.text) && !/\d{3,}/.test(l.text) && l.text.length <= 48);
-  if (!cands.length) return null;
+  // Invoices that name the seller outright ("From: YOU Broadband India Limited", "SUPPLIER / Mascot").
+  for (const l of lines) {
+    const m = l.text.match(/(?<![a-z])(from|supplier|seller|sold\s*by|vendor|sender)\s*[:\-]?\s*(.*)$/i);
+    if (!m || billTo.has(l.idx) && !/from|supplier|seller|sender/i.test(m[1])) continue;
+    if (!/^(from|supplier|seller|sold\s*by|vendor|sender)\s*[:\-]?/i.test(l.text.slice(m.index)) || /\d{3,}/.test(m[2])) continue;
+    const same = m[2].trim();
+    if (/[A-Za-z]{3,}/.test(same) && same.length <= 60 && !/date|invoice|bill/i.test(same)) return { name: same, idx: l.idx };
+    const next = lines[l.idx + 1];
+    if (next && /[A-Za-z]{3,}/.test(next.text) && !/\d{4,}/.test(next.text) && next.text.length <= 60 && !NOT_MERCHANT.test(next.text)) return { name: next.text, idx: next.idx };
+  }
+  const cands = top.filter(l => l.tag === 'text' && !billTo.has(l.idx) && /[A-Za-z]{3,}/.test(l.text) && !NOT_MERCHANT.test(l.text) && !/\d{3,}/.test(l.text) && l.text.length <= 48
+    && !/^\(.*\)$/.test(l.text.trim())); // "(ODVJH Private Limited)" is the legal name under the trade name
+  if (!cands.length) return { name: null, idx: null };
   // Big font and company-ish words win; address-ish lines lose.
   const score = l => l.h
-    + (COMPANY.test(l.text) ? 1.5 : 0)
+    + (COMPANY.test(l.text) ? 0.6 : 0)
+    - (SUBTITLE.test(l.text) ? 1 : 0)
     - (ADDRESS.test(l.text) ? 1.5 : 0)
     - (/\d/.test(l.text) ? 0.3 : 0)
     - l.idx * 0.03;
@@ -245,11 +278,13 @@ function findMerchant(lines) {
   // Company names wrapped over two lines ("AIK HUAT HARDWARE" / "ENTERPRISE (SETIA ALAM) SDN BHD").
   const next = lines[best.idx + 1], prev = lines[best.idx - 1];
   const nameish = l => l && l.tag === 'text' && !ADDRESS.test(l.text) && !NOT_MERCHANT.test(l.text) && !/\d{3,}/.test(l.text) && /[A-Za-z]{3,}/.test(l.text);
-  if (nameish(next) && COMPANY.test(next.text) && !COMPANY.test(best.text)) return `${best.text} ${next.text}`;
-  if (nameish(prev) && COMPANY.test(best.text) && best.text.search(COMPANY) === 0) return `${prev.text} ${best.text}`;
+  if (nameish(next) && COMPANY.test(next.text) && !COMPANY.test(best.text) && !SUBTITLE.test(next.text)) return { name: `${best.text} ${next.text}`, idx: next.idx };
+  if (nameish(prev) && COMPANY.test(best.text) && best.text.search(COMPANY) === 0) return { name: `${prev.text} ${best.text}`, idx: best.idx };
   // Two stacked big lines are usually one name ("Green / Supermarket").
-  if (next && cands.includes(next) && Math.abs(next.h - best.h) < 0.25 * best.h && best.h > 1.2) return `${best.text} ${next.text}`;
-  return best.text;
+  // "SRI KRISHNA" over a smaller "Veg Restaurant": the descriptor line belongs to the name.
+  if (nameish(prev) && COMPANY.test(best.text) && !COMPANY.test(prev.text) && prev.h >= best.h * 0.9 && !SUBTITLE.test(best.text) && cands.includes(prev)) return { name: `${prev.text} ${best.text}`, idx: best.idx };
+  if (next && cands.includes(next) && !ADDRESS.test(next.text) && Math.abs(next.h - best.h) < 0.25 * best.h && best.h > 1.2) return { name: `${best.text} ${next.text}`, idx: next.idx };
+  return { name: best.text, idx: best.idx };
 }
 
 // The reading of an amount that matches one of the expected values, else the plain value.
@@ -308,10 +343,33 @@ export function solveReceipt(boxes) {
     if (j - i >= 3) for (let k = i; k < j; k++) lines[k].tag = 'ignore';
   }
 
+  // Table rows with whole-number amounts ("PAV BHAJI  4  200  800") under a header,
+  // on a receipt whose summary uses decimals: they count as priced rows when the
+  // row's own arithmetic (qty × rate = amount) confirms it.
+  const firstHeader = lines.findIndex(l => l.tag === 'header');
+  const roles = firstHeader >= 0 ? headerRoles(lines[firstHeader].text + (/(amount|amt|total)\s*$/i.test(lines[firstHeader - 1]?.text ?? '') && !/(amount|amt|total)/i.test(lines[firstHeader].text) ? ' amount' : '')) : null;
+  const taxRates = [...new Set(lines.filter(l => l.tag === 'tax').flatMap(l => [...l.text.matchAll(/(\d{1,2}(?:\.\d{1,3})?)\s*%/g)].map(m => +m[1])))];
+  if (firstHeader >= 0) {
+    for (let i = firstHeader + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (SUMMARY_TAGS.includes(l.tag) && l.amount) break;
+      if (l.tag !== 'text' || !lettered(l.text)) continue;
+      const pr = parseRow(l.text, { roles, rates: taxRates });
+      if (!pr.amount || !pr.confirmed || pr.confirmed === 'columns' || !lettered(pr.name)) continue;
+      const raw = pr.tail.at(-1).raw, index = l.text.lastIndexOf(raw);
+      l.amount = { value: pr.amount, raw, index, end: index + raw.length, currency: '', perUnit: false };
+      l.money = [l.amount];
+      l.tag = 'amount';
+    }
+  }
+
   // Item region ends at the first summary line that follows an amount line.
   const firstAmount = lines.findIndex(l => l.tag === 'amount');
   // (A tax line with a value also ends it: taxes don't sit between items.)
-  let end = lines.findIndex((l, i) => i > firstAmount && (['subtotal', 'total'].includes(l.tag) || (l.tag === 'tax' && i > firstAmount + 1)) && l.amount);
+  // …unless a priced item row follows it: then it was a tax-slab heading between item groups
+  // ("2) CGST @ 9.00% SGST @ 9.00%" on Reliance-style bills).
+  const itemRowFollows = i => { const n = lines.slice(i + 1).find(x => x.tag !== 'text' || x.money.length); return n && n.tag === 'amount'; };
+  let end = lines.findIndex((l, i) => i > firstAmount && (['subtotal', 'total'].includes(l.tag) || (l.tag === 'tax' && i > firstAmount + 1 && !itemRowFollows(i))) && l.amount);
   if (end === -1) end = lines.length;
   // First table header: forms can have several tables (laundry + dry cleaning).
   const header = lines.slice(0, end).findIndex(l => l.tag === 'header');
@@ -321,9 +379,24 @@ export function solveReceipt(boxes) {
   // The amount column is the rightmost money heading, on the header line or the
   // line just above it (headings sometimes wrap: "AMOUNT" over "ITEM QTY PRICE").
   const headingBoxes = header >= 0 ? [lines[header], lines[header - 1]].filter(Boolean).flatMap(l => l.boxesX ?? []) : [];
-  const amtCol = headingBoxes.filter(b => /amount|amt|total|value|price|rate/i.test(b.text)).sort((a, b) => b.right - a.right)[0];
+  // (Rightmost heading of any kind: the amount is the last column, and OCR garbles its name: "Vaiue".)
+  const amtCol = headingBoxes.filter(b => headerWords(b.text) > 0 || /amount|amt|total|value|price|rate/i.test(b.text)).sort((a, b) => b.right - a.right)[0];
   const rowWidth = Math.max(...lines.map(l => l.amountX ?? 0)) - Math.min(...lines.map(l => l.left));
   const inAmountColumn = l => !amtCol || l.amountX == null || Math.abs(l.amountX - amtCol.right) < rowWidth * 0.2;
+
+  // Qty / rate / discount of a priced row from its own arithmetic (or the column headings).
+  const rowOf = l => {
+    const pr = parseRow(l.text, { roles, rates: taxRates });
+    if (!pr.confirmed || pr.amount == null) return null;
+    // Column-matched qty doesn't depend on reading the amount the same way ("$15.000").
+    if (pr.confirmed === 'columns') return pr.qty != null ? { qty: pr.qty, unit_price: pr.unit_price ?? null } : null;
+    if (!close(pr.amount, Math.abs(l.amount?.value ?? NaN), 0.02)) return null;
+    return { qty: pr.qty ?? 1, unit_price: pr.unit_price ?? null, discount: pr.discount ?? null };
+  };
+  // A serial-number column ("#", "Sl. No.", "SI") means a leading number is not a quantity.
+  // An HSN / SAC / item-code column: those codes end up glued into names ("Hotel Booking 1234").
+  const hasCodeColumn = firstHeader >= 0 && /(?<![a-z])(hsn|sac|item\s*code|itemcode|code|sku|barcode|ean)(?![a-z])/i.test(lines[firstHeader].text);
+  const hasSerialColumn = firstHeader >= 0 && /^\s*(#|s\.?\s*no|si\.?|sl\.?|sr\.?|s\.?\s*n)\b/i.test(lines[firstHeader].text + ' ' + (lines[firstHeader - 1]?.text ?? ''));
 
   // Build items.
   const items = [];
@@ -338,7 +411,20 @@ export function solveReceipt(boxes) {
       end = i;
       break;
     }
-    if (l.tag === 'amount' && !inAmountColumn(l)) continue;
+    // A summary word with no amount inside the item list is just name text ("S TENDER LAM" ≠ tendered).
+    if (l.tag === 'payment' && !l.amount && lettered(name) && !/^\s*(cash|card|upi|paid|tender\w*|change|balance)\s*:?\s*$/i.test(l.text)) l.tag = 'text';
+    if (l.tag === 'amount' && !inAmountColumn(l)) {
+      // Its only price sits in the rate column and the amount column drifted to a neighbouring row
+      // ("BUTTER NAAN 1 P 35.00" with 35.00 printed a row up): accept it when qty × rate shows up there.
+      const tail = splitRow(l.text).tail.filter(n => !n.pct);
+      const qTok = tail.find(n => n.decimals === 0 && n.value > 0 && n.value < 1000);
+      const expected = qTok && tail.length >= 2 ? round2(qTok.value * tail.at(-1).value) : null;
+      const near = expected != null && [lines[i - 1], lines[i + 1]].some(n => n?.money?.some(mm => close(mm.value, expected)));
+      if (!near || !lettered(name)) continue;
+      items.push({ name, qty: qTok.value, unit_price: tail.at(-1).value, total: expected, line: i, money: l.amount, verified: true });
+      pendingName = null;
+      continue;
+    }
     // A row of 3+ prices side by side ("₹144 ₹202 ₹20 ₹20") is a product carousel, not a bill line.
     if (l.money.filter(m => m.currency).length >= 3) continue;
     // Without decimals to go by, a bare row of numbers is too ambiguous to be an item.
@@ -353,22 +439,46 @@ export function solveReceipt(boxes) {
       continue;
     }
     if (l.tag === 'text') {
+      const prev = items.at(-1);
+      // Quantity / weight detail without its own amount ("0.778kg NET @ $5.99/kg", "2 @ ₹859/ea"):
+      // it belongs to the item just above.
+      const dq = qtyInfo(l);
+      if (dq && !dq.soft && prev && !pendingName && (prev.lastLine ?? prev.line) >= i - 2 && isDetailLine(l, name)) {
+        Object.assign(prev, { qty: dq.qty, unit_price: dq.unit_price ?? prev.unit_price, ...(dq.unit ? { unit: dq.unit } : {}) });
+        prev.lastLine = i;
+        continue;
+      }
       if (lettered(name) && !KW.header.test(l.text)) {
         // Numbers printed ABOVE the name (code / price-qty-value / NAME layout).
         if (pendingAmount && !pendingName) {
           const { line: pl, row, q } = pendingAmount;
-          items.push({ name, qty: row?.qty ?? (q && !q.soft ? q.qty : 1), unit_price: row?.unit_price ?? null, total: pl.amount.value, line: pl.idx, money: pl.amount });
+          items.push({ name, qty: row?.qty ?? (q && !q.soft ? q.qty : 1), unit_price: row?.unit_price ?? null, total: pl.amount.value, line: pl.idx, lastLine: i, money: pl.amount });
           pendingAmount = null;
           continue;
         }
-        // Wrapped name ("MATCHA GELATO" / "SINGLE", "Italiano Veg" / "Sandwich") vs. the next item's name.
-        // If the line after this one is a priced row with its own name, this text can't be
-        // that row's name, so it continues the item above.
-        const prev = items.at(-1);
-        const next = lines[i + 1];
-        const nextHasOwnName = next && next.tag === 'amount' && lettered(itemName(next));
-        const wrapShape = !qtyInfo(l) && name.split(' ').length <= 3 && !/\d{2,}/.test(name) && l.left > lines[prev?.line ?? 0].left - 5 && l.h < 1.3;
-        if (prev && prev.line === i - 1 && !pendingName && wrapShape && (name === name.toUpperCase() && name.split(' ').length <= 2 || nextHasOwnName || i + 1 >= end)) prev.name += ' ' + name;
+        // Name hard-wrapped mid-word by a narrow printer ("LADIES NIGH" / "T SANGRIA").
+        if (pendingName && pendingName.line === i - 1 && hardWrap(pendingName.name, name)) {
+          pendingName = { ...pendingName, name: joinWrapped(pendingName.name, name), line: i };
+          continue;
+        }
+        // Wrapped name ("MATCHA GELATO" / "SINGLE", "Solder" / "Wire" / "Univolt" / "50grms") vs. the
+        // next item's name. Look past further text lines to the next priced row: if it has its own
+        // name (or the item list ends there), every text line in between continues the item above —
+        // unless that row's name is the hard-wrapped end of this text ("THAI GRILLE" / "D FISH 1 375.00").
+        let k = i + 1;
+        while (k < end && lines[k].tag === 'text' && !lines[k].money.length) k++;
+        const next = lines[k];
+        const nextName = next && next.tag === 'amount' ? itemName(next) : '';
+        const continuesIntoNext = nextName && (hardWrap(itemName(lines[k - 1]), nextName) || /^\(/.test(nextName));
+        const nextHasOwnName = !continuesIntoNext && (k >= end || lettered(nextName) || (next && SUMMARY_TAGS.includes(next.tag)));
+        const wrapShape = !qtyInfo(l) && name.split(' ').length <= 6 && !l.money.length && l.left > lines[prev?.line ?? 0].left - 5 && l.h < 1.3;
+        if (prev && (prev.lastLine ?? prev.line) === i - 1 && !pendingName && wrapShape && !continuesIntoNext && (name === name.toUpperCase() && name.split(' ').length <= 2 || nextHasOwnName || i + 1 >= end || hardWrap(prev.name, name))) {
+          // "Hotel Name: Royal Retreat", "Journey Date 10-Apr-2024" are details, not more name
+          // (and once details start, the lines after them are details too).
+          if (prev.description || /^[A-Za-z][A-Za-z .]{1,24}:/.test(l.text.trim()) || /\d{1,2}[-/. ](\d{1,2}|[A-Za-z]{3})[-/. ]\d{2,4}/.test(l.text)) (prev.description ??= []).push(l.text.trim());
+          else prev.name = hardWrap(prev.name, name) ? joinWrapped(prev.name, name) : `${prev.name} ${name}`;
+          prev.lastLine = i;
+        }
         else if (!/^(pcs?|nos?|ea|each|units?)$/i.test(name)) pendingName = { name, line: i, q: qtyInfo(l) };
       }
       continue;
@@ -390,9 +500,12 @@ export function solveReceipt(boxes) {
       }
       if (q.weight) continue;
     }
-    const row = tableRow(l);
+    const row = rowOf(l) || tableRow(l);
     let nm = name;
     if ((!lettered(nm) || /^\d/.test(nm)) && pendingName) nm = pendingName.name;
+    // The priced line finishes a name that started on the line(s) above:
+    // "LADIES NIGH" / "T SANGRIA  2  0.00", "100 PIPERS" / "(30 ML)  5  1275.00".
+    else if (pendingName && pendingName.line === i - 1 && (hardWrap(pendingName.name, nm) || /^\(/.test(nm))) nm = joinWrapped(pendingName.name, nm);
     if (!lettered(nm)) {
       // A bare "price qty value" row with no name yet: its name may follow on the next line.
       if (!close(l.amount.value, 0)) pendingAmount = { line: l, row, q };
@@ -400,9 +513,15 @@ export function solveReceipt(boxes) {
       continue;
     }
     if (close(l.amount.value, 0) && /^(pcs?|nos?|ea|each|units?)$/i.test(nm)) { pendingName = null; continue; }
+    // Summary wording is never an item ("Tot Items: 11 Gross Amt : 829", "(Amount inclusive of taxes) 574.25").
+    if (SUMMARY_NAME.test(fixKeywords(nm))) {
+      if (items.length >= 2 && close(l.amount.value, sum(items.map(t => t.total)))) { l.tag = 'subtotal'; end = i; break; }
+      pendingName = null;
+      continue;
+    }
     pendingAmount = null;
-    const qq = row || (q && !q.soft ? q : q?.soft && q.qty > 0 ? q : null) || pendingName?.q;
-    items.push({ name: nm, qty: qq?.qty ?? 1, unit_price: qq?.unit_price ?? (qq?.qty ? round2(l.amount.value / qq.qty) : null), unit: qq?.unit, total: l.amount.value, line: i, money: l.amount });
+    const qq = row || (q && !q.soft ? q : q?.soft && q.qty > 0 && !hasSerialColumn ? q : null) || pendingName?.q;
+    items.push({ name: nm, qty: qq?.qty ?? 1, unit_price: qq?.unit_price ?? (qq?.qty ? round2(l.amount.value / qq.qty) : null), unit: qq?.unit, total: l.amount.value, line: i, money: l.amount, ...(qq?.discount ? { discount: qq.discount } : {}) });
     pendingName = null;
   }
 
@@ -440,7 +559,11 @@ export function solveReceipt(boxes) {
   const pick = t => summary.filter(l => l.tag === t && l.amount);
   const subtotalLines = pick('subtotal');
   const taxes = pick('tax').map(l => ({ label: l.label.trim(), rate: +(l.text.match(/(\d+(?:\.\d+)?)\s*%/)?.[1] ?? NaN) || null, amount: Math.abs(l.amount.value), inclusive: KW.inclusive.test(l.text) }));
-  const discounts = pick('discount').filter(l => !/\boff\b.*\d|saved\s+\D?\d/i.test(l.text) || l.amount.value < 0).map(l => ({ label: l.label.trim(), amount: -Math.abs(l.amount.value) }));
+  // "YOU HAVE SAVED: 33.52" / "Total savings 75" (unsigned) report savings against MRP: information,
+  // not a discount on this bill. A signed one ("REDcard Savings $11.55-") is a real discount.
+  const isSavingsNote = l => /you\s*(have\s*)?saved|total\s*sav(ings?|ed)|^\s*savings?\b/i.test(l.text) && l.amount.value > 0;
+  const savings = pick('discount').filter(isSavingsNote).map(l => ({ label: l.label.trim(), amount: l.amount.value }));
+  const discounts = pick('discount').filter(l => !isSavingsNote(l)).filter(l => !/\boff\b.*\d|saved\s+\D?\d/i.test(l.text) || l.amount.value < 0).map(l => ({ label: l.label.trim(), amount: -Math.abs(l.amount.value) }));
   const charges = pick('charge').map(l => ({ label: l.label.trim(), amount: /round|adjust/i.test(l.text) ? l.amount.value : Math.abs(l.amount.value) }));
   // Some invoices print the total above the items ("Receipt Total $154.06").
   const totalLines = pick('total').length ? pick('total') : lines.filter(l => l.tag === 'total' && l.amount);
@@ -452,6 +575,14 @@ export function solveReceipt(boxes) {
     const rows = taxes.filter(t => t !== taxTotalLine);
     if (close(sum(rows.map(r => r.amount)), taxTotalLine.amount, 0.05)) taxes.splice(taxes.indexOf(taxTotalLine), 1);
   }
+  // A tax printed again as its components ("Tax 1,869.92" … "CGST 975.61, SGST 894.31", or
+  // "GST@5% 48.08" over "CGST 24.04, SGST 24.04"): keep one reading, not both.
+  for (let a = 0; a < taxes.length; a++) {
+    for (let b = a + 1; b < taxes.length; b++) {
+      const whole = taxes.findIndex((t, k) => k !== a && k !== b && close(t.amount, taxes[a].amount + taxes[b].amount, 0.02));
+      if (whole !== -1) { taxes.splice(whole, 1); a = taxes.length; break; }
+    }
+  }
 
   // Printed totals the items should add up to, in all plausible OCR readings.
   const anchors = [...subtotalLines, ...totalLines].flatMap(l => variants(l.amount));
@@ -462,6 +593,13 @@ export function solveReceipt(boxes) {
         const s = round2(sum(items.map(i => i.total)) - it.total + v);
         if (anchors.some(a => close(s, a))) { it.total = v; break outer; }
       }
+    }
+    // Rows whose qty × rate is one digit off the printed amount ("69.00 1 63.00"): if correcting
+    // all of them makes the items add up to a printed total, the amounts were misread.
+    const alts = items.map(it => ({ it, alt: lines[it.line] && it.money ? parseRow(lines[it.line].text, { roles, rates: taxRates }).altAmount : null })).filter(x => x.alt != null);
+    if (alts.length && !anchors.some(a => close(sum(items.map(i => i.total)), a))) {
+      const s = round2(sum(items.map(i => i.total)) + sum(alts.map(x => x.alt - x.it.total)));
+      if (anchors.some(a => close(s, a))) alts.forEach(x => { x.it.total = x.alt; x.it.corrected = true; });
     }
   }
 
@@ -504,7 +642,12 @@ export function solveReceipt(boxes) {
     const final = chain.filter(l => FINAL.test(l.label));
     if (paid != null && totalLines.some(l => close(l.amount.value, paid, 0.011))) total = paid;
     else if (final.length) total = reading(final.at(-1));
-    else if (fitting.length) total = reading(fitting.at(-1));
+    else if (fitting.length) {
+      total = reading(fitting.at(-1));
+      // "Food Total 1921.50" then "Total : 1921": the later, rounded figure is what's paid.
+      const later = chain.filter(l => l.idx > fitting.at(-1).idx && Number.isInteger(l.amount.value) && Math.abs(l.amount.value - total) < 1);
+      if (later.length) total = later.at(-1).amount.value;
+    }
     // Handwritten form whose rows are each confirmed by qty × rate: trust their sum over a garbled TOTAL.
     else if (lines.integerMode && items.length && items.every(i => i.verified)) total = itemSum;
     else if (paid != null && fits(paid)) total = paid;
@@ -542,17 +685,59 @@ export function solveReceipt(boxes) {
   const allText = lines.map(l => l.text).join('\n');
   const currency = detectCurrency(allText);
   const payText = payments.map(p => p.text).join(' ') + ' ' + allText;
+  const merchant = findMerchant(lines);
+  const firstItemLine = fixedItems.length ? Math.min(...fixedItems.map(i => i.line)) : end;
+  const meta = extractMeta(lines, { merchantLine: merchant.idx, itemStart: header >= 0 ? header : firstItemLine });
+  // Final name cleanup: codes from a code column, "(%)" / unit leftovers from wide tables.
+  const cleanName = n => {
+    let t = n.replace(/\(%\)/g, ' ').replace(/(?<![a-z])(pcs|nos|kgs?|unit|uom)(?![a-z])/gi, ' ');
+    if (hasCodeColumn) t = t.split(/\s+/).filter(w => !/^(?=.*\d)[A-Z0-9/_.-]{4,}$/i.test(w)).join(' ');
+    t = t.replace(/\s+/g, ' ').trim();
+    return lettered(t) ? t : n.trim();
+  };
+  const outItems = fixedItems.map(({ line, lastLine, money, verified, ...it }) => ({ ...it, name: cleanName(it.name) }));
+  const qtySum = round2(outItems.reduce((s, i) => s + (i.unit ? 1 : (i.qty ?? 1)), 0));
+  // The same product on several rows (Target's 4 × CHOBANI lines): combined, rows kept as printed.
+  const groups = new Map();
+  for (const it of outItems) {
+    const k = it.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const g = groups.get(k) ?? { name: it.name, rows: 0, qty: 0, total: 0 };
+    g.rows++; g.qty = round2(g.qty + (it.qty ?? 1)); g.total = round2(g.total + it.total);
+    groups.set(k, g);
+  }
+  const repeated = [...groups.values()].filter(g => g.rows > 1);
   return {
-    merchant: findMerchant(lines),
+    merchant: merchant.name,
     currency,
     ...extractDateTime(lines, { currency }),
-    items: fixedItems.map(({ line, money, verified, ...it }) => it),
+    invoice_number: meta.document.number ?? null,
+    items: outItems,
     subtotal,
     discounts,
     charges,
     taxes,
     total,
-    payment_method: /\bcash\b/i.test(payText) ? 'cash' : /visa|master|amex|discover|card|credit|debit/i.test(payText) ? 'card' : null,
+    payment_method: meta.payment.method ?? (/\bcash\b/i.test(payText) ? 'cash' : /visa|master|amex|discover|card|credit|debit/i.test(payText) ? 'card' : null),
+    phones: meta.phones,
+    tax_ids: meta.ids.map(i => `${i.type} ${i.value}`),
+    details: {
+      legal_name: meta.legal_name ?? null,
+      address: meta.address,
+      email: meta.email,
+      website: meta.website,
+      ids: meta.ids,
+      document: meta.document,
+      staff: meta.people.staff ?? null,
+      payment: {
+        ...meta.payment,
+        ...(cash ? { tendered: cash.amount.value } : {}),
+        ...(change ? { change: change.amount.value } : {}),
+      },
+      // Printed counts next to what was read: a mismatch means an item was missed or invented.
+      counts: { printed_items: meta.counts.items ?? null, printed_qty: meta.counts.qty ?? null, items: outItems.length, qty: qtySum },
+      repeated_items: repeated,
+      savings,
+    },
     _debug: { combos, paid, itemSum },
     _lines: lines.map(l => `${String(l.idx).padStart(2)} ${l.tag.padEnd(8)} ${l.amount ? String(l.amount.value).padStart(10) : ''.padStart(10)}  ${l.text}`).join('\n'),
   };
