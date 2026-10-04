@@ -31,7 +31,20 @@ export const ocrOffline = $state({
   progress: 0, // 0..1 while downloading
   bytes: 0, // size on disk once ready
   error: null,
+  /** false: the browser may delete the reader when storage runs low (null = unknown) */
+  persisted: null,
+  /** the reader was on this device before and the browser has since deleted it */
+  evicted: false,
 });
+
+/** Asks the browser to keep our storage, and remembers whether it agreed. */
+async function askToKeep() {
+  try {
+    ocrOffline.persisted = (await navigator.storage?.persisted?.()) || (await navigator.storage?.persist?.()) || false;
+  } catch {
+    ocrOffline.persisted = false;
+  }
+}
 
 const supported = () => 'serviceWorker' in navigator && 'caches' in window && import.meta.env.PROD;
 
@@ -130,7 +143,7 @@ export function downloadOcr() {
     try {
       await swControl();
       // Ask the browser not to evict ~67 MB when storage gets tight.
-      navigator.storage?.persist?.().catch(() => {});
+      askToKeep();
       performance.setResourceTimingBufferSize?.(1000);
       const receipt = await import('./receipt/index.js');
       await receipt.warmUp();
@@ -195,8 +208,27 @@ export async function autoDownloadIfInstalled() {
   setTimeout(() => downloadOcr(), 8000);
 }
 
+/**
+ * The reader was downloaded before (its file list is remembered) but the cache is gone: the
+ * browser cleared it to free space. Fetch it again in the background so offline scanning keeps
+ * working, unless the user removed it or is offline / saving data.
+ */
+async function restoreIfEvicted() {
+  let manifest = null;
+  let prior = null;
+  try {
+    manifest = readManifest();
+    prior = localStorage.getItem(AUTO_KEY);
+  } catch {}
+  if (ocrOffline.status !== 'missing' || !manifest?.length || prior === 'removed') return;
+  ocrOffline.evicted = true;
+  if (!navigator.onLine || navigator.connection?.saveData) return;
+  setTimeout(() => downloadOcr().then((ok) => ok && (ocrOffline.evicted = false)), 8000);
+}
+
 export function initOcrOffline() {
-  checkOcrOffline().then(() => autoDownloadIfInstalled());
+  if (supported()) navigator.storage?.persisted?.().then((p) => (ocrOffline.persisted = p)).catch(() => {});
+  checkOcrOffline().then(() => restoreIfEvicted()).then(() => autoDownloadIfInstalled());
   window.addEventListener('appinstalled', () => autoDownloadIfInstalled());
   window.addEventListener('online', () => autoDownloadIfInstalled());
 }

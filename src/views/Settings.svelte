@@ -212,10 +212,15 @@
           <div class="text-xs text-slate-500">
             {#if ocrOffline.status === 'ready'}
               ✓ On this device{ocrOffline.bytes ? ` · ${mb(ocrOffline.bytes)}` : ''} · scanning works offline
+              {#if ocrOffline.persisted === false}
+                <span class="block text-amber-600 dark:text-amber-400">Your browser may clear it when storage runs low{pwa.installed ? '' : '. Installing the app keeps it safer'}; it downloads again if that happens.</span>
+              {/if}
             {:else if ocrOffline.status === 'downloading'}
               Downloading… {Math.round(ocrOffline.progress * 100)}%
             {:else if ocrOffline.status === 'error'}
               <span class="text-rose-500">{ocrOffline.error}</span>
+            {:else if ocrOffline.evicted}
+              <span class="text-amber-600 dark:text-amber-400">Your browser cleared it to free up space. {navigator.onLine ? 'It will download again shortly.' : 'It downloads again when you’re online.'}</span>
             {:else if ocrOffline.status === 'checking'}
               Checking…
             {:else}
