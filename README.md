@@ -36,7 +36,7 @@ A 100% serverless, local-first Progressive Web Application (PWA) for managing gr
 
 SpreadShare operates on a double-entry ledger system. Every action (Expense, Transfer, Loan) is recorded as an immutable event node in a Google Sheet. The application fetches these raw events and reconstructs the group's mathematical state on the client side.
 
-Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT`, `GROUP_SETTINGS` (the group's currency, only before its first entry), `PROFILE`, `SPLIT_PRESET` and `MEMBER_MERGED` (a member without Google linked to an account: their entries count as that account's) (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
+Event types: `MEMBER_JOINED`, `EXPENSE_ADD`, `TRANSFER`, `LOAN`, `EXPENSE_DELETE`, `COMMENT`, `GROUP_SETTINGS` (the group's currency, only before its first entry; its shared budget, any time), `PROFILE`, `SPLIT_PRESET` and `MEMBER_MERGED` (a member without Google linked to an account: their entries count as that account's) (a member's own details, currently their UPI ID; the latest one wins). An edit is an `EXPENSE_DELETE` of the old entry plus a new entry with `replaces: <old id>`, which links versions for the history view. Comments are `COMMENT` events pointing at an entry. Clients ignore event types they don't know, so older versions of the app keep working with newer sheets.
 
 1.  **Authentication:** The user logs in via Google. The app requests scopes exclusively for Sheets and Drive files created by the application itself.
 2.  **Provisioning:** Upon creating a new group, the app provisions a hidden configuration file in Drive and a new Spreadsheet formatted to accept ledger entries.
@@ -77,8 +77,8 @@ Everything here keeps SpreadShare's rules: no server, data stays in your own Goo
 - [x] **Notes, comments & history:** Notes on any entry, a comment thread everyone in the group sees, and a version history with plain-language changes.
 - [x] **Monthly statements:** Per person (or everyone) for any month or all time: opening balance, every entry's effect, closing balance. Share as text, CSV, or print / save as PDF.
 - [x] **Search everywhere & tags:** Search all groups at once, and tag entries with #goa, #office in a title or note.
-- [ ] **Group budgets:** A shared budget for a trip or a flat, visible to everyone in the group.
-- [ ] **Reminders for recurring bills:** A nudge when rent or a subscription is due.
+- [x] **Group budgets:** A shared budget for a trip (or each month for a flat), on everyone's balance card.
+- [x] **Coming up:** The home screen lists recurring expenses due this week. (Push notifications would need a server.)
 
 ### Smarter on-device AI
 - [x] **Quantities on receipts:** Item quantity and rate are read, shown and kept on the expense. "How many each?" splits "3 × Beer" as 2 for Asha and 1 for Ravi (halves only when you allow them); items without a quantity can use uneven shares.
