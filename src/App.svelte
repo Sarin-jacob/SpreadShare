@@ -2,7 +2,8 @@
   import { app, openGroup, login, refreshSession, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
   import { setBadge } from './lib/pwa.svelte.js';
   import { updates, applyUpdate } from './lib/updates.svelte.js';
-  import { route } from './lib/router.svelte.js';
+  import { route, go } from './lib/router.svelte.js';
+  import Shortcuts from './components/Shortcuts.svelte';
   import { ledger } from './lib/ledger.svelte.js';
   import { display } from './lib/display.svelte.js';
   import { CONFIG } from './lib/config.js';
@@ -93,6 +94,37 @@
     { href: '#/settings', label: 'Settings', icon: 'settings', match: (s) => s[0] === 'settings' },
   ];
 
+  // ─── Keyboard shortcuts (the group page handles N and / itself) ───
+  let showKeys = $state(false);
+  let gPressed = 0;
+
+  function onKey(e) {
+    const t = e.target;
+    if (e.ctrlKey || e.metaKey || e.altKey || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if (!app.user || lock.locked || document.querySelector('[role=dialog]')) return;
+    const groupRoot = seg[0] === 'g' && seg.length === 2;
+    const key = e.key;
+    if (Date.now() - gPressed < 1200) {
+      gPressed = 0;
+      const sorted = app.directory; // the order groups were added: stable, unlike the sidebar
+      if (key === 'h') go('/');
+      else if (key === 'i') go('/insights');
+      else if (key === 's') go('/settings');
+      else if (/^[1-9]$/.test(key) && sorted[+key - 1]) go(`/g/${sorted[+key - 1].id}`);
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (key === 'g') gPressed = Date.now();
+    else if (key === '?') showKeys = true;
+    else if (key === 'n' && !groupRoot) go('/quick/add');
+    else if (key === '/' && !groupRoot) go('/search');
+    else if (key === 'e' && seg[0] === 'g' && seg[2] === 'e' && seg[3] && !seg[4]) go(`/g/${seg[1]}/e/${seg[3]}/edit`);
+    else if (key === 'Escape' && isSubPage) history.back();
+    else return;
+    e.preventDefault();
+  }
+
   let reconnecting = $state(false);
   async function reconnect() {
     reconnecting = true;
@@ -107,7 +139,7 @@
   }
 </script>
 
-<svelte:window ontouchstart={onTouchStart} ontouchmove={onTouchMove} ontouchend={onTouchEnd} ontouchcancel={onTouchEnd} />
+<svelte:window onkeydown={onKey} ontouchstart={onTouchStart} ontouchmove={onTouchMove} ontouchend={onTouchEnd} ontouchcancel={onTouchEnd} />
 
 {#if !app.booted}
   <div class="min-h-dvh grid place-items-center">
@@ -231,5 +263,6 @@
 {/if}
 
 {#if app.user && lock.locked}<LockScreen />{/if}
+{#if showKeys}<Shortcuts onclose={() => (showKeys = false)} />{/if}
 
 <Toasts />
