@@ -5,7 +5,7 @@
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
 // Replaced with a unique ID on every build (build/build-info.js), so each deploy is a new worker.
-const BUILD = '0.1.0-3b34be9-muuc36ir';
+const BUILD = '0.1.0-fe52017-mv3f3p00';
 const CACHE = `spreadshare-app-${BUILD}`;
 // Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
 const SHARE_CACHE = 'spreadshare-share';
@@ -14,7 +14,7 @@ const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
 // Every built JS/CSS file, filled in by build/build-info.js. Precached so the whole app, including
 // the receipt scanner's lazy chunks, works offline right after an update.
-const PRECACHE = ["./manifest.webmanifest","./assets/index-B0mRr-VD.js","./assets/index-Cpx5aPUR.css","./assets/pdf-CzI_o6zy.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-ChyRJ0A_.js"];
+const PRECACHE = ["./manifest.webmanifest","./assets/index-Cpx5aPUR.css","./assets/index-DByiFmCY.js","./assets/pdf-CkaQ3i8N.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-CQ_KsNYG.js"];
 const IMMUTABLE = /\/(assets|icons)\//;
 
 /** Version-pinned packages on jsDelivr ("/npm/name@1.2.3/…") and the PaddleOCR model bucket. */
@@ -160,9 +160,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (req.mode === 'navigate') {
-    // Invite links carry ?invite=…; serve the same cached shell for any navigation.
+  if (req.mode === 'navigate' && !/\.html?$/.test(url.pathname.replace(/\/index\.html$/, '/'))) {
+    // The app (invite links carry ?invite=…): one cached shell for any navigation to it.
     event.respondWith(networkFirst(req, './index.html'));
+  } else if (req.mode === 'navigate') {
+    // Other pages (privacy.html, terms.html) are cached under their own URL.
+    event.respondWith(networkFirst(req));
   } else if (IMMUTABLE.test(url.pathname)) {
     event.respondWith(cacheFirst(req));
   } else {

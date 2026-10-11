@@ -1,0 +1,51 @@
+/* Privacy policy and terms: plain static pages, readable without signing in or loading the app. */
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --accent: #4f46e5;
+  --accent-soft: #eef2ff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --line: #334155;
+    --accent: #a5b4fc;
+    --accent-soft: #1e1b4b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+h1 { font-size: 2rem; line-height: 1.2; margin: 0.5rem 0 0.25rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
+p, li { color: var(--text); }
+ul { padding-left: 1.25rem; }
+li { margin: 0.35rem 0; }
+a { color: var(--accent); }
+code { font-size: 0.9em; background: var(--accent-soft); padding: 0.05em 0.35em; border-radius: 0.3em; }
+.meta, .back { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.back a { text-decoration: none; }
+.summary {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 0.75rem;
+}

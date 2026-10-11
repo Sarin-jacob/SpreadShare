@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · SpreadShare</title>
+  <meta name="description" content="How SpreadShare handles your data: no server, your groups live in your own Google Drive.">
+  <link rel="stylesheet" href="./legal.css">
+</head>
+<body>
+  <main>
+    <p class="back"><a href="./">← SpreadShare</a> · <a href="./terms.html">Terms of Use</a></p>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated: 11 October 2026</p>
+
+    <div class="summary">
+      <strong>In short:</strong> SpreadShare has no server and no database of its own. Your groups are Google Sheets in
+      your own Google Drive, and the app talks to Google directly from your device. We don't collect, store, sell or
+      share your data, and there are no ads, analytics or trackers.
+    </div>
+
+    <h2>Who we are</h2>
+    <p>
+      SpreadShare is a free, open-source app for splitting expenses with friends and groups, made by Sarin C Jacob.
+      The source code is public at
+      <a href="https://github.com/Sarin-jacob/SpreadShare">github.com/Sarin-jacob/SpreadShare</a>, so you can check
+      everything this policy says.
+    </p>
+
+    <h2>What the app asks Google for, and why</h2>
+    <p>When you sign in with Google, SpreadShare asks for these permissions:</p>
+    <ul>
+      <li><strong>Your name, email address and profile picture</strong>: to show who added what, and to identify you in the groups you join.</li>
+      <li><strong>Google Sheets</strong>: each group is a spreadsheet. The app creates group spreadsheets, adds entries to them
+        and reads the groups you're a member of. It doesn't open or change any other spreadsheet in your account.</li>
+      <li><strong>Google Drive, only files SpreadShare creates or opens</strong>: a <code>SpreadShare_Workspaces</code> folder, a
+        small file listing your groups, a file with your preferences (budgets, your UPI ID), and receipt photos you attach.
+        The app can't see your other Drive files.</li>
+    </ul>
+    <p>
+      You can see or remove this access at any time in your Google Account under
+      <a href="https://myaccount.google.com/connections">Third-party apps &amp; services</a>.
+    </p>
+
+    <h2>Where your data lives</h2>
+    <ul>
+      <li><strong>In your Google Drive.</strong> Everything you enter in a group (expenses, payments, comments, notes, members' names,
+        UPI IDs you choose to share) is stored in that group's Google Sheet, owned by whoever created the group.</li>
+      <li><strong>On your device.</strong> A copy of your groups is kept in the browser's storage so the app works offline, along with
+        your settings, a sign-in token that expires after an hour, and (if you download it) the receipt reader. Signing out
+        removes this copy.</li>
+      <li><strong>Nowhere else.</strong> We have no server, so we never receive your data.</li>
+    </ul>
+
+    <h2>Who can see your data</h2>
+    <ul>
+      <li><strong>Members of your group</strong> see everything in that group.</li>
+      <li><strong>Invite links:</strong> when you invite someone, the group's sheet is shared as "anyone with the link can edit",
+        so they can open it. Anyone you give the link to (or who gets it from them) can read and edit the group. Only share
+        invite links with people you trust, and you can turn link sharing off in Google Drive.</li>
+      <li><strong>Receipt photos</strong> you attach are uploaded to your Drive and shared as "anyone with the link can view", so other
+        group members can see them.</li>
+      <li><strong>Google</strong> stores your files under its own <a href="https://policies.google.com/privacy">privacy policy</a>.</li>
+    </ul>
+
+    <h2>Processed on your device only</h2>
+    <p>
+      Receipt photos, PDF bills, screenshots of payment history, bank statements, CSV files and pasted bank or UPI
+      messages are read by the app <strong>on your device</strong>. They are never sent to us or to any AI service.
+      Automatic categories are worked out on your device from your own past entries.
+      The app lock (fingerprint, face or device PIN) uses your device's own unlock; nothing about it leaves your device.
+    </p>
+
+    <h2>Other services the app contacts</h2>
+    <p>Your device connects directly to these services. None of them receive your expenses or personal details from SpreadShare:</p>
+    <ul>
+      <li><strong>Google</strong> (accounts.google.com, googleapis.com): sign-in and your Sheets / Drive files.</li>
+      <li><strong>GitHub Pages</strong>: serves the app's files. GitHub may log your IP address, like any website host
+        (<a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>).</li>
+      <li><strong>jsDelivr</strong> (cdn.jsdelivr.net) and <strong>PaddlePaddle's model storage</strong> (paddle-model-ecology.bj.bcebos.com):
+        download the receipt reader's code and models, once. Only the files are requested; your receipts are not sent.</li>
+      <li><strong>ExchangeRate-API</strong> (open.er-api.com): today's exchange rates when you enter an amount in another currency.
+        Only the currency is sent.</li>
+      <li><strong>Your UPI app</strong>: "Pay with UPI" opens it with the payee and amount filled in. SpreadShare never sees the payment.</li>
+    </ul>
+
+    <h2>Google API Services</h2>
+    <p>
+      SpreadShare's use and transfer of information received from Google APIs adheres to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+      including the Limited Use requirements. Data from Google is only used to provide the app's features to you, is not
+      transferred to anyone, is not used for advertising, and is never read by people.
+    </p>
+
+    <h2>Deleting your data</h2>
+    <ul>
+      <li>Sign out (Settings) to remove everything stored on your device.</li>
+      <li>Delete a group's sheet, or the whole <code>SpreadShare_Workspaces</code> folder, in Google Drive to delete it for good.
+        Groups owned by someone else can only be deleted by their owner.</li>
+      <li>Remove SpreadShare's access in your <a href="https://myaccount.google.com/connections">Google Account</a>.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>SpreadShare is not meant for children under 13 and doesn't knowingly handle their data.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted here with a new date. The full history is in the public code repository.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or requests: open an issue at <a href="https://github.com/Sarin-jacob/SpreadShare/issues">github.com/Sarin-jacob/SpreadShare/issues</a>.</p>
+  </main>
+</body>
+</html>
