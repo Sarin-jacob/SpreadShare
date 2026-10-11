@@ -1,5 +1,6 @@
 <script>
-  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi, grantPermissions } from '../lib/app.svelte.js';
+  import { app, pendingIds, logout, syncAll, rebuildCache, loadDirectory, publishUpi, grantPermissions, refreshReminders } from '../lib/app.svelte.js';
+  import { notify, enableNotifications, disableNotifications, setNotifyKind, show } from '../lib/notify.svelte.js';
   import { prefs, setUpi } from '../lib/prefs.svelte.js';
   import { isUpiId, normalizeUpiId } from '../lib/upi.js';
   import { lock, lockSupported, enableLock, disableLock, setLockAfter } from '../lib/lock.svelte.js';
@@ -32,6 +33,25 @@
       disableLock();
       toast('App lock off', 'info');
     }
+  }
+
+  async function toggleNotifications(on) {
+    if (!on) {
+      disableNotifications();
+      return toast('Notifications off', 'info');
+    }
+    if (await enableNotifications()) {
+      refreshReminders();
+      show([{ title: 'SpreadShare', body: 'Notifications are on. This is what they look like.', url: '#/settings', tag: 'ss-test' }]);
+      toast('Notifications on');
+    } else {
+      toast(notify.permission === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser’s site settings.' : 'Notifications weren’t allowed', 'error', { ms: 6000 });
+    }
+  }
+
+  function setKind(kind, value) {
+    setNotifyKind(kind, value);
+    if (kind === 'reminders') refreshReminders();
   }
 
   let reviewing = $state(false);
@@ -126,6 +146,32 @@
     </div>
     {#if !upiValid}<p class="text-xs text-rose-600 dark:text-rose-400">That doesn’t look like a UPI ID (name@bank).</p>{/if}
   </form>
+
+  <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
+    <div class="p-4 flex items-center justify-between gap-4">
+      <div>
+        <div class="text-sm font-bold">Notifications</div>
+        <div class="text-xs text-slate-500">
+          {#if !notify.supported}
+            This browser can't show notifications.
+          {:else if notify.permission === 'denied'}
+            <span class="text-amber-600 dark:text-amber-400">Blocked for this site. Allow notifications in your browser's site settings, then switch this on.</span>
+          {:else}
+            New entries, payments and comments from others while SpreadShare isn't on screen, and recurring bills the day before. Without a server, nothing arrives while the app is fully closed except bill reminders{notify.background ? '' : ' (installed Android app)'}.
+          {/if}
+        </div>
+      </div>
+      <Switch label="Notifications" checked={notify.enabled} disabled={!notify.supported || notify.permission === 'denied'} onchange={toggleNotifications} />
+    </div>
+    {#if notify.enabled}
+      {#each [['activity', 'Entries and comments involving you'], ['payments', 'Someone pays you'], ['reminders', 'Recurring bills, the day before']] as [kind, label] (kind)}
+        <div class="px-4 py-3 flex items-center justify-between gap-4">
+          <div class="text-sm">{label}</div>
+          <Switch {label} checked={notify[kind]} onchange={(v) => setKind(kind, v)} />
+        </div>
+      {/each}
+    {/if}
+  </section>
 
   <section class="card divide-y divide-slate-100 dark:divide-slate-700/60">
     <div class="p-4 flex items-center justify-between gap-4">

@@ -1,6 +1,5 @@
 <script>
   import { app, openGroup, login, refreshSession, grantPermissions, pendingIds, syncAll, loadDirectory } from './lib/app.svelte.js';
-  import { setBadge } from './lib/pwa.svelte.js';
   import { updates, applyUpdate } from './lib/updates.svelte.js';
   import { route, go } from './lib/router.svelte.js';
   import Shortcuts from './components/Shortcuts.svelte';
@@ -80,7 +79,6 @@
     if (app.user && groupId) openGroup(groupId);
   });
 
-  $effect(() => setBadge(pendingIds.size));
 
   // Amounts show in the open group's currency; pages across groups use the default currency.
   $effect.pre(() => {

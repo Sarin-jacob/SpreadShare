@@ -7,6 +7,7 @@ import { syncThemeColor, applyBrandLinks } from './lib/settings.svelte.js';
 import { initOcrOffline } from './lib/ocrOffline.svelte.js';
 import { registerServiceWorker } from './lib/updates.svelte.js';
 import { initLock } from './lib/lock.svelte.js';
+import { initNotifications } from './lib/notify.svelte.js';
 
 captureInvite();
 syncThemeColor();
@@ -16,6 +17,7 @@ const app = mount(App, { target: document.getElementById('app') });
 boot();
 initOcrOffline();
 initLock();
+initNotifications();
 
 window.addEventListener('load', () => registerServiceWorker());
 

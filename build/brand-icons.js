@@ -21,6 +21,18 @@ const SHORTCUTS = [
   { name: 'Insights', short_name: 'Insights', url: './#/insights', icon: 'chart' },
 ];
 
+/**
+ * Notification badge: a white silhouette of the logo (sheet + ₹ coin) on transparent. Android shows
+ * it in the status bar, using only its shape.
+ */
+const BADGE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><mask id="m">
+<rect width="512" height="512" fill="#000"/>
+<path d="M136 92H296L356 152V380a28 28 0 0 1-28 28H136a28 28 0 0 1-28-28V120a28 28 0 0 1 28-28Z" fill="#fff"/>
+<g fill="#000"><rect x="150" y="214" width="110" height="26" rx="13"/><rect x="150" y="268" width="80" height="26" rx="13"/><rect x="150" y="322" width="60" height="26" rx="13"/></g>
+<circle cx="346" cy="346" r="142" fill="#000"/><circle cx="346" cy="346" r="118" fill="#fff"/>
+<g fill="none" stroke="#000" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"><path d="M300 290H392"/><path d="M300 322H392"/><path d="M320 290a32 32 0 0 1 0 64H302L370 412"/></g>
+</mask></defs><rect width="512" height="512" fill="#fff" mask="url(#m)"/></svg>`;
+
 /** A shortcut icon: the glyph in white on the accent colour (full bleed; launchers crop it). */
 const shortcutSvg = (shades, d) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="${shades[600]}"/>` +
@@ -101,6 +113,7 @@ export function generateBrandFiles(cssPath) {
     files.set(`manifest-${accent}.webmanifest`, { body: manifest(accent), type: 'application/manifest+json' });
   }
   files.set('manifest.webmanifest', { body: manifest(DEFAULT_ACCENT), type: 'application/manifest+json' });
+  files.set('icons/badge-96.png', { body: png(BADGE_SVG, 96), type: 'image/png' });
   return files;
 }
 

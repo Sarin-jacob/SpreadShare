@@ -1,5 +1,5 @@
 // src/lib/pwa.svelte.js
-// Install prompt + home-screen badge for unsynced entries.
+// Install prompt. (The app icon badge counts unread notifications: notify.svelte.js.)
 
 const standaloneQuery = matchMedia('(display-mode: standalone)');
 const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -37,8 +37,4 @@ export async function promptInstall() {
   return outcome === 'accepted';
 }
 
-/** Shows the number of not-yet-synced entries on the installed app's icon (where supported). */
-export function setBadge(count) {
-  if (!('setAppBadge' in navigator)) return;
-  (count > 0 ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => {});
-}
+

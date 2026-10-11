@@ -45,7 +45,7 @@ export default function buildInfo() {
         sw,
         readFileSync(sw, 'utf8')
           .replaceAll('__BUILD_ID__', id)
-          .replace("['__PRECACHE__']", JSON.stringify(['./manifest.webmanifest', ...assets.sort()]))
+          .replace("['__PRECACHE__']", JSON.stringify(['./manifest.webmanifest', './icons/badge-96.png', ...assets.sort()]))
       );
     },
   };

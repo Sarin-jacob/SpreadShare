@@ -16,6 +16,7 @@ import { computeLedgerState, parsePayload } from './engine.js';
 import { dueOccurrences } from './recurring.js';
 import { disableLock } from './lock.svelte.js';
 import { newGuestId, isGuest, mergeMap } from './members.js';
+import { notifyActivity, scheduleReminders } from './notify.svelte.js';
 import { tagsOf } from './tags.js';
 
 const PROFILE_KEY = 'ss_profile';
@@ -118,6 +119,7 @@ export async function boot() {
       app.sync.authExpired = true;
     }
   }
+  if (profile) refreshReminders(); // from local data: reminders work offline too
   window.addEventListener('click', refreshOnInteraction, true);
   window.addEventListener('keydown', refreshOnInteraction, true);
 
@@ -211,6 +213,17 @@ async function onConnected() {
   syncPrefs().then(() => prefs.upi && publishUpi(prefs.upi));
   await handlePendingInvite();
   await syncAll();
+}
+
+// ─── Notifications ───
+
+/** Recomputes the recurring-bill reminders the service worker shows (see notify.svelte.js). */
+export async function refreshReminders() {
+  if (!app.user) return;
+  const all = await db.getAll(db.STORES.events);
+  const groups = {};
+  for (const e of all) if (app.directory.some((g) => g.id === e.spreadsheetId)) (groups[e.spreadsheetId] ??= []).push(e);
+  await scheduleReminders(groups, Object.fromEntries(app.directory.map((g) => [g.id, g.name])), app.user.email);
 }
 
 // ─── Recurring expenses & UPI ───
@@ -310,6 +323,7 @@ export function syncAll({ staleOnly = false } = {}) {
         }
       };
       await Promise.all(Array.from({ length: Math.min(SYNC_CONCURRENCY, ids.length) }, worker));
+      refreshReminders();
     } finally {
       app.sync.progress = null;
       syncAllRunning = null;
@@ -521,11 +535,15 @@ export async function syncGroup(id) {
     const keep = new Set(merged.map((e) => e.eventId));
     const cached = await db.getGroupEvents(id);
     const stale = cached.filter((e) => !keep.has(e.eventId)).map((e) => [id, e.eventId]);
+    // Arrived from other people since the last sync (not on a group's first download).
+    const known = new Set(cached.map((e) => e.eventId));
+    const fresh = app.groupSyncedAt[id] ? remote.filter((e) => !known.has(e.eventId)) : [];
 
     await db.putMany(db.STORES.events, remote);
     if (stale.length) await db.removeMany(db.STORES.events, stale);
 
     if (app.groupId === id) app.events = merged;
+    if (fresh.length) notifyActivity(fresh, merged, { me: app.user.email, groupId: id, groupName: groupName(id) });
     await addDueRecurring(id, merged);
     app.sync.lastSyncedAt = Date.now();
     app.groupSyncedAt[id] = app.sync.lastSyncedAt;
