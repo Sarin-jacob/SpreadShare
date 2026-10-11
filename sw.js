@@ -5,16 +5,18 @@
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
 // Replaced with a unique ID on every build (build/build-info.js), so each deploy is a new worker.
-const BUILD = '0.1.0-fe52017-mv3f3p00';
+const BUILD = '0.1.0-eba3f39-mv3oc24y';
 const CACHE = `spreadshare-app-${BUILD}`;
 // Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
 const SHARE_CACHE = 'spreadshare-share';
+// Reminder schedule written by the page (src/lib/notify.svelte.js) and which ones were shown.
+const NOTIFY_CACHE = 'spreadshare-notify';
 // Keep in sync with src/lib/ocrOffline.svelte.js. Bump when the vendored PaddleOCR version changes.
 const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
 // Every built JS/CSS file, filled in by build/build-info.js. Precached so the whole app, including
 // the receipt scanner's lazy chunks, works offline right after an update.
-const PRECACHE = ["./manifest.webmanifest","./assets/index-Cpx5aPUR.css","./assets/index-DByiFmCY.js","./assets/pdf-CkaQ3i8N.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-CQ_KsNYG.js"];
+const PRECACHE = ["./manifest.webmanifest","./icons/badge-96.png","./assets/index-Cpx5aPUR.css","./assets/index-DqdR4S7x.js","./assets/pdf-BlcXMlPs.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-CgxJuEr4.js"];
 const IMMUTABLE = /\/(assets|icons)\//;
 
 /** Version-pinned packages on jsDelivr ("/npm/name@1.2.3/…") and the PaddleOCR model bucket. */
@@ -49,12 +51,13 @@ self.addEventListener('install', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
   if (event.data?.type === 'GET_VERSION') event.ports?.[0]?.postMessage({ build: BUILD });
+  if (event.data?.type === 'CHECK_REMINDERS') event.waitUntil(showDueReminders());
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, OCR_CACHE, SHARE_CACHE].includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, OCR_CACHE, SHARE_CACHE, NOTIFY_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -122,6 +125,66 @@ async function ocrAsset(event) {
   }
   return res;
 }
+
+// ─── Notifications ───
+
+async function readJson(cache, key, fallback) {
+  try {
+    return (await (await cache.match(key))?.json()) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function updateBadge() {
+  if (!self.navigator.setAppBadge) return;
+  const count = (await self.registration.getNotifications()).length;
+  await (count ? self.navigator.setAppBadge(count) : self.navigator.clearAppBadge()).catch(() => {});
+}
+
+/** Shows reminders that are due and haven't been shown yet (each one once). */
+async function showDueReminders() {
+  if (self.Notification?.permission !== 'granted') return;
+  const cache = await caches.open(NOTIFY_CACHE);
+  const { items = [] } = await readJson(cache, 'schedule', {});
+  const shown = await readJson(cache, 'shown', []);
+  const now = Date.now();
+  const due = items.filter((r) => r.at <= now && r.at > now - 2 * 86_400_000 && !shown.includes(r.id));
+  for (const r of due) {
+    await self.registration.showNotification(r.title, { body: r.body, icon: r.icon, badge: r.badge, tag: r.id, data: { url: r.url } });
+    shown.push(r.id);
+  }
+  if (due.length) {
+    await cache.put('shown', new Response(JSON.stringify(shown.slice(-200)), { headers: { 'Content-Type': 'application/json' } }));
+    await updateBadge();
+  }
+}
+
+// Android (installed app): Chrome wakes the worker about once a day when it sees fit.
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'ss-reminders') event.waitUntil(showDueReminders());
+});
+
+// Tapping a notification opens the app at the entry or group (reusing an open window).
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(`./${event.notification.data?.url || ''}`, self.registration.scope).href;
+  event.waitUntil(
+    (async () => {
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const win = wins.find((w) => w.url.startsWith(self.registration.scope));
+      if (win) {
+        await win.focus();
+        await win.navigate(target).catch(() => win.postMessage({ type: 'OPEN', url: event.notification.data?.url }));
+      } else {
+        await self.clients.openWindow(target);
+      }
+      await updateBadge();
+    })()
+  );
+});
+
+self.addEventListener('notificationclose', (event) => event.waitUntil(updateBadge()));
 
 // Web Share Target: the OS posts shared files / text here. Park them in SHARE_CACHE and open the app.
 async function receiveShare(req) {
