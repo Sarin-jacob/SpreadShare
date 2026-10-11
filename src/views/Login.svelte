@@ -52,7 +52,8 @@
         <p class="text-sm text-rose-500 text-center">{error}</p>
       {/if}
       <p class="text-xs text-slate-400 text-center">
-        SpreadShare only gets access to files it creates in your Drive.
+        Your groups are Google Sheets in your own Drive. SpreadShare has no server and never sees your data.
+        <br /><a href="./privacy.html" class="underline underline-offset-2">Privacy</a> · <a href="./terms.html" class="underline underline-offset-2">Terms</a>
       </p>
     </div>
   </div>

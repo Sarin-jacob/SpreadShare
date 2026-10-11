@@ -331,6 +331,10 @@
       </button>
       <a class="text-xs text-slate-500 underline underline-offset-2" href="https://myaccount.google.com/connections" target="_blank" rel="noopener">Manage on Google</a>
     </div>
+    <p class="pt-1 text-xs text-slate-500">
+      <a class="underline underline-offset-2" href="./privacy.html" target="_blank" rel="noopener">Privacy Policy</a> ·
+      <a class="underline underline-offset-2" href="./terms.html" target="_blank" rel="noopener">Terms of Use</a>
+    </p>
   </section>
 
   <button class="btn btn-danger w-full !py-3" onclick={signOut}><Icon name="logout" class="w-4 h-4" /> Sign out</button>

@@ -160,9 +160,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (req.mode === 'navigate') {
-    // Invite links carry ?invite=…; serve the same cached shell for any navigation.
+  if (req.mode === 'navigate' && !/\.html?$/.test(url.pathname.replace(/\/index\.html$/, '/'))) {
+    // The app (invite links carry ?invite=…): one cached shell for any navigation to it.
     event.respondWith(networkFirst(req, './index.html'));
+  } else if (req.mode === 'navigate') {
+    // Other pages (privacy.html, terms.html) are cached under their own URL.
+    event.respondWith(networkFirst(req));
   } else if (IMMUTABLE.test(url.pathname)) {
     event.respondWith(cacheFirst(req));
   } else {
