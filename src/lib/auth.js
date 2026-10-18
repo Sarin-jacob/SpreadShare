@@ -40,7 +40,6 @@ export class MissingPermissionError extends Error {
 const TOKEN_KEY = 'ss_oauth_token';
 const SCOPE_KEY = 'ss_oauth_scope';
 const EXPIRY_KEY = 'ss_oauth_expiry';
-const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export class AuthRequiredError extends Error {
   /** needsUser: Google wants the user to pick an account / consent again (a silent refresh won't do). */
@@ -55,9 +54,6 @@ export class AuthRequiredError extends Error {
 const NEEDS_USER = /interaction_required|consent_required|login_required|account_selection_required|access_denied/;
 // Without a reply the popup was blocked or closed; settle rather than hang every API call.
 const REQUEST_TIMEOUT_MS = { silent: 20_000, interactive: 180_000 };
-
-/** True while the page may open a popup (inside a tap / key press). */
-export const canOpenPopup = () => navigator.userActivation?.isActive ?? true;
 
 class AuthenticationService {
   tokenClient = null;
@@ -172,23 +168,13 @@ class AuthenticationService {
   }
 
   /**
-   * Returns a usable token. If the cached one is about to expire and the page may open a popup
-   * right now, refreshes it silently; otherwise uses what's left of it.
+   * Returns the cached token while it's valid. Never opens Google's popup itself: API calls that
+   * happen to follow any tap would otherwise flash it. A new token comes from refreshSession()
+   * on a sync tap (app.svelte.js).
    */
-  async ensureValidToken(emailHint) {
-    const cached = this.cachedToken(REFRESH_BUFFER_MS);
-    if (cached) return cached;
-    if (canOpenPopup()) {
-      try {
-        return await this.refreshSilently(emailHint);
-      } catch (e) {
-        const stillValid = this.cachedToken();
-        if (stillValid) return stillValid;
-        throw e instanceof AuthRequiredError ? e : new AuthRequiredError();
-      }
-    }
-    const stillValid = this.cachedToken();
-    if (stillValid) return stillValid;
+  async ensureValidToken() {
+    const token = this.cachedToken();
+    if (token) return token;
     throw new AuthRequiredError();
   }
 

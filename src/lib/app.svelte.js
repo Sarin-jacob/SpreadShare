@@ -114,14 +114,14 @@ export async function boot() {
     } else if (AuthService.cachedToken()) {
       onConnected();
     } else {
-      // Expired since last time (tokens last an hour). Local data is usable right away; the next
-      // tap gets a new token without any prompt (see refreshOnInteraction).
+      // Expired since last time (tokens last an hour). Everything works from local data; the next
+      // sync tap (sync chip, pull to refresh, saving) gets a new token (see refreshOnInteraction).
       app.sync.authExpired = true;
     }
   }
   if (profile) refreshReminders(); // from local data: reminders work offline too
   window.addEventListener('click', refreshOnInteraction, true);
-  window.addEventListener('keydown', refreshOnInteraction, true);
+  window.addEventListener('submit', refreshOnInteraction, true);
 
   window.addEventListener('online', () => {
     app.sync.online = true;
@@ -141,20 +141,39 @@ function setUser(profile) {
   writeJson(PROFILE_KEY, user);
 }
 
-// Refresh the token when it has expired or is about to, on a tap or key press: the only moment
-// the browser lets Google's (self-closing) popup open. Keeps the session going without prompts.
-const REFRESH_AHEAD_MS = 10 * 60_000;
+// A new Google token needs Google's (self-closing) popup, which browsers only allow during a tap.
+// The popup flashes Google's page, so it only happens when it's needed: the token has run out
+// and you tap something that syncs (the sync chip, pull to refresh, "Sync now", saving an entry:
+// elements marked data-sync-tap, and form submits). Everything works offline meanwhile; entries
+// wait in the queue.
+const REFRESH_AHEAD_MS = 60_000;
 let lastRefreshAttempt = 0;
 
 function refreshOnInteraction(e) {
   if (e.target?.closest?.('[data-auth-action]')) return; // sign-in buttons do their own request
+  if (e.type !== 'submit' && !e.target?.closest?.('[data-sync-tap]')) return;
   if (AuthService.expiresIn() > REFRESH_AHEAD_MS || Date.now() - lastRefreshAttempt < 30_000) return;
   refreshSession();
+}
+
+/**
+ * Whether Google is actually reachable: "online" is also reported on Wi-Fi without internet or
+ * with a dead mobile signal, and the popup would then show Google's error page.
+ */
+async function googleReachable() {
+  if (!navigator.onLine) return false;
+  try {
+    await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Silent token refresh. Call only from a user gesture handler. Resolves true when connected. */
 export async function refreshSession() {
   if (!app.user || !navigator.onLine || app.sync.reconnecting || app.sync.needsSignIn) return !app.sync.authExpired;
+  if (!(await googleReachable())) return !app.sync.authExpired; // offline in practice: stay quiet
   lastRefreshAttempt = Date.now();
   const wasExpired = app.sync.authExpired;
   app.sync.reconnecting = true;
@@ -170,7 +189,9 @@ export async function refreshSession() {
     console.warn('Silent Google sign-in failed', err?.message);
     if (AuthService.expiresIn() <= 0) {
       app.sync.authExpired = true;
-      app.sync.needsSignIn = true;
+      // Only Google refusing (not a dropped connection or a script that couldn't load) means you
+      // have to sign in again.
+      if (err instanceof AuthRequiredError && (await googleReachable())) app.sync.needsSignIn = true;
     }
     return !app.sync.authExpired;
   } finally {

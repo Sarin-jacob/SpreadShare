@@ -21,6 +21,7 @@
 </script>
 
 <button
+  data-sync-tap
   type="button"
   onclick={() => syncAll()}
   title={app.sync.error || 'Sync now'}

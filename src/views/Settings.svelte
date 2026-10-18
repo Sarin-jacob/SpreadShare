@@ -311,7 +311,7 @@
           {#if app.sync.lastSyncedAt}· last refresh {new Date(app.sync.lastSyncedAt).toLocaleTimeString()}{/if}
         </div>
       </div>
-      <button class="btn btn-soft !py-2 shrink-0" onclick={syncNow} disabled={busy || app.sync.authExpired}>
+      <button class="btn btn-soft !py-2 shrink-0" data-sync-tap onclick={syncNow} disabled={busy}>
         <Icon name="refresh" class="w-4 h-4 {busy ? 'animate-spin' : ''}" /> Sync now
       </button>
     </div>
