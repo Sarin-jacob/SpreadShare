@@ -1,5 +1,5 @@
 // src/lib/receipt/image.js
-// Photo handling for the receipt scanner, ported from receipt_test@8125280 scan/scan.js:
+// Photo handling for the receipt scanner, ported from receipt_test@e2f36f7 scan/pipeline.js:
 // load → auto-detect the paper's corners → perspective-flatten → brightness / contrast / B&W.
 import { enhance } from './preprocess.js';
 
@@ -70,6 +70,13 @@ export function autoQuad(src) {
   if (area < 0.08 || area > 0.92) return full; // nothing paper-like, or a screenshot/scan
   const rect = minAreaRect(hull(best.map((p) => [p % w, (p / w) | 0])));
   if (!rect) return full;
+  // A bright band square to the frame, running side to side and off the top or bottom edge, is a
+  // screenshot's light panel (an app's bill under a dark header), not paper on a table: cropping to it
+  // would cut off the shop name. (A photo shown in a gallery app has dark bars above and below.)
+  const xs = rect.map((p) => p[0]), ys = rect.map((p) => p[1]);
+  const square = Math.abs(rect[1][1] - rect[0][1]) < h * 0.01;
+  const offEdge = Math.min(...ys) <= h * 0.01 || Math.max(...ys) >= h * 0.99 - 1;
+  if (square && offEdge && Math.max(...xs) - Math.min(...xs) >= w * 0.95) return full;
   // Pad a little so the paper edge (and any text on it) stays inside.
   const cx = rect.reduce((a, p) => a + p[0], 0) / 4, cy = rect.reduce((a, p) => a + p[1], 0) / 4;
   return rect.map(([x, y]) => [

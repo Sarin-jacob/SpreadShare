@@ -1,4 +1,4 @@
-// Vendored from receipt_test@b9dd94a , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@71b8e01 , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
 // Receipt structure from OCR boxes without a generative model.
 // 1. group boxes into lines, pull money values out of each line
 // 2. tag lines (total / subtotal / tax / discount / charge / payment / item)
@@ -21,7 +21,7 @@ const KW = {
   // (with OCR spellings next to a rate: "VAI @18.9%", "C6ST @9%", "CG8ST @ 0.5%")
   tax: kw(String.raw`tax|taxes|vat|gst|hst|pst|qst|cgst|sgst|igst|utgst|mwst|ust|tva|iva|btw|moms|sst|ppn|va[i1l](?=\s*@)|[cs]\s?[g6]\s?8?[s5]\s?[t71](?=\s*[@\d])`),
   discount: kw(String.raw`discount|disc\.?|dis(?=\s*[:@.])|savings?|saved|coupon|cpn|promo|loyalty|voucher|rebate|rabatt|remise|descuento|markdown|you\s*saved|member\s*price|off|less`),
-  charge: kw(String.raw`tip|gratuity|service(\s*charge)?|(serv|svc)\.?\s*(charge|chg)|svc|fee|delivery|surge|packaging|bag\s*charge|rounding|round\s*off|adjustment|handling|small\s*cart`),
+  charge: kw(String.raw`tip|gratuity|service(\s*charge)?|(serv|svc)\.?\s*(charge|chg)|svc|fee|delivery|surge|packaging|bag\s*charge|rounding|round\s*off|adjustment|handling|small\s*cart|extended\s*at`),
   payment: kw(String.raw`cash|change|tender(ed)?|visa|master\s*card|mastercard|amex|discover|debit|credit\s*card|card\s*(no|number|type)|upi|paid|bank|eftpos|balance`),
   ignore: kw(String.raw`tota?l?\s*(qty|quantity|items?|savings?)|items?\s*(count|sold)|no\.?\s*of\s*items|in\s*words|only|approval|auth|terminal|merchant\s*id|transaction|invoice\s*(no|number|#)|receipt\s*(no|number|#)|tel|phone|fax|gstin|(vat|tax|gst|mwst|ust|tva|iva)\s*(-?\s*(nr|no|number|reg|id)\b|#)|tax\s*id|ntn|strn|abn|expires?|entspricht|equivalent|exchange\s*rate`),
   header: /\b(qty|quantity|description|item\s*name|items?|price|rate|amount|amt|unit|total)\b.*\b(qty|quantity|price|rate|amount|amt|total|subtotal|cost)\b/i,
@@ -105,7 +105,10 @@ function analyseLines(boxes) {
   });
   // Handwritten / kachha bills: (almost) no decimal amounts anywhere.
   const decimals = built.reduce((n, b) => n + moneyIn(b.text).filter(m => /[.,]\d{1,2}$/.test(m.raw.replace(/\s*-$/, ''))).length, 0);
-  const integerMode = decimals < 2;
+  // …but a page that prints its prices with a currency sign ("₹49") isn't one: there, bare numbers
+  // are quantities, sizes and struck-out old prices.
+  const marked = built.reduce((n, b) => n + moneyIn(b.text).filter(m => m.currency).length, 0);
+  const integerMode = decimals < 2 && marked < 2;
   const out = built.map(({ l, starts, text }, idx) => {
     const money = moneyIn(text, { integerMode });
     const amount = [...money].reverse().find(m => !m.perUnit) ?? null;
@@ -124,13 +127,32 @@ function analyseLines(boxes) {
       }
     }
     // ktext/label get keyword repair for tagging; `text` stays raw because money indices point into it.
-    return { idx, text, ktext: fixKeywords(text), money, amount, amountX, label: fixKeywords(label), boxesX: l.boxes.map(b => ({ text: b.text, right: b.right })), h: Math.max(...l.boxes.map(b => b.h)) / medH, cy: l.cy, left: Math.min(...l.boxes.map(b => b.left)) };
+    return { idx, text, ktext: fixKeywords(text), money, amount, amountX, label: fixKeywords(label), boxesX: l.boxes.map(b => ({ text: b.text, left: b.left, right: b.right })), h: Math.max(...l.boxes.map(b => b.h)) / medH, cy: l.cy, left: Math.min(...l.boxes.map(b => b.left)) };
   });
   out.integerMode = integerMode;
   return out;
 }
 
+// Buttons and labels of shopping / delivery apps (screenshots of carts, checkouts, order pages).
+const APP_UI = new RegExp(String.raw`move\s*to\s*wishlist|customi[sz]e|add\s*items|cooking\s*requests?|cutlery(\s*ne\w*)?|rate\s*now|repeat\s*order|view\s*cart(\s*on\s*next\s*step)?|download\s*invoice|view\s*(all\s*coupons|details)|apply\s*(restaurant\s*)?coupon|change|share|remove|add\s*tip|help|reorder|savings\s*corner|complete\s*your\s*meal|popular|beverages|desserts|sides|place\s*order|pay\s*using|delivering\s*to(\s*home)?|how\s*were\s*your\s*ordered\s*items\??|eligible\s*items|applied|instructions|delivery\s*type|enter\s*amount|before\s*you\s*checkout|see\s*more|proceed|on\s*time|checkout|my\s*cart`, 'gi');
+const isAppUi = text => APP_UI.test(text) && !/[a-z]{2,}/i.test(text.replace(APP_UI, ' ').replace(/[^a-z\s]/gi, ' ').replace(/(?<![a-z])[a-z](?![a-z])/gi, ' '));
+// "3 items • ₹424 proceed", "Delivered , 3 Items , ₹292": item count + total in a header / footer.
+const COUNT_LINE = /^\W*(delivered\W*)?\d{1,3}\s*items?\b\s*[•·|,]/i;
+// Page headings: "4 items in this order", "Shipment of 6 items", "Delivery in 18 minutes", "Order summary".
+const APP_HEADING = /^\W*(\d{1,3}\s*items?\s*in\s*(this|your)\s*(order|cart)|shipment\s*of\s*\d{1,3}\s*items?|(free\s*)?delivery\s*in\s*\d{1,3}\s*min\w*|arriv(ed|ing)\s*(at|in)\b.*|order\s*summary|bill\s*details|items?\s*added|\S+\s+eligible\s+items)\W*$/i;
+// Short link lines with a chevron: "Enjoy! >", "View all coupons >".
+const LINK_LINE = /^\s*\S+(\s+\S+){0,2}\s*[>›]\s*$/;
+// Order-page details under a product (Amazon / Flipkart): not part of its name.
+const ORDER_DETAIL = /^\W*(sold\s*by\b|return\s*(items?|window)\b|eligible\s*till\b|delivered\s*(today|on|yesterday)\b|package\s*was\b|order\s*(placed|number|id)\b|arriving\b|track\s*package\b)/i;
+// Tip buttons "+₹10 +25 +50", add-on buttons "Remove ₹1", savings banners "₹38 saved with free delivery", "₹164.8 saved!".
+const TIP_BUTTONS = /(\+\s*(₹|rs\.?)?\s*\d+\s*){2,}/i;
+const SAVED = /(?<![a-z])(saved|savings\s+of|you\s+save)(?![a-z])/i;
+
 function tag(line) {
+  APP_UI.lastIndex = 0;
+  if (!line.amount && (isAppUi(line.ktext) || APP_HEADING.test(line.text) || LINK_LINE.test(line.text) || ORDER_DETAIL.test(line.text))) return 'ignore';
+  if (line.amount && (COUNT_LINE.test(line.text) || TIP_BUTTONS.test(line.text) || /enter\s*amount|proceed\s*[>›]?\s*$|^\W*(remove|add)\s*(₹|rs\.?)\s*\d+\s*$/i.test(line.text))) return 'ignore';
+  if (line.amount && SAVED.test(line.text) && line.amount.value > 0 && !/^\s*-/.test(line.text.slice(line.amount.index))) return 'savings';
   const first = tagText(line, line.label);
   if (first !== 'amount' || !line.amount) return first;
   // Nearest text run had no keyword ("... on $151.37  $12.83"): try everything left of the amount.
@@ -161,8 +183,16 @@ function fixKeywords(text) {
   });
 }
 
+// App checkout buttons: "Pay ₹155", "Slide to Pay | ₹463".
+const PAY_BUTTON = /^\W*(slide\s*to\s*)?pay(\s*now)?\s*[|Il1:]?\s*$/i;
+
 function tagText(line, label) {
   const t = label.toLowerCase(), full = line.ktext.toLowerCase();
+  if (line.amount && PAY_BUTTON.test(label)) return 'total';
+  // "Pay 251" whose ₹ OCR lost: the figure is picked up with the other loose summary values.
+  if (!line.amount && /^\W*(slide\s*to\s*)?pay(\s*now)?\s*[|Il1:]?\s*\d[\d,]*(\.\d{1,2})?\s*$/i.test(full)) return 'total';
+  // "Item Total 399" whose ₹ OCR lost reads like a column heading; it's the subtotal.
+  if (!line.amount && KW.subtotal.test(full) && /(?<![\d.,])\d{1,6}(?:\.\d{1,2})?\s*$/.test(full) && full.trim().split(/\s+/).length <= 4) return 'subtotal';
   if (KW.ignore.test(line.amount ? t : full)) return 'ignore';
   if ((KW.header.test(full) && !line.amount) || headerWords(full) >= 4) return 'header';
   if (KW.subtotal.test(t)) return 'subtotal';
@@ -189,9 +219,10 @@ function itemName(line) {
     .replace(new RegExp(String.raw`(^|\s)${CUR}(?=\s|$)`, 'g'), ' ')
     .replace(/(?:^|\s)(?:[A-Z]{1,2}|[*#@xX]|à|a)(?=\s*$)/, ' ')
     .replace(/^\s*\d{1,3}\s*[xX×*]\s*/, '')
-    .replace(/^\s*\d{1,2}\s+(?=[A-Za-z])/, '') // qty / serial prefix ("2 KIWI"), but keep "100 PIPERS"
+    .replace(/^\s*\d{1,2}\s+(?=[A-Za-z])(?!(pcs?|pieces?|nos|kg|g|gm|ml|ltr)\b)/i, '') // qty / serial prefix ("2 KIWI"), but keep "100 PIPERS", "2 Pcs Roti"
     .replace(/\s+[@à]\s*$/, '')
     .replace(/[↓↑|]+/g, ' ')
+    .replace(/\s+[x×]\s*\d{1,3}\s*$/, '') // "Chicken Tikka x 1": the quantity
     .replace(/(\s+\d{1,3}(?:\.\d+)?)+\s*$/, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -212,6 +243,14 @@ function qtyInfo(line) {
 }
 
 const DETAIL_WORDS = /\b(ea|each|net|kg|lb|g|x|pc|pcs)\b/gi;
+
+// Pack-size lines under a product name in shopping apps: "2 x 38 g x 2", "148 g × 1", "1 unit",
+// "1 pair", "45 g + 45 g x 1", "1 pack (100 pulls) x 1". A trailing "x N" is the quantity.
+// (An optional short word in front is a stray OCR fragment from the product photo.)
+const SIZE_UNIT = String.raw`(?:g|gm|gms|grams?|kg|kgs|ml|l|ltr|litres?|liters?|oz|lb|pcs?|pieces?|units?|pairs?|packs?|rolls?|sachets?|tabs?|tablets?|caps?|capsules?|nos|pulls)`;
+const SIZE = String.raw`\d+(?:\.\d+)?\s*(?:[x×]\s*\d+(?:\.\d+)?\s*)?${SIZE_UNIT}(?![a-z])(?:\s*\([^)]*\))?`;
+const SIZE_LINE = new RegExp(String.raw`^(?:[a-z]{1,7}\s+)?${SIZE}(?:\s*[+&]\s*${SIZE})*(?:\s*[x×]\s*(\d{1,3}))?(?:\s+[\d,]+)?\s*$`, 'i');
+const sizeLine = name => SIZE_LINE.exec(String(name).replace(/\s+/g, ' ').trim());
 function isDetailLine(line, name) {
   const q = qtyInfo(line);
   if (!q || q.soft) return false;
@@ -301,7 +340,31 @@ function oneDigitApart(a, b) {
   return d === 1;
 }
 
+// Chinese / Japanese glyphs on a Latin-script bill are OCR misreads: a struck-through or bold "₹"
+// before a price ("天60", "+ぼ2"), an app's stepper "+" ("十"), or noise around product photos.
+const CJK = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/;
+function cleanBoxes(boxes) {
+  const all = boxes.map(b => b.text).join(' ');
+  if (!CJK.test(all) || (all.match(new RegExp(CJK.source, 'g')) || []).length > all.length * 0.3) return boxes; // a CJK receipt
+  const rupee = /₹|\bRs\.?\s|\bINR\b/.test(all);
+  const out = boxes.map(b => {
+    const text = b.text
+      .replace(new RegExp(String.raw`${CJK.source}+(?=\s*\d)`, 'g'), m => (rupee ? ' ₹' : ' '))
+      .replace(new RegExp(CJK.source, 'g'), ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text === b.text ? b : { ...b, text };
+  }).filter(b => b.text);
+  return Object.assign(out, { skewDeg: boxes.skewDeg, info: boxes.info });
+}
+// Two prices printed side by side lose their gap in OCR when one is struck through:
+// "₹316.98 ₹207" → "316.98207". Real amounts never have 5+ decimal digits.
+const splitGluedPrices = (t, cur = '') => t.replace(/(\d+[.,]\d{2})(\d{3,})(?![\d.,%])(?!\s*(?:kg|g|gm|ml|l|ltr|lb)\b)/gi, `$1 ${cur}$2`);
+
 export function solveReceipt(boxes) {
+  boxes = cleanBoxes(boxes);
+  const rupee = /₹|\bRs\.?\s|\bINR\b/.test(boxes.map(b => b.text).join(' '));
+  boxes = Object.assign(boxes.map(b => (/\d+[.,]\d{5,}/.test(b.text) ? { ...b, text: splitGluedPrices(b.text, rupee ? '₹' : '') } : b)), { skewDeg: boxes.skewDeg, info: boxes.info });
   const lines = analyseLines(boxes);
   lines.forEach(l => { l.tag = tag(l); });
 
@@ -324,6 +387,23 @@ export function solveReceipt(boxes) {
     const owner = [lines[l.idx + 1], lines[l.idx - 1], lines[l.idx + 2]].find(n => n && ['total', 'subtotal'].includes(n.tag) && !n.amount);
     if (owner) { owner.amount = l.amount; owner.money = l.money; }
     l.amount = null;
+  }
+  // A TOTAL caption under its figure (app buttons: "₹1,391" / "TOTAL"): take the amount from the
+  // line above when that amount sits right over the caption.
+  // Only when nothing else on the page is a total with a figure.
+  const hasTotal = lines.some(l => l.tag === 'total' && l.amount);
+  for (const l of lines) {
+    if (hasTotal || l.tag !== 'total' || l.amount) continue;
+    const cap = (l.boxesX ?? []).find(b => KW.total.test(b.text));
+    if (!cap) continue;
+    const overlaps = n => {
+      const box = n.boxesX.find(b => b.right === n.amountX);
+      if (!box) return false;
+      const o = Math.min(box.right, cap.right) - Math.max(box.left, cap.left);
+      return o > 0.3 * Math.min(box.right - box.left, cap.right - cap.left);
+    };
+    const above = [lines[l.idx - 1], lines[l.idx - 2]].find(n => n?.amount && !n.claimed && !SUMMARY_TAGS.includes(n.tag) && n.amountX != null && overlaps(n));
+    if (above) { l.amount = above.amount; l.money = above.money; l.label = cap.text; above.claimed = true; above.tag = 'claimed'; }
   }
   // Labels without a value on their own line (misaligned columns): borrow the
   // nearest unclaimed value-only line.
@@ -363,6 +443,23 @@ export function solveReceipt(boxes) {
     }
   }
 
+  // "Chicken Tikka x 1 230" between "… x 1 ₹129" rows: OCR dropped the ₹, the figure is still the price.
+  const QTY_ROW = /(?<![a-z])[x×]\s*(\d{1,3})\s+(?:₹|rs\.?\s*)?(\d{1,6}(?:[.,]\d{2})?)\s*$/i;
+  // Rows of the same shape next to a "… x 1 ₹139" row, outwards from it.
+  const promote = l => {
+    const m = l && l.tag === 'text' && lettered(l.text) ? QTY_ROW.exec(l.text) : null;
+    if (!m) return false;
+    const raw = m[2], index = l.text.lastIndexOf(raw);
+    l.amount = { value: +raw.replace(',', '.'), raw, index, end: index + raw.length, currency: '', perUnit: false };
+    l.money = [l.amount];
+    l.tag = 'amount';
+    return true;
+  };
+  for (const row of lines.filter(l => l.tag === 'amount' && l.amount?.currency && QTY_ROW.test(l.text))) {
+    for (let k = row.idx - 1; k >= 0 && (QTY_ROW.test(lines[k].text) && lines[k].tag === 'amount' || promote(lines[k])); k--);
+    for (let k = row.idx + 1; k < lines.length && (QTY_ROW.test(lines[k].text) && lines[k].tag === 'amount' || promote(lines[k])); k++);
+  }
+
   // Item region ends at the first summary line that follows an amount line.
   const firstAmount = lines.findIndex(l => l.tag === 'amount');
   // (A tax line with a value also ends it: taxes don't sit between items.)
@@ -372,7 +469,10 @@ export function solveReceipt(boxes) {
   let end = lines.findIndex((l, i) => i > firstAmount && (['subtotal', 'total'].includes(l.tag) || (l.tag === 'tax' && i > firstAmount + 1 && !itemRowFollows(i))) && l.amount);
   if (end === -1) end = lines.length;
   // First table header: forms can have several tables (laundry + dry cleaning).
-  const header = lines.slice(0, end).findIndex(l => l.tag === 'header');
+  let header = lines.slice(0, end).findIndex(l => l.tag === 'header');
+  // A "header" with priced rows above it and none below ("How were your ordered items? Rate now")
+  // isn't the item table's heading.
+  if (header >= 0 && !lines.slice(header + 1, end).some(l => l.tag === 'amount') && lines.slice(0, header).some(l => l.tag === 'amount')) header = -1;
 
   // Column check: with a table header ("… Amount"), real item amounts sit under
   // that column; values far to the left (a brochure, a phone number) are not items.
@@ -398,12 +498,44 @@ export function solveReceipt(boxes) {
   const hasCodeColumn = firstHeader >= 0 && /(?<![a-z])(hsn|sac|item\s*code|itemcode|code|sku|barcode|ean)(?![a-z])/i.test(lines[firstHeader].text);
   const hasSerialColumn = firstHeader >= 0 && /^\s*(#|s\.?\s*no|si\.?|sl\.?|sr\.?|s\.?\s*n)\b/i.test(lines[firstHeader].text + ' ' + (lines[firstHeader - 1]?.text ?? ''));
 
+  // Item names in a column with product photos to their left (shopping apps): OCR'd fragments of
+  // the photo ("munch", "BITES") sit wholly left of the name column and aren't part of the name.
+  const region = lines.slice(Math.max(0, header + 1), end).filter(l => ['text', 'amount'].includes(l.tag));
+  const pageW = Math.max(...lines.flatMap(l => (l.boxesX ?? []).map(b => b.right)), 1);
+  const lefts = region.flatMap(l => (l.boxesX ?? []).filter(b => /[a-z]{3,}/i.test(b.text)).map(b => b.left));
+  const buckets = new Map();
+  for (const x of lefts) { const k = Math.round(x / (pageW * 0.02)); buckets.set(k, (buckets.get(k) ?? 0) + 1); }
+  const modeKey = [...buckets].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const colLeft = modeKey != null && buckets.get(modeKey) >= 3 ? Math.min(...lefts.filter(x => Math.round(x / (pageW * 0.02)) === modeKey)) : null;
+  const nameLine = l => {
+    if (colLeft == null || !l.boxesX?.length) return l;
+    const keep = l.boxesX.filter(b => !(b.right < colLeft - pageW * 0.005 && b.text.length <= 12 && b.text.trim().split(/\s+/).length <= 2));
+    if (keep.length === l.boxesX.length) return l;
+    const text = keep.map(b => b.text).join(' ');
+    return { ...l, text, money: moneyIn(text, { integerMode: lines.integerMode }) };
+  };
+
   // Build items.
   const items = [];
   let pendingName = null, pendingAmount = null;
   for (let i = Math.max(0, header + 1); i < end; i++) {
     const l = lines[i];
-    const name = itemName(l);
+    const nl = nameLine(l);
+    APP_UI.lastIndex = 0;
+    let name = itemName(nl).replace(APP_UI, ' ').replace(/\s+/g, ' ').trim();
+    // Name above, pack size and price below (shopping apps): the size line isn't a name.
+    let rawName = nl.text;
+    for (const m of [...nl.money].reverse()) rawName = rawName.slice(0, m.index) + ' ' + rawName.slice(m.end);
+    APP_UI.lastIndex = 0;
+    rawName = rawName.replace(APP_UI, ' ');
+    const size = pendingName ? sizeLine(rawName) : null;
+    if (size) {
+      if (size[1]) pendingName.q = { qty: +size[1] };
+      if (l.tag !== 'amount') continue; // size on its own line; the price follows
+      name = '';
+    }
+    // A product name with a summary word in it and no figure ("Colgate Total Anti-Tartar") is a name.
+    if (!l.amount && ['total', 'subtotal'].includes(l.tag) && i > Math.max(0, header + 1) && l.text.trim().split(/\s+/).length >= 3 && !/[%:@]/.test(l.text)) l.tag = 'text';
     // A bare value equal to the running item sum is an unlabelled subtotal (label lost to OCR / a thumb).
     // Also when it shares a line with "Total Qty: 8" (a split "Sub / Total" label around it).
     if (l.amount && items.length >= 2 && (valueOnly(l) || l.tag === 'ignore') && ['amount', 'ignore'].includes(l.tag) && close(l.amount.value, sum(items.map(t => t.total)))) {
@@ -472,14 +604,22 @@ export function solveReceipt(boxes) {
         const continuesIntoNext = nextName && (hardWrap(itemName(lines[k - 1]), nextName) || /^\(/.test(nextName));
         const nextHasOwnName = !continuesIntoNext && (k >= end || lettered(nextName) || (next && SUMMARY_TAGS.includes(next.tag)));
         const wrapShape = !qtyInfo(l) && name.split(' ').length <= 6 && !l.money.length && l.left > lines[prev?.line ?? 0].left - 5 && l.h < 1.3;
-        if (prev && (prev.lastLine ?? prev.line) === i - 1 && !pendingName && wrapShape && !continuesIntoNext && (name === name.toUpperCase() && name.split(' ').length <= 2 || nextHasOwnName || i + 1 >= end || hardWrap(prev.name, name))) {
+        // (Not when the item's name was printed above its price row: then this line starts the next item.)
+        if (prev && !prev.nameAbove && (prev.lastLine ?? prev.line) === i - 1 && !pendingName && wrapShape && !continuesIntoNext && (name === name.toUpperCase() && name.split(' ').length <= 2 || nextHasOwnName || i + 1 >= end || hardWrap(prev.name, name))) {
           // "Hotel Name: Royal Retreat", "Journey Date 10-Apr-2024" are details, not more name
           // (and once details start, the lines after them are details too).
           if (prev.description || /^[A-Za-z][A-Za-z .]{1,24}:/.test(l.text.trim()) || /\d{1,2}[-/. ](\d{1,2}|[A-Za-z]{3})[-/. ]\d{2,4}/.test(l.text)) (prev.description ??= []).push(l.text.trim());
           else prev.name = hardWrap(prev.name, name) ? joinWrapped(prev.name, name) : `${prev.name} ${name}`;
           prev.lastLine = i;
         }
-        else if (!/^(pcs?|nos?|ea|each|units?)$/i.test(name)) pendingName = { name, line: i, q: qtyInfo(l) };
+        else if (!/^(pcs?|nos?|ea|each|units?)$/i.test(name)) {
+          // A name over two or three lines, then its price row (shopping apps).
+          const gapIsNoise = pendingName && lines.slice(pendingName.line + 1, i).every(x => x.tag === 'ignore' || !lettered(itemName(nameLine(x))));
+          // (At most three lines: more than that is a heading / address block, not one product.)
+          pendingName = pendingName && gapIsNoise && !sizeLine(name) && (pendingName.parts ?? 1) < 3
+            ? { ...pendingName, name: joinWrapped(pendingName.name, name), line: i, parts: (pendingName.parts ?? 1) + 1 }
+            : { name, line: i, q: qtyInfo(l), parts: 1 };
+        }
       }
       continue;
     }
@@ -502,7 +642,7 @@ export function solveReceipt(boxes) {
     }
     const row = rowOf(l) || tableRow(l);
     let nm = name;
-    if ((!lettered(nm) || /^\d/.test(nm)) && pendingName) nm = pendingName.name;
+    if ((!lettered(nm) || (/^\d/.test(nm) && !/^\d{1,2}\s*(pcs?|pieces?|nos)\s+[a-z]/i.test(nm))) && pendingName) nm = pendingName.name;
     // The priced line finishes a name that started on the line(s) above:
     // "LADIES NIGH" / "T SANGRIA  2  0.00", "100 PIPERS" / "(30 ML)  5  1275.00".
     else if (pendingName && pendingName.line === i - 1 && (hardWrap(pendingName.name, nm) || /^\(/.test(nm))) nm = joinWrapped(pendingName.name, nm);
@@ -513,15 +653,19 @@ export function solveReceipt(boxes) {
       continue;
     }
     if (close(l.amount.value, 0) && /^(pcs?|nos?|ea|each|units?)$/i.test(nm)) { pendingName = null; continue; }
-    // Summary wording is never an item ("Tot Items: 11 Gross Amt : 829", "(Amount inclusive of taxes) 574.25").
-    if (SUMMARY_NAME.test(fixKeywords(nm))) {
+    // Summary wording is never an item ("Tot Items: 11 Gross Amt : 829", "(Amount inclusive of taxes) 574.25"),
+    // except inside a product name printed over several lines above its price ("Colgate Total Anti-Tartar" /
+    // "Toothpaste").
+    const productName = pendingName && (pendingName.parts ?? 1) >= 2 && nm.startsWith(pendingName.name) &&
+      nm.split(' ').length >= 3 && !/[%:@\d]/.test(nm) && !SUMMARY_NAME.test(nm.split(' ')[0]);
+    if (!productName && SUMMARY_NAME.test(fixKeywords(nm))) {
       if (items.length >= 2 && close(l.amount.value, sum(items.map(t => t.total)))) { l.tag = 'subtotal'; end = i; break; }
       pendingName = null;
       continue;
     }
     pendingAmount = null;
     const qq = row || (q && !q.soft ? q : q?.soft && q.qty > 0 && !hasSerialColumn ? q : null) || pendingName?.q;
-    items.push({ name: nm, qty: qq?.qty ?? 1, unit_price: qq?.unit_price ?? (qq?.qty ? round2(l.amount.value / qq.qty) : null), unit: qq?.unit, total: l.amount.value, line: i, money: l.amount, ...(qq?.discount ? { discount: qq.discount } : {}) });
+    items.push({ name: nm, qty: qq?.qty ?? 1, unit_price: qq?.unit_price ?? (qq?.qty ? round2(l.amount.value / qq.qty) : null), unit: qq?.unit, total: l.amount.value, line: i, money: l.amount, ...(qq?.discount ? { discount: qq.discount } : {}), ...(pendingName && nm === pendingName.name ? { nameAbove: true } : {}) });
     pendingName = null;
   }
 
@@ -562,7 +706,7 @@ export function solveReceipt(boxes) {
   // "YOU HAVE SAVED: 33.52" / "Total savings 75" (unsigned) report savings against MRP: information,
   // not a discount on this bill. A signed one ("REDcard Savings $11.55-") is a real discount.
   const isSavingsNote = l => /you\s*(have\s*)?saved|total\s*sav(ings?|ed)|^\s*savings?\b/i.test(l.text) && l.amount.value > 0;
-  const savings = pick('discount').filter(isSavingsNote).map(l => ({ label: l.label.trim(), amount: l.amount.value }));
+  const savings = [...pick('discount').filter(isSavingsNote), ...lines.filter(l => l.tag === 'savings')].map(l => ({ label: l.label.trim(), amount: l.amount.value }));
   const discounts = pick('discount').filter(l => !isSavingsNote(l)).filter(l => !/\boff\b.*\d|saved\s+\D?\d/i.test(l.text) || l.amount.value < 0).map(l => ({ label: l.label.trim(), amount: -Math.abs(l.amount.value) }));
   const charges = pick('charge').map(l => ({ label: l.label.trim(), amount: /round|adjust/i.test(l.text) ? l.amount.value : Math.abs(l.amount.value) }));
   // Some invoices print the total above the items ("Receipt Total $154.06").
@@ -604,7 +748,17 @@ export function solveReceipt(boxes) {
   }
 
   const itemSum = sum(items.map(i => i.total));
-  let subtotal = subtotalLines.length ? bestReading(subtotalLines[0].amount, [itemSum]) : null;
+  // Several subtotal lines ("MRP ₹260" / "Product discount -₹59" / "Item total ₹201"): the one the
+  // items add up to, else the one after which nothing more is taken off before the charges.
+  const subLine = subtotalLines.find(l => variants(l.amount).some(v => close(v, itemSum))) ?? (subtotalLines.length > 1 && /\bmrp\b/i.test(subtotalLines[0].label) ? subtotalLines.find(l => !/\bmrp\b/i.test(l.label)) : null) ?? subtotalLines[0];
+  let subtotal = subLine ? bestReading(subLine.amount, [itemSum]) : null;
+  if (subLine) {
+    // Product discounts between MRP and the item total are already in the item total.
+    const before = new Set(summary.filter(l => l.idx < subLine.idx && l.tag === 'discount').map(l => l.label.trim()));
+    if (before.size && subtotalLines.some(l => l.idx < subLine.idx)) {
+      for (let k = discounts.length - 1; k >= 0; k--) if (before.has(discounts[k].label)) discounts.splice(k, 1);
+    }
+  }
 
   // Candidate equations: base (printed subtotal or item sum) × tax added or already included.
   const disc = sum(discounts.map(d => d.amount)), chg = sum(charges.map(c => c.amount)), addTax = sum(taxes.filter(t => !t.inclusive).map(t => t.amount)), allTax = sum(taxes.map(t => t.amount));
@@ -639,7 +793,7 @@ export function solveReceipt(boxes) {
     // label rather than on its line: consider bare values right beside it too.
     const beside = totalLines.flatMap(t => [lines[t.idx - 1], lines[t.idx + 1]]).filter(n => n && n.amount && valueOnly(n));
     const fitting = [...chain, ...beside].filter(l => variants(l.amount).some(v => fits(v)));
-    const final = chain.filter(l => FINAL.test(l.label));
+    const final = chain.filter(l => FINAL.test(l.label) || PAY_BUTTON.test(l.label));
     if (paid != null && totalLines.some(l => close(l.amount.value, paid, 0.011))) total = paid;
     else if (final.length) total = reading(final.at(-1));
     else if (fitting.length) {
@@ -690,12 +844,12 @@ export function solveReceipt(boxes) {
   const meta = extractMeta(lines, { merchantLine: merchant.idx, itemStart: header >= 0 ? header : firstItemLine });
   // Final name cleanup: codes from a code column, "(%)" / unit leftovers from wide tables.
   const cleanName = n => {
-    let t = n.replace(/\(%\)/g, ' ').replace(/(?<![a-z])(pcs|nos|kgs?|unit|uom)(?![a-z])/gi, ' ');
+    let t = n.replace(/\(%\)/g, ' ').replace(/(?<![a-z\d]\s?)(?<![\d]\s)(?<!\d)(pcs|nos|kgs?|unit|uom)(?![a-z])/gi, ' ');
     if (hasCodeColumn) t = t.split(/\s+/).filter(w => !/^(?=.*\d)[A-Z0-9/_.-]{4,}$/i.test(w)).join(' ');
     t = t.replace(/\s+/g, ' ').trim();
     return lettered(t) ? t : n.trim();
   };
-  const outItems = fixedItems.map(({ line, lastLine, money, verified, ...it }) => ({ ...it, name: cleanName(it.name) }));
+  const outItems = fixedItems.map(({ line, lastLine, money, verified, nameAbove, ...it }) => ({ ...it, name: cleanName(it.name) }));
   const qtySum = round2(outItems.reduce((s, i) => s + (i.unit ? 1 : (i.qty ?? 1)), 0));
   // The same product on several rows (Target's 4 × CHOBANI lines): combined, rows kept as printed.
   const groups = new Map();
