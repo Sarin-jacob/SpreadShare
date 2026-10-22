@@ -2,9 +2,11 @@
   import { login } from '../lib/app.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Logo from '../components/Logo.svelte';
+  import { popupHelp } from '../lib/popupHelp.js';
 
   let busy = $state(false);
   let error = $state('');
+  let blocked = $state(false);
 
   async function signIn() {
     busy = true;
@@ -12,6 +14,7 @@
     try {
       await login();
     } catch (e) {
+      blocked = !!e?.popupBlocked;
       error = e.message || 'Sign-in failed';
     } finally {
       busy = false;
@@ -48,7 +51,12 @@
       <button class="btn btn-primary w-full !py-3" onclick={signIn} disabled={busy}>
         {busy ? 'Waiting for Google…' : 'Continue with Google'}
       </button>
-      {#if error}
+      {#if blocked}
+        <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm space-y-1" role="alert">
+          <p class="font-semibold text-amber-900 dark:text-amber-100">Allow pop-ups to sign in</p>
+          <p class="text-amber-800 dark:text-amber-200">Google’s sign-in opens in a small window, and your browser blocked it. {popupHelp()}</p>
+        </div>
+      {:else if error}
         <p class="text-sm text-rose-500 text-center">{error}</p>
       {/if}
       <p class="text-xs text-slate-400 text-center">

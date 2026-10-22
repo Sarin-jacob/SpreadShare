@@ -7,6 +7,7 @@
   import { CATEGORIES } from '../lib/categories.js';
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
+  import { numpad, padEnabled } from '../lib/numpad.svelte.js';
   import { computeSplit, exactWithRemainder, itemCounted } from '../lib/split.js';
   import { suggestCategoryFor } from '../lib/categorize.js';
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
@@ -26,6 +27,7 @@
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
+  import DateTimePicker from '../components/DateTimePicker.svelte';
   import ReceiptScanner from '../components/ReceiptScanner.svelte';
 
   let { groupId, editId = null, prefill = {} } = $props();
@@ -804,6 +806,7 @@
           class="flex-1 min-w-0 bg-transparent text-right text-4xl font-black tracking-tight tabular-nums focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
           bind:value={amountExpr}
           onblur={() => !hasOperator || collapse()}
+          use:numpad
           inputmode="decimal"
           placeholder="0.00"
           aria-label="Amount"
@@ -812,9 +815,10 @@
         />
       </div>
       <div class="flex items-center gap-1.5">
-        {#each ['+', '−', '×', '÷'] as op}
+        <!-- (The on-screen pad has these keys.) -->
+        {#if !padEnabled()}{#each ['+', '−', '×', '÷'] as op}
           <button type="button" class="btn btn-soft !px-0 !py-1 w-9 text-base" onclick={() => insert(op === '−' ? '-' : op === '×' ? '*' : op === '÷' ? '/' : op)}>{op}</button>
-        {/each}
+        {/each}{/if}
         <span class="flex-1 text-right text-sm text-slate-500 dark:text-slate-400 tabular-nums truncate">
           {#if hasOperator}= {money(amount, currency)}{/if}
         </span>
@@ -822,7 +826,7 @@
       {#if currency !== BASE}
         <div class="flex items-center gap-2 text-sm border-t border-slate-100 dark:border-slate-700/60 pt-3">
           <span class="text-slate-500 shrink-0">1 {currency} =</span>
-          <input class="field !py-1 !w-28 text-right tabular-nums" bind:value={rateExpr} inputmode="decimal" aria-label="Exchange rate" />
+          <input class="field !py-1 !w-28 text-right tabular-nums" bind:value={rateExpr} use:numpad inputmode="decimal" aria-label="Exchange rate" />
           <span class="text-slate-500">{BASE}</span>
           <span class="flex-1 text-right font-bold tabular-nums">{rateLoading ? '…' : money(total)}</span>
         </div>
@@ -872,7 +876,7 @@
 
       {#if panel === 'date'}
         <div class="card p-3 space-y-2">
-          <input id="f-when" class="field" type="datetime-local" bind:value={when} aria-label="Date and time" />
+          <DateTimePicker bind:value={when} />
           <div class="flex gap-1.5">
             <button type="button" class="chip" onclick={() => setDay(0)}>Today</button>
             <button type="button" class="chip" onclick={() => setDay(-1)}>Yesterday</button>
@@ -959,6 +963,7 @@
                 <input
                   class="field !w-28 !py-1.5 text-right tabular-nums"
                   inputmode="decimal"
+                  use:numpad
                   bind:value={payerInputs[m]}
                   placeholder={payers.auto === m ? String(payers.list.find((p) => p.user === m)?.value ?? '0') : '0'}
                 />
@@ -1001,7 +1006,7 @@
               <li class="rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 space-y-2">
                 <div class="flex items-center gap-2">
                   <input class="field !py-1.5 flex-1 min-w-0" bind:value={item.name} placeholder="Item {idx + 1}" aria-label="Item name" />
-                  <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={item.amount} inputmode="decimal" placeholder="0" aria-label="Item price" />
+                  <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={item.amount} use:numpad inputmode="decimal" placeholder="0" aria-label="Item price" />
                   <button type="button" class="btn btn-ghost !p-1.5 shrink-0" aria-label="Remove item" onclick={() => receiptItems.splice(idx, 1)}><Icon name="x" class="w-4 h-4" /></button>
                 </div>
                 <div class="flex flex-wrap gap-1.5">
@@ -1095,6 +1100,7 @@
                 <input
                   class="field !w-24 !py-1.5 text-right tabular-nums"
                   inputmode="decimal"
+                  use:numpad
                   bind:value={splitInputs[m]}
                   placeholder={strategy === 'SHARES' ? '1' : strategy === 'EXACT' && split.auto === m ? String(share) : '0'}
                 />
@@ -1130,7 +1136,7 @@
         {#if type === 'LOAN'}
           <div class="flex items-center gap-2">
             <label class="label !mb-0 flex-1" for="f-interest">Simple interest (optional)</label>
-            <input id="f-interest" class="field !w-24 !py-1.5 text-right" inputmode="decimal" bind:value={interestExpr} placeholder="0" />
+            <input id="f-interest" class="field !w-24 !py-1.5 text-right" use:numpad inputmode="decimal" bind:value={interestExpr} placeholder="0" />
             <span class="text-sm text-slate-500">%</span>
           </div>
         {/if}

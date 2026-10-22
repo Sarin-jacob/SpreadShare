@@ -13,6 +13,7 @@
   import Avatar from '../components/Avatar.svelte';
   import Icon from '../components/Icon.svelte';
   import Switch from '../components/Switch.svelte';
+  import { pad, setSystemKeyboard } from '../lib/numpad.svelte.js';
 
   let busy = $state(false);
 
@@ -244,6 +245,15 @@
         {/each}
       </div>
     </div>
+    {#if pad.touch}
+      <div class="p-4 flex items-center justify-between gap-4">
+        <div>
+          <div class="text-sm font-bold">Number pad for amounts</div>
+          <div class="text-xs text-slate-500">Digits, + − × ÷ and brackets for sums like (450+120)/3. Off: your phone’s keyboard{pad.hardware ? ' (used now: a physical keyboard was detected)' : ''}</div>
+        </div>
+        <Switch label="Number pad for amounts" checked={!pad.system} onchange={(v) => setSystemKeyboard(!v)} />
+      </div>
+    {/if}
   </section>
 
   {#if !pwa.installed && (pwa.canPrompt || pwa.showIosHint)}

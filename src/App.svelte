@@ -10,10 +10,12 @@
   import Icon from './components/Icon.svelte';
   import Logo from './components/Logo.svelte';
   import Toasts from './components/Toasts.svelte';
+  import Numpad from './components/Numpad.svelte';
   import SyncStatus from './components/SyncStatus.svelte';
   import SidebarGroups from './components/SidebarGroups.svelte';
   import LockScreen from './components/LockScreen.svelte';
   import { lock } from './lib/lock.svelte.js';
+  import { popupHelp } from './lib/popupHelp.js';
   import Login from './views/Login.svelte';
   import Groups from './views/Groups.svelte';
   import Group from './views/Group.svelte';
@@ -201,7 +203,18 @@
         <SyncStatus />
       </header>
 
-      {#if app.sync.authExpired && app.sync.needsSignIn}
+      {#if app.sync.popupBlocked}
+        <div class="mx-4 mt-4 md:mx-8 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm space-y-2" role="alert">
+          <div class="flex items-start gap-2">
+            <p class="flex-1 font-semibold text-amber-900 dark:text-amber-100">Allow pop-ups so SpreadShare can stay connected</p>
+            <button class="btn btn-ghost !p-1 -m-1 shrink-0" onclick={() => (app.sync.popupBlocked = false)} aria-label="Dismiss"><Icon name="x" class="w-4 h-4" /></button>
+          </div>
+          <p class="text-amber-800 dark:text-amber-200">
+            Google renews your sign-in in a small window that closes by itself, and your browser blocked it. Your changes are saved on this device meanwhile. {popupHelp()}
+          </p>
+          <button class="btn btn-primary !py-1.5" data-auth-action onclick={reconnect} disabled={reconnecting}>{reconnecting ? 'Connecting…' : 'Try again'}</button>
+        </div>
+      {:else if app.sync.authExpired && app.sync.needsSignIn}
         <div class="mx-4 mt-4 md:mx-8 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <span class="flex-1 text-amber-800 dark:text-amber-200">
             Google needs you to sign in again. Your changes are saved on this device and will upload once you do.
@@ -287,4 +300,5 @@
 {#if app.user && lock.locked}<LockScreen />{/if}
 {#if showKeys}<Shortcuts onclose={() => (showKeys = false)} />{/if}
 
+<Numpad />
 <Toasts />

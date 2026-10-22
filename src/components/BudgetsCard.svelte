@@ -1,5 +1,6 @@
 <script>
   // This month's budgets (your share), with an editor. Budgets sync to your Drive (prefs.svelte.js).
+  import { numpad } from '../lib/numpad.svelte.js';
   import { prefs, setBudget } from '../lib/prefs.svelte.js';
   import { budgetStatus, monthToDate, monthProgress } from '../lib/budgets.js';
   import { CATEGORIES, category } from '../lib/categories.js';
@@ -45,6 +46,7 @@
             id="budget-{c.value}"
             class="field !w-32 !py-1.5 text-right tabular-nums"
             inputmode="decimal"
+            use:numpad={{ ops: false }}
             placeholder="No limit"
             value={prefs.budgets[c.value] ?? ''}
             onchange={(e) => setBudget(c.value, e.currentTarget.value.replace(/[^\d.]/g, ''))}

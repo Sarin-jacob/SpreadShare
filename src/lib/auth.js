@@ -50,6 +50,15 @@ export class AuthRequiredError extends Error {
   }
 }
 
+/** The browser blocked Google's sign-in window (pop-ups are off for this site). */
+export class PopupBlockedError extends AuthRequiredError {
+  constructor() {
+    super('Your browser blocked Google’s sign-in window');
+    this.name = 'PopupBlockedError';
+    this.popupBlocked = true;
+  }
+}
+
 // Errors from a silent (prompt: 'none') request that mean only an interactive sign-in can help.
 const NEEDS_USER = /interaction_required|consent_required|login_required|account_selection_required|access_denied/;
 // Without a reply the popup was blocked or closed; settle rather than hang every API call.
@@ -74,7 +83,8 @@ class AuthenticationService {
           client_id: clientId,
           scope: SCOPES,
           callback: (res) => this.#onToken(res),
-          error_callback: (err) => this.#settle(null, new AuthRequiredError(err?.message || err?.type || 'Sign-in cancelled')),
+          error_callback: (err) =>
+            this.#settle(null, err?.type === 'popup_failed_to_open' ? new PopupBlockedError() : new AuthRequiredError(err?.message || err?.type || 'Sign-in cancelled')),
         });
         resolve();
       };

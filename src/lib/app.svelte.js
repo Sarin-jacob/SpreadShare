@@ -51,6 +51,7 @@ export const app = $state({
     authExpired: false, // no usable Google token right now; changes wait in the queue
     needsSignIn: false, // a silent refresh failed: only the Reconnect button can help
     reconnecting: false, // silent refresh in progress
+    popupBlocked: false, // the browser blocked Google's sign-in window: banner asks to allow pop-ups
     missingScopes: [], // required Google permissions not granted ('sheets', 'drive'): nothing can sync
     error: null,
     lastSyncedAt: null,
@@ -179,6 +180,7 @@ export async function refreshSession() {
   app.sync.reconnecting = true;
   try {
     await AuthService.refreshSilently(app.user.email);
+    app.sync.popupBlocked = false;
     app.sync.authExpired = false;
     app.sync.needsSignIn = false;
     app.sync.reconnecting = false; // the sync below shows its own progress
@@ -187,6 +189,11 @@ export async function refreshSession() {
     return true;
   } catch (err) {
     console.warn('Silent Google sign-in failed', err?.message);
+    if (err?.popupBlocked) {
+      app.sync.popupBlocked = true;
+      if (AuthService.expiresIn() <= 0) app.sync.authExpired = true;
+      return !app.sync.authExpired;
+    }
     if (AuthService.expiresIn() <= 0) {
       app.sync.authExpired = true;
       // Only Google refusing (not a dropped connection or a script that couldn't load) means you
@@ -199,9 +206,16 @@ export async function refreshSession() {
   }
 }
 
+/** Remembers a blocked sign-in window (for the banner) and passes the error on. */
+function notePopup(err) {
+  if (err?.popupBlocked) app.sync.popupBlocked = true;
+  throw err;
+}
+
 /** Interactive sign-in (must run from a click). Also used for "Reconnect". */
 export async function login() {
-  const { profile } = await AuthService.login(app.user?.email);
+  const { profile } = await AuthService.login(app.user?.email).catch(notePopup);
+  app.sync.popupBlocked = false;
   if (app.user && app.user.email !== profile.email) {
     // Different account on this device: drop the previous user's local data.
     await resetLocalData();
@@ -218,7 +232,8 @@ export async function login() {
  * Call from a tap. Resolves true when everything needed is granted.
  */
 export async function grantPermissions() {
-  await AuthService.requestPermissions(app.user?.email);
+  await AuthService.requestPermissions(app.user?.email).catch(notePopup);
+  app.sync.popupBlocked = false;
   app.sync.missingScopes = AuthService.missingScopes();
   app.sync.authExpired = false;
   app.sync.needsSignIn = false;

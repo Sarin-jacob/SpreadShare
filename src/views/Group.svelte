@@ -1,4 +1,5 @@
 <script>
+  import { numpad } from '../lib/numpad.svelte.js';
   import { app, pendingIds, groupName, inviteLink, syncGroup, removeGroup, exportCsv, setGroupCurrency, setGroupBudget, addGuest, linkGuest, removeGuest } from '../lib/app.svelte.js';
   import { isGuest } from '../lib/members.js';
   import { CONFIG } from '../lib/config.js';
@@ -140,12 +141,13 @@
     return { label: 'not involved', cls: 'text-slate-400' };
   }
 
+  /** Who paid, after the amount in the row ("₹1,200 paid by Asha"); names truncate, the amount doesn't. */
   function subtitle(x) {
-    if (x.type === 'TRANSFER') return `${name(x.payer)} paid ${name(x.target)}`;
-    if (x.type === 'LOAN') return `${name(x.payer)} lent ${name(x.target)}`;
+    if (x.type === 'TRANSFER') return `${name(x.payer)} → ${name(x.target)}`;
+    if (x.type === 'LOAN') return `lent by ${name(x.payer)} to ${name(x.target)}`;
     const payers = x.payload.payers || [];
-    if (payers.length > 1) return `${payers.length} people paid`;
-    return `${name(payers[0]?.user || x.payer)} paid`;
+    if (payers.length > 1) return `paid by ${payers.length} people`;
+    return `paid by ${name(payers[0]?.user || x.payer)}`;
   }
 
   /** @param guest a guest's ID: a personal link that also hands them their entries when they join */
@@ -418,7 +420,11 @@
                           {#each allTags.slice(0, 3) as t (t)}<span class="px-1.5 rounded-full text-[10px] font-semibold bg-accent-500/10 text-accent-700 dark:text-accent-300 shrink-0">#{t}</span>{/each}
                         </div>
                       {/if}
-                      <div class="text-xs text-slate-500 dark:text-slate-400 truncate"><span class="sm:hidden">{cat.icon} </span>{subtitle(x)} {money(x.amount)}</div>
+                      <div class="text-xs text-slate-500 dark:text-slate-400 flex items-baseline gap-1 min-w-0">
+                        <span class="sm:hidden shrink-0">{cat.icon}</span>
+                        <span class="shrink-0 font-semibold tabular-nums text-slate-600 dark:text-slate-300">{money(x.amount)}</span>
+                        <span class="truncate">{subtitle(x)}</span>
+                      </div>
                     </div>
                     <div class="text-right shrink-0 {imp.cls}">
                       <div class="text-[11px] font-medium leading-tight">{imp.label}</div>
@@ -614,7 +620,7 @@
       <label class="block">
         <span class="label">Amount ({groupCurrency})</span>
         <!-- svelte-ignore a11y_autofocus -->
-        <input class="field text-lg font-bold tabular-nums" bind:value={budgetInput} inputmode="decimal" placeholder="e.g. 50000" autofocus />
+        <input class="field text-lg font-bold tabular-nums" bind:value={budgetInput} use:numpad={{ ops: false }} inputmode="decimal" placeholder="e.g. 50000" autofocus />
       </label>
       <div class="flex gap-2">
         {#if L.budget}<button type="button" class="btn btn-ghost text-rose-600" onclick={async () => { await setGroupBudget(groupId, 0); budgetOpen = false; toast('Group budget removed'); }}>Remove</button>{/if}

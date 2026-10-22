@@ -2,6 +2,7 @@
   // Bulk add from a list of transactions: GPay / PhonePe / Paytm / bank app history screenshots,
   // bank statement PDFs or CSVs, a Splitwise export, or pasted messages. Read on the device,
   // reviewed here, added in one go.
+  import { numpad } from '../lib/numpad.svelte.js';
   import { app, appendEvent, addGuest } from '../lib/app.svelte.js';
   import { parseCsv, isSplitwise, readSplitwise, splitwiseToEntry, splitwiseCategory, guessPeople, readGenericCsv } from '../lib/csvImport.js';
   import { isGuest } from '../lib/members.js';
@@ -23,6 +24,7 @@
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
+  import DateTimePicker from '../components/DateTimePicker.svelte';
 
   let { groupId } = $props();
 
@@ -33,6 +35,7 @@
   const name = (email) => displayName(email, L.profiles, me);
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
+  let dateOpen = $state(null); // row whose calendar is open
   let step = $state('pick'); // pick | reading | people (Splitwise names) | review
   let swPeople = $state([]); // Splitwise names to match
   let swMap = $state({}); // Splitwise name → member ID, or 'new' (add without Google)
@@ -336,10 +339,17 @@
           <div class="flex items-center gap-2">
             <input type="checkbox" class="w-5 h-5 shrink-0 accent-[var(--accent-500)]" bind:checked={r.include} aria-label="Add {r.title}" />
             <input class="field !py-1.5 flex-1 min-w-0" bind:value={r.title} aria-label="Title" />
-            <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={r.amount} inputmode="decimal" aria-label="Amount" readonly={!!r.sw} title={r.sw ? 'Splitwise splits keep their amounts' : ''} />
+            <input class="field !py-1.5 !w-24 text-right tabular-nums" bind:value={r.amount} use:numpad={{ ops: false }} inputmode="decimal" aria-label="Amount" readonly={!!r.sw} title={r.sw ? 'Splitwise splits keep their amounts' : ''} />
           </div>
           <div class="flex flex-wrap items-center gap-2 pl-7 text-xs">
-            <input type="date" class="field !w-auto !py-1 !px-2 text-xs {r.undated ? '!border-amber-500' : ''}" bind:value={r.date} aria-label="Date" title={r.undated ? 'No date found: check it' : ''} />
+            <button
+              type="button"
+              class="field !w-auto !py-1 !px-2 text-xs flex items-center gap-1 tabular-nums {r.undated ? '!border-amber-500' : ''}"
+              aria-expanded={dateOpen === r.id}
+              aria-label="Date: {new Date(`${r.date}T12:00`).toLocaleDateString(undefined, { dateStyle: 'medium' })}"
+              title={r.undated ? 'No date found: check it' : ''}
+              onclick={() => (dateOpen = dateOpen === r.id ? null : r.id)}
+            ><Icon name="calendar" class="w-3.5 h-3.5 text-slate-400" />{new Date(`${r.date}T12:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</button>
             <select class="field !w-auto !py-1 !px-2 text-xs" bind:value={r.category} aria-label="Category">
               {#each CATEGORIES as c (c.value)}<option value={c.value}>{c.icon} {c.label}</option>{/each}
             </select>
@@ -352,6 +362,11 @@
               <a href="#/g/{groupId}/e/{r.dup.eventId}" class="px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold" title="{r.dup.title}, {money(r.dup.amount)}">Already added?</a>
             {/if}
           </div>
+          {#if dateOpen === r.id}
+            <div class="ml-7 max-w-xs rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+              <DateTimePicker bind:value={r.date} time={false} onpick={() => { dateOpen = null; r.undated = false; }} />
+            </div>
+          {/if}
         </li>
       {/each}
     </ul>
