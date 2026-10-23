@@ -1,7 +1,7 @@
 <script>
   // On-screen number pad for fields with use:numpad (see lib/numpad.svelte.js). Keys never take
   // focus, so the field keeps its caret and the pad stays open while you type.
-  import { pad, press } from '../lib/numpad.svelte.js';
+  import { pad, press, holdFocus } from '../lib/numpad.svelte.js';
   import Icon from './Icon.svelte';
 
   const OPS = [
@@ -54,6 +54,7 @@
   <div
     class="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 dark:border-slate-800 bg-slate-100/95 dark:bg-slate-900/95 backdrop-blur px-2 pt-2 pb-safe select-none"
     bind:clientHeight={height}
+    use:holdFocus
     role="group"
     aria-label="Number pad"
   >

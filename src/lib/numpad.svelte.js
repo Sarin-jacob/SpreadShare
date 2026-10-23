@@ -1,12 +1,11 @@
 // src/lib/numpad.svelte.js
 // On-screen number pad for amount fields on touch screens. Phone keyboards' number layouts have
 // no + − × ÷ ( ), so amounts like "(450+120)/3" couldn't be typed. Fields opt in with use:numpad;
-// on a device with a mouse / trackpad (and so, a keyboard), or once a physical key is pressed in
-// one, the field keeps the system keyboard.
+// where a mouse / trackpad is the main pointer, or once a physical key is pressed in one, the field
+// keeps the system keyboard.
 
 const SYSTEM_KEY = 'ss_numpad_system'; // '1': you chose the system keyboard (⌨ on the pad)
 const coarse = matchMedia('(pointer: coarse)');
-const fine = matchMedia('(any-pointer: fine)');
 
 function read(key, store = localStorage) {
   try {
@@ -26,7 +25,9 @@ export const pad = $state({
   target: null,
   /** Whether the focused field takes + − × ÷ ( ) (amount expressions) or only a plain number. */
   ops: true,
-  touch: coarse.matches && !fine.matches,
+  // Touch is the main input (phones, tablets). Not "no fine pointer at all": phones with a stylus
+  // report one.
+  touch: coarse.matches,
   /** A physical key was pressed in a pad field this session (Bluetooth / tablet keyboard). */
   hardware: read('ss_numpad_hw', sessionStorage) === '1',
   system: read(SYSTEM_KEY) === '1',
@@ -38,11 +39,10 @@ const fields = new Set();
 const applyMode = (el) => (el.inputMode = padEnabled() ? 'none' : el.dataset.inputmode || 'decimal');
 
 const update = () => {
-  pad.touch = coarse.matches && !fine.matches;
+  pad.touch = coarse.matches;
   fields.forEach(applyMode);
 };
 coarse.addEventListener('change', update);
-fine.addEventListener('change', update);
 
 /** True when pad fields should use the on-screen pad instead of the system keyboard. */
 export const padEnabled = () => pad.touch && !pad.hardware && !pad.system;
@@ -59,17 +59,27 @@ function close() {
   fields.forEach(applyMode);
 }
 
+// When a pad key was last pressed. On a touchscreen a tap moves focus even when the key's
+// pointerdown is cancelled, so the field's blur right after a key press is undone (see numpad()).
+let pressedAt = 0;
+const KEY_BLUR_MS = 600;
+
 /** Types into the focused field like a keyboard would (at the caret), so bind:value and oninput run. */
 export function press(key) {
   const el = pad.target;
   if (!el) return;
-  if (key === 'done') return el.blur();
+  if (key === 'done') {
+    pressedAt = 0; // a real blur
+    return el.blur();
+  }
   if (key === 'keyboard') {
+    pressedAt = 0;
     setSystemKeyboard(true);
     el.blur();
     requestAnimationFrame(() => el.focus());
     return;
   }
+  pressedAt = Date.now();
   const v = el.value;
   let start = el.selectionStart ?? v.length, end = el.selectionEnd ?? v.length;
   let next;
@@ -89,6 +99,26 @@ export function press(key) {
 }
 
 /**
+ * Svelte action for the pad itself: touches and clicks on it never take focus from the field
+ * (cancelling touchstart also stops the tap from focusing the key on phones).
+ */
+export function holdFocus(node) {
+  node.dataset.numpad = '';
+  const keep = (e) => {
+    pressedAt = Date.now();
+    if (e.cancelable) e.preventDefault();
+  };
+  node.addEventListener('touchstart', keep, { passive: false });
+  node.addEventListener('mousedown', keep);
+  return {
+    destroy() {
+      node.removeEventListener('touchstart', keep);
+      node.removeEventListener('mousedown', keep);
+    },
+  };
+}
+
+/**
  * Svelte action: `<input use:numpad>` for amount expressions, `use:numpad={{ ops: false }}` for a
  * plain number. The field keeps its own inputmode for when the system keyboard is used.
  */
@@ -98,16 +128,32 @@ export function numpad(node, opts = {}) {
   fields.add(node);
   applyMode(node); // before focus, or the phone keyboard starts opening
 
+  let refocusing = false;
   const onFocus = () => {
     applyMode(node);
     if (!padEnabled() || node.readOnly || node.disabled) return;
+    const opening = pad.target !== node;
     pad.target = node;
     pad.ops = ops;
     // Out from under the pad once it has slid in.
-    setTimeout(() => node.scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+    if (opening && !refocusing) setTimeout(() => node.scrollIntoView?.({ block: 'center', behavior: 'smooth' }), 120);
+    refocusing = false;
   };
   const onBlur = () => {
-    if (pad.target === node) close();
+    if (pad.target !== node) return;
+    // Focus taken by a tap on the pad: give it back, keep the pad open.
+    if (Date.now() - pressedAt < KEY_BLUR_MS) {
+      refocusing = true;
+      setTimeout(() => {
+        const now = document.activeElement;
+        if (pad.target !== node || now === node) return;
+        // (Unless you tapped into another field or button meanwhile.)
+        if (now && now !== document.body && !now.closest('[data-numpad]')) return close();
+        node.focus({ preventScroll: true });
+      });
+      return;
+    }
+    close();
   };
   const onKey = (e) => {
     // The phone keyboard is hidden (inputmode none), so a key here came from a physical keyboard.
