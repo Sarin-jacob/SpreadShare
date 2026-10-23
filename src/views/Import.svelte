@@ -24,7 +24,7 @@
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
-  import DateTimePicker from '../components/DateTimePicker.svelte';
+  import DateDialog from '../components/DateDialog.svelte';
 
   let { groupId } = $props();
 
@@ -35,7 +35,7 @@
   const name = (email) => displayName(email, L.profiles, me);
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
-  let dateOpen = $state(null); // row whose calendar is open
+  let dateOpen = $state(null); // row whose date dialog is open
   let step = $state('pick'); // pick | reading | people (Splitwise names) | review
   let swPeople = $state([]); // Splitwise names to match
   let swMap = $state({}); // Splitwise name → member ID, or 'new' (add without Google)
@@ -345,7 +345,6 @@
             <button
               type="button"
               class="field !w-auto !py-1 !px-2 text-xs flex items-center gap-1 tabular-nums {r.undated ? '!border-amber-500' : ''}"
-              aria-expanded={dateOpen === r.id}
               aria-label="Date: {new Date(`${r.date}T12:00`).toLocaleDateString(undefined, { dateStyle: 'medium' })}"
               title={r.undated ? 'No date found: check it' : ''}
               onclick={() => (dateOpen = dateOpen === r.id ? null : r.id)}
@@ -363,9 +362,7 @@
             {/if}
           </div>
           {#if dateOpen === r.id}
-            <div class="ml-7 max-w-xs rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-              <DateTimePicker bind:value={r.date} time={false} onpick={() => { dateOpen = null; r.undated = false; }} />
-            </div>
+            <DateDialog value={r.date} onpick={(d) => { r.date = d; r.undated = false; }} onclose={() => (dateOpen = null)} />
           {/if}
         </li>
       {/each}

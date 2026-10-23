@@ -27,7 +27,8 @@
   import { toast } from '../lib/toast.svelte.js';
   import Icon from '../components/Icon.svelte';
   import Avatar from '../components/Avatar.svelte';
-  import DateTimePicker from '../components/DateTimePicker.svelte';
+  import DateDialog from '../components/DateDialog.svelte';
+  import TimeDialog from '../components/TimeDialog.svelte';
   import ReceiptScanner from '../components/ReceiptScanner.svelte';
 
   let { groupId, editId = null, prefill = {} } = $props();
@@ -653,6 +654,11 @@
     return `${day}, ${time}`;
   });
 
+  let picker = $state(null); // 'date' | 'time': the date or time dialog
+  const whenDate = $derived(Number.isNaN(new Date(when).getTime()) ? new Date() : new Date(when));
+  /** 0 today, 1 yesterday, … (for the quick chips) */
+  const daysAgo = $derived(Math.round((new Date().setHours(0, 0, 0, 0) - new Date(whenDate).setHours(0, 0, 0, 0)) / 86_400_000));
+
   /** Moves the date to today / yesterday / …, keeping the time. */
   function setDay(offset) {
     const d = new Date(when);
@@ -876,13 +882,27 @@
 
       {#if panel === 'date'}
         <div class="card p-3 space-y-2">
-          <DateTimePicker bind:value={when} />
           <div class="flex gap-1.5">
-            <button type="button" class="chip" onclick={() => setDay(0)}>Today</button>
-            <button type="button" class="chip" onclick={() => setDay(-1)}>Yesterday</button>
-            <button type="button" class="chip" onclick={() => setDay(-2)}>2 days ago</button>
+            {#each [[0, 'Today'], [-1, 'Yesterday'], [-2, '2 days ago']] as [offset, label]}
+              <button type="button" class="chip {daysAgo === -offset ? 'chip-open' : ''}" aria-pressed={daysAgo === -offset} onclick={() => setDay(offset)}>{label}</button>
+            {/each}
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" class="field flex items-center gap-2 text-left" onclick={() => (picker = 'date')}>
+              <Icon name="calendar" class="w-4 h-4 text-slate-400 shrink-0" />
+              <span class="truncate">{whenDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            </button>
+            <button type="button" class="field flex items-center gap-2 text-left tabular-nums" onclick={() => (picker = 'time')}>
+              <Icon name="clock" class="w-4 h-4 text-slate-400 shrink-0" />
+              <span class="truncate">{whenDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
+            </button>
           </div>
         </div>
+        {#if picker === 'date'}
+          <DateDialog value={when.slice(0, 10)} onpick={(d) => (when = `${d}T${when.slice(11, 16) || '12:00'}`)} onclose={() => (picker = null)} />
+        {:else if picker === 'time'}
+          <TimeDialog value={when.slice(11, 16)} onpick={(t) => (when = `${when.slice(0, 10)}T${t}`)} onclose={() => (picker = null)} />
+        {/if}
       {:else if panel === 'category'}
         <div class="card p-3 space-y-2">
           {#if autoCategory && !categoryTouched}
