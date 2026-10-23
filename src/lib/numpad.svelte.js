@@ -30,13 +30,16 @@ export const pad = $state({
   touch: coarse.matches,
   /** A physical key was pressed in a pad field this session (Bluetooth / tablet keyboard). */
   hardware: read('ss_numpad_hw', sessionStorage) === '1',
+  /** Settings: always the system keyboard on this device. */
   system: read(SYSTEM_KEY) === '1',
+  /** The field where ⌨ was tapped: it uses the phone keyboard until you leave it. */
+  skip: null,
 });
 
 /** Every field with use:numpad. */
 const fields = new Set();
 /** Pad fields hide the phone keyboard (inputmode none) only while the pad is in use. */
-const applyMode = (el) => (el.inputMode = padEnabled() ? 'none' : el.dataset.inputmode || 'decimal');
+const applyMode = (el) => (el.inputMode = padEnabled() && pad.skip !== el ? 'none' : el.dataset.inputmode || 'decimal');
 
 const update = () => {
   pad.touch = coarse.matches;
@@ -47,11 +50,23 @@ coarse.addEventListener('change', update);
 /** True when pad fields should use the on-screen pad instead of the system keyboard. */
 export const padEnabled = () => pad.touch && !pad.hardware && !pad.system;
 
-/** System keyboard instead of the pad on this device (⌨ on the pad; Settings turns it back). */
+/** System keyboard instead of the pad on this device (Settings). */
 export function setSystemKeyboard(on) {
   pad.system = on;
   save(SYSTEM_KEY, on ? '1' : null);
+  if (!on) forgetHardware();
   close();
+}
+
+/** Back to the pad after it was switched off (a physical keyboard was detected, or Settings). */
+export function usePad() {
+  forgetHardware();
+  setSystemKeyboard(false);
+}
+
+function forgetHardware() {
+  pad.hardware = false;
+  save('ss_numpad_hw', null, sessionStorage);
 }
 
 function close() {
@@ -73,8 +88,10 @@ export function press(key) {
     return el.blur();
   }
   if (key === 'keyboard') {
+    // The phone keyboard for this field only: the pad is back in the next one.
     pressedAt = 0;
-    setSystemKeyboard(true);
+    pad.skip = el;
+    close();
     el.blur();
     requestAnimationFrame(() => el.focus());
     return;
@@ -131,7 +148,7 @@ export function numpad(node, opts = {}) {
   let refocusing = false;
   const onFocus = () => {
     applyMode(node);
-    if (!padEnabled() || node.readOnly || node.disabled) return;
+    if (!padEnabled() || pad.skip === node || node.readOnly || node.disabled) return;
     const opening = pad.target !== node;
     pad.target = node;
     pad.ops = ops;
@@ -140,6 +157,14 @@ export function numpad(node, opts = {}) {
     refocusing = false;
   };
   const onBlur = () => {
+    if (pad.skip === node && document.activeElement !== node) {
+      // Left the field ⌨ was tapped in (not the blur ⌨ itself does to reopen the keyboard).
+      setTimeout(() => {
+        if (document.activeElement === node) return;
+        pad.skip = null;
+        applyMode(node);
+      }, 50);
+    }
     if (pad.target !== node) return;
     // Focus taken by a tap on the pad: give it back, keep the pad open.
     if (Date.now() - pressedAt < KEY_BLUR_MS) {
@@ -156,8 +181,10 @@ export function numpad(node, opts = {}) {
     close();
   };
   const onKey = (e) => {
-    // The phone keyboard is hidden (inputmode none), so a key here came from a physical keyboard.
+    // A key from a physical keyboard. Phone keyboards can still send keys here (one left open from
+    // the previous field), some with real key values; they leave `code` empty, physical ones don't.
     if (pad.target !== node || e.isComposing || e.key === 'Unidentified' || e.key === 'Process') return;
+    if (!e.code || e.code === 'Unidentified') return;
     if (e.key.length !== 1 && !['Backspace', 'Delete', 'Enter', 'Tab'].includes(e.key)) return;
     pad.hardware = true;
     save('ss_numpad_hw', '1', sessionStorage);

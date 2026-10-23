@@ -141,31 +141,76 @@ describe('number pad on a phone', () => {
     const { numpad, pad, padEnabled } = await load();
     const { el } = field(numpad);
     el.focus();
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: '5', bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: '5', code: 'Digit5', bubbles: true }));
     expect(pad.target).toBe(null);
     expect(padEnabled()).toBe(false);
     expect(el.inputMode).toBe('decimal');
     expect(sessionStorage.getItem('ss_numpad_hw')).toBe('1');
   });
 
-  it('ignores the phone keyboard’s own key events', async () => {
-    const { numpad, pad } = await load();
+  it.each([
+    ['Unidentified', ''],
+    ['5', ''], // a phone keyboard left open from the previous field, with a real key value
+    ['Backspace', ''],
+    ['Enter', ''],
+  ])('ignores phone-keyboard key events (key %s, no code)', async (key, code) => {
+    const { numpad, pad, padEnabled } = await load();
     const { el } = field(numpad);
     el.focus();
-    el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true }));
+    expect(pad.target).toBe(el);
+    expect(padEnabled()).toBe(true);
+  });
+
+  it('the keyboard key uses the phone keyboard for that field only', async () => {
+    const { numpad, press, pad, padEnabled } = await load();
+    const a = field(numpad).el;
+    const b = field(numpad).el;
+    a.focus();
+    press('keyboard');
+    vi.runAllTimers();
+    a.focus(); // (⌨ re-focuses the field so the phone keyboard opens)
+    expect(pad.target).toBe(null);
+    expect(a.inputMode).toBe('decimal');
+    expect(padEnabled()).toBe(true); // not switched off for good
+    expect(localStorage.getItem('ss_numpad_system')).toBe(null);
+    // Typing on the phone keyboard there doesn't count as a physical keyboard.
+    a.dispatchEvent(new KeyboardEvent('keydown', { key: '5', code: '', bubbles: true }));
+    b.focus();
+    vi.runAllTimers();
+    expect(pad.target).toBe(b); // the next field gets the pad
+    a.focus();
+    expect(pad.target).toBe(a); // and so does the first one, once you've left it
+    expect(a.inputMode).toBe('none');
+  });
+
+  it('comes back after a physical keyboard switched it off (Pad button / Settings)', async () => {
+    const { numpad, pad, padEnabled, usePad } = await load();
+    const { el } = field(numpad);
+    el.focus();
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: '5', code: 'Digit5', bubbles: true }));
+    el.blur();
+    expect(padEnabled()).toBe(false);
+    usePad();
+    expect(padEnabled()).toBe(true);
+    expect(sessionStorage.getItem('ss_numpad_hw')).toBe(null);
+    el.focus();
     expect(pad.target).toBe(el);
   });
 
-  it('the keyboard key switches to the system keyboard, and Settings switches back', async () => {
-    const { numpad, press, pad, setSystemKeyboard } = await load();
+  it('Settings can turn it off for good, and back on', async () => {
+    const { numpad, pad, setSystemKeyboard, usePad } = await load();
     const { el } = field(numpad);
-    el.focus();
-    press('keyboard');
-    expect(pad.system).toBe(true);
+    setSystemKeyboard(true);
     expect(el.inputMode).toBe('decimal');
     expect(localStorage.getItem('ss_numpad_system')).toBe('1');
-    setSystemKeyboard(false);
+    el.focus();
+    expect(pad.target).toBe(null);
+    el.blur();
+    usePad();
     expect(el.inputMode).toBe('none');
+    el.focus();
+    expect(pad.target).toBe(el);
   });
 
   it('leaves read-only fields alone', async () => {

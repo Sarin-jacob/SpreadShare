@@ -39,6 +39,17 @@ describe('number pad is wired up', () => {
   });
 });
 
+describe('a way back to the number pad', () => {
+  it('expense form offers it (with brackets meanwhile) when the pad is off', () => {
+    const s = src('views/ExpenseForm.svelte');
+    expect(s).toMatch(/\{#if !padEnabled\(\)\}[\s\S]*?'\(', '\)'[\s\S]*?usePad\(\)/);
+  });
+
+  it('Settings shows whether it is on right now and turns it back on', () => {
+    expect(src('views/Settings.svelte')).toMatch(/checked=\{padEnabled\(\)\}[^\n]*usePad\(\)/);
+  });
+});
+
 describe('date and time pickers are wired up', () => {
   it('expense form opens the date and the time dialogs', () => {
     const s = src('views/ExpenseForm.svelte');

@@ -13,7 +13,7 @@
   import Avatar from '../components/Avatar.svelte';
   import Icon from '../components/Icon.svelte';
   import Switch from '../components/Switch.svelte';
-  import { pad, setSystemKeyboard } from '../lib/numpad.svelte.js';
+  import { pad, padEnabled, setSystemKeyboard, usePad } from '../lib/numpad.svelte.js';
 
   let busy = $state(false);
 
@@ -249,9 +249,9 @@
       <div class="p-4 flex items-center justify-between gap-4">
         <div>
           <div class="text-sm font-bold">Number pad for amounts</div>
-          <div class="text-xs text-slate-500">Digits, + − × ÷ and brackets for sums like (450+120)/3. Off: your phone’s keyboard{pad.hardware ? ' (used now: a physical keyboard was detected)' : ''}</div>
+          <div class="text-xs text-slate-500">Digits, + − × ÷ and brackets for sums like (450+120)/3. Off: your phone’s keyboard{pad.hardware && !pad.system ? '. Off for now: a physical keyboard was used' : ''}</div>
         </div>
-        <Switch label="Number pad for amounts" checked={!pad.system} onchange={(v) => setSystemKeyboard(!v)} />
+        <Switch label="Number pad for amounts" checked={padEnabled()} onchange={(v) => (v ? usePad() : setSystemKeyboard(true))} />
       </div>
     {/if}
   </section>

@@ -7,7 +7,7 @@
   import { CATEGORIES } from '../lib/categories.js';
   import { CURRENCIES, getMultiplier } from '../lib/currency.js';
   import { evaluate, evaluateLoose, round2 } from '../lib/math.js';
-  import { numpad, padEnabled } from '../lib/numpad.svelte.js';
+  import { numpad, padEnabled, pad, usePad } from '../lib/numpad.svelte.js';
   import { computeSplit, exactWithRemainder, itemCounted } from '../lib/split.js';
   import { suggestCategoryFor } from '../lib/categorize.js';
   import { getCategoryModel } from '../lib/categoryModel.svelte.js';
@@ -654,6 +654,7 @@
     return `${day}, ${time}`;
   });
 
+  let amountEl = $state();
   let picker = $state(null); // 'date' | 'time': the date or time dialog
   const whenDate = $derived(Number.isNaN(new Date(when).getTime()) ? new Date() : new Date(when));
   /** 0 today, 1 yesterday, … (for the quick chips) */
@@ -811,6 +812,7 @@
         <input
           class="flex-1 min-w-0 bg-transparent text-right text-4xl font-black tracking-tight tabular-nums focus:outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600"
           bind:value={amountExpr}
+          bind:this={amountEl}
           onblur={() => !hasOperator || collapse()}
           use:numpad
           inputmode="decimal"
@@ -822,9 +824,17 @@
       </div>
       <div class="flex items-center gap-1.5">
         <!-- (The on-screen pad has these keys.) -->
-        {#if !padEnabled()}{#each ['+', '−', '×', '÷'] as op}
-          <button type="button" class="btn btn-soft !px-0 !py-1 w-9 text-base" onclick={() => insert(op === '−' ? '-' : op === '×' ? '*' : op === '÷' ? '/' : op)}>{op}</button>
-        {/each}{/if}
+        {#if !padEnabled()}
+          <!-- (Phone keyboards' number layouts have none of these.) -->
+          {#each ['+', '−', '×', '÷', '(', ')'] as op}
+            <button type="button" class="btn btn-soft !px-0 !py-1 w-8 text-base" onclick={() => insert(op === '−' ? '-' : op === '×' ? '*' : op === '÷' ? '/' : op)}>{op}</button>
+          {/each}
+          {#if pad.touch}
+            <button type="button" class="btn btn-ghost !px-2 !py-1 text-xs gap-1" onclick={() => { usePad(); amountEl?.focus(); }} title="Use the on-screen number pad again">
+              <Icon name="keyboard" class="w-4 h-4" />Pad
+            </button>
+          {/if}
+        {/if}
         <span class="flex-1 text-right text-sm text-slate-500 dark:text-slate-400 tabular-nums truncate">
           {#if hasOperator}= {money(amount, currency)}{/if}
         </span>
