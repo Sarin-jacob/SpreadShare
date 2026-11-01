@@ -5,7 +5,7 @@
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
 // Replaced with a unique ID on every build (build/build-info.js), so each deploy is a new worker.
-const BUILD = '0.1.0-c5d4733-mvy7vbwe';
+const BUILD = '0.1.0-b6a6092-mvyfd6qk';
 const CACHE = `spreadshare-app-${BUILD}`;
 // Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
 const SHARE_CACHE = 'spreadshare-share';
@@ -16,7 +16,7 @@ const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
 // Every built JS/CSS file, filled in by build/build-info.js. Precached so the whole app, including
 // the receipt scanner's lazy chunks, works offline right after an update.
-const PRECACHE = ["./manifest.webmanifest","./icons/badge-96.png","./assets/index-DDRRMWzE.js","./assets/index-DtXrvJYi.css","./assets/pdf-DkedHC_s.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-Y33NoThz.js"];
+const PRECACHE = ["./manifest.webmanifest","./icons/badge-96.png","./assets/index-DtXrvJYi.css","./assets/index-dY9UyNSx.js","./assets/pdf-CE_W-V7x.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-DCwgGyDL.js"];
 const IMMUTABLE = /\/(assets|icons)\//;
 
 /** Version-pinned packages on jsDelivr ("/npm/name@1.2.3/…") and the PaddleOCR model bucket. */
