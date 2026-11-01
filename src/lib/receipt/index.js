@@ -1,7 +1,7 @@
 // src/lib/receipt/index.js
 // On-device receipt scanning: PaddleOCR (PP-OCRv6 small) + an arithmetic line solver.
 // This module is imported lazily by the scanner so the OCR code and model download only
-// happen when someone actually scans. Parser modules are vendored from receipt_test@b9dd94a.
+// happen when someone actually scans. Parser modules are vendored from receipt_test@46e67d0.
 // Same specifier as ocr.js, so both share one module instance.
 import { PaddleOCR } from 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
 import { getOcr, OCR_MODELS, toBoxes } from './ocr.js';
@@ -16,9 +16,12 @@ export * from './draft.js';
 export { isPdf } from './pdfText.js';
 export { readListLines } from './listReader.js';
 
-function solve(boxes, t0) {
+/** Where the image came from: screenshots carry their date and app (solver.js withApp). */
+export const fileHints = (file) => (file ? { fileName: file.name || '', fileTime: file.lastModified || undefined } : {});
+
+function solve(boxes, t0, hints = {}) {
   // eslint-disable-next-line no-unused-vars
-  const { _lines, _debug, ...raw } = solveReceipt(boxes);
+  const { _lines, _debug, ...raw } = solveReceipt(boxes, hints);
   const receipt = normalize(raw);
   return { receipt, check: audit(receipt), lines: _lines, ms: performance.now() - t0 };
 }
@@ -33,7 +36,7 @@ export async function readPdf(file) {
   const { loadPdf } = await import('./pdf.js'); // pdf.js is its own chunk
   const { canvas, runs, numPages } = await loadPdf(file);
   if (!hasUsableText(runs)) return { canvas, result: null, numPages };
-  const result = solve(toBoxes(runsToOcrItems(runs)), t0);
+  const result = solve(toBoxes(runsToOcrItems(runs)), t0, fileHints(file));
   return { canvas, result: { ...result, fromText: true }, numPages };
 }
 
@@ -80,11 +83,12 @@ export async function warmUp() {
 /**
  * Reads a flattened receipt image.
  * @param {HTMLCanvasElement} flat output of warp() + applyAdjustments()
+ * @param {{ fileName?: string, fileTime?: number }} [hints] the picked file (fileHints(file))
  * @returns {Promise<{ receipt: object, check: { ok: boolean, checks: object[] }, lines: string, ms: number }>}
  */
-export async function scanReceipt(flat) {
+export async function scanReceipt(flat, hints = {}) {
   await preloadOcr();
   const t0 = performance.now();
   const boxes = await ocrPhoto(flat, { ocrModel: OCR_MODEL, crop: true, contrast: false });
-  return solve(boxes, t0);
+  return solve(boxes, t0, hints);
 }

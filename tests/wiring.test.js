@@ -71,3 +71,11 @@ describe('pop-up blocked help is wired up', () => {
     expect(src('App.svelte')).toMatch(/app\.sync\.popupBlocked[\s\S]*popupHelp\(\)/);
   });
 });
+
+describe('receipt scanner passes the picked file to the reader', () => {
+  it('so screenshots get their date and app', () => {
+    const s = src('components/ReceiptScanner.svelte');
+    expect(s).toMatch(/scanReceipt\(flat,\s*R\.fileHints\(file\)\)/);
+    expect(src('lib/receipt/index.js')).toMatch(/solveReceipt\(boxes,\s*hints\)/);
+  });
+});

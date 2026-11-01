@@ -1,4 +1,4 @@
-// Vendored from receipt_test@71b8e01 , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@46e67d0 , bench/lib/solver.js. Keep in sync with that repo; avoid local edits.
 // Receipt structure from OCR boxes without a generative model.
 // 1. group boxes into lines, pull money values out of each line
 // 2. tag lines (total / subtotal / tax / discount / charge / payment / item)
@@ -10,6 +10,7 @@
 // specific test receipt.
 import { toLines } from './ocr.js';
 import { extractDateTime } from './datetime.js';
+import { appDetails, decodeOrderRows } from './apps.js';
 import { extractMeta } from './meta.js';
 import { parseRow, headerRoles, splitRow } from './rows.js';
 
@@ -61,6 +62,13 @@ export function moneyIn(text, { integerMode = false } = {}) {
     else value = parseFloat(m[3].replace(/[,.']/g, '') + '.' + m[4].slice(1));
     const neg = !!(m[1] || m[5] || m[6]) || /\(\s*$/.test(before);
     out.push({ value: neg ? -value : value, index: i, end: i + s.length, raw: s, currency: (m[2] || m[7] || '').trim(), perUnit });
+  }
+  // A whole amount with thousands commas ending the line ("Bill total 1,166"): money, even without
+  // a currency sign or decimals (phones, dates and IDs aren't grouped like that).
+  const grouped = text.match(/(?<![\d.,\/:-])(-\s*)?(\d{1,3}(?:,\d{3})+)\s*$/);
+  if (grouped && !out.some(o => o.end > grouped.index + (grouped[1]?.length ?? 0))) {
+    const v = +grouped[2].replace(/,/g, '');
+    out.push({ value: grouped[1] ? -v : v, index: grouped.index, end: grouped.index + grouped[0].length, raw: grouped[0].trim(), currency: '', perUnit: false });
   }
   if (integerMode) {
     // Only the last integer on the line, and never phone/ID-like numbers.
@@ -134,12 +142,12 @@ function analyseLines(boxes) {
 }
 
 // Buttons and labels of shopping / delivery apps (screenshots of carts, checkouts, order pages).
-const APP_UI = new RegExp(String.raw`move\s*to\s*wishlist|customi[sz]e|add\s*items|cooking\s*requests?|cutlery(\s*ne\w*)?|rate\s*now|repeat\s*order|view\s*cart(\s*on\s*next\s*step)?|download\s*invoice|view\s*(all\s*coupons|details)|apply\s*(restaurant\s*)?coupon|change|share|remove|add\s*tip|help|reorder|savings\s*corner|complete\s*your\s*meal|popular|beverages|desserts|sides|place\s*order|pay\s*using|delivering\s*to(\s*home)?|how\s*were\s*your\s*ordered\s*items\??|eligible\s*items|applied|instructions|delivery\s*type|enter\s*amount|before\s*you\s*checkout|see\s*more|proceed|on\s*time|checkout|my\s*cart`, 'gi');
+const APP_UI = new RegExp(String.raw`move\s*to\s*wishlist|customi[sz]e|add\s*items|cooking\s*requests?|cutlery(\s*ne\w*)?|rate\s*now|repeat\s*order|view\s*cart(\s*on\s*next\s*step)?|download\s*invoice|view\s*(all\s*coupons|details)|apply\s*(restaurant\s*)?coupon|change|share|remove|add\s*tip|help|reorder|savings\s*corner|complete\s*your\s*meal|popular|beverages|desserts|sides|place\s*order|pay\s*using|delivering\s*to(\s*home)?|how\s*were\s*your\s*ordered\s*items\??|eligible\s*items|applied|instructions|delivery\s*type|enter\s*amount|before\s*you\s*checkout|see\s*more|proceed|on\s*time|checkout|my\s*cart|avoid|leave\s*at|the\s*door|directions|ringing\s*bell|to\s*reach|calling|delivering\s*superfast!?`, 'gi');
 const isAppUi = text => APP_UI.test(text) && !/[a-z]{2,}/i.test(text.replace(APP_UI, ' ').replace(/[^a-z\s]/gi, ' ').replace(/(?<![a-z])[a-z](?![a-z])/gi, ' '));
 // "3 items • ₹424 proceed", "Delivered , 3 Items , ₹292": item count + total in a header / footer.
 const COUNT_LINE = /^\W*(delivered\W*)?\d{1,3}\s*items?\b\s*[•·|,]/i;
 // Page headings: "4 items in this order", "Shipment of 6 items", "Delivery in 18 minutes", "Order summary".
-const APP_HEADING = /^\W*(\d{1,3}\s*items?\s*in\s*(this|your)\s*(order|cart)|shipment\s*of\s*\d{1,3}\s*items?|(free\s*)?delivery\s*in\s*\d{1,3}\s*min\w*|arriv(ed|ing)\s*(at|in)\b.*|order\s*summary|bill\s*details|items?\s*added|\S+\s+eligible\s+items)\W*$/i;
+const APP_HEADING = /^\W*(\d{1,3}\s*items?\s*in\s*(this|your)\s*(order|cart)|shipment\s*of\s*\d{1,3}\s*items?|(free\s*)?delivery\s*in\s*\d{1,3}\s*min\w*|arriv(ed|ing)\s*(at|in)\b.*|order\s*summary|bill\s*details|items?\s*added|\S+\s+eligible\s+items|\d{1,3}\s*-\s*\d{1,3}\s*mins?\s*to\b.*)\W*$/i;
 // Short link lines with a chevron: "Enjoy! >", "View all coupons >".
 const LINK_LINE = /^\s*\S+(\s+\S+){0,2}\s*[>›]\s*$/;
 // Order-page details under a product (Amazon / Flipkart): not part of its name.
@@ -361,7 +369,48 @@ function cleanBoxes(boxes) {
 // "₹316.98 ₹207" → "316.98207". Real amounts never have 5+ decimal digits.
 const splitGluedPrices = (t, cur = '') => t.replace(/(\d+[.,]\d{2})(\d{3,})(?![\d.,%])(?!\s*(?:kg|g|gm|ml|l|ltr|lb)\b)/gi, `$1 ${cur}$2`);
 
-export function solveReceipt(boxes) {
+/**
+ * Receipt structure from OCR boxes.
+ * @param hints where the image came from: { fileName, fileTime } (screenshots: app, date, time)
+ */
+export function solveReceipt(boxes, hints = {}) {
+  const { _rows, ...out } = solveLines(boxes);
+  return withApp(out, _rows, hints);
+}
+
+// Shopping apps that don't print a shop name: the app is where you bought it.
+const STORE_APPS = ['Blinkit', 'Zepto', 'Swiggy Instamart', 'BigBasket', 'JioMart', 'Amazon', 'Flipkart'];
+
+/** App screenshots: app / page, dates completed from the screenshot, order ids, glued prices. */
+function withApp(out, lines, hints) {
+  const a = appDetails(lines, hints);
+  const details = { ...out.details, app: a.app, page: a.page };
+  const r = { ...out, details };
+  if (!r.date && a.date) {
+    r.date = a.date;
+    details.date_from = a.dateFrom;
+  }
+  if (!r.time && a.time) r.time = a.time;
+  if (!r.invoice_number && a.orderId) r.invoice_number = a.orderId;
+  if (a.printedItems != null && details.counts?.printed_items == null) details.counts = { ...details.counts, printed_items: a.printedItems };
+  // Order rows whose prices OCR glued together ("79064"): split them so they add up to the item total.
+  if (a.page === 'order' && r.subtotal > 0 && !close(sum(r.items.map(i => i.total)), r.subtotal, 0.02)) {
+    const rows = decodeOrderRows(lines, r.subtotal);
+    if (rows) {
+      r.items = rows;
+      details.counts = { ...details.counts, items: rows.length, qty: sum(rows.map(i => i.qty ?? 1)) };
+    }
+  }
+  // On an app page a "merchant" that is really a product name (the first lines are items).
+  if (a.page && r.merchant && r.items.some(i => i.name.toLowerCase().includes(r.merchant.toLowerCase()))) r.merchant = null;
+  // Their pages name no shop: the first lines are products, so the app is the merchant.
+  if (a.page && STORE_APPS.includes(a.app)) r.merchant = a.app;
+  // A food order page that doesn't show the restaurant: at least the app ("Swiggy").
+  if (a.page && !r.merchant && a.app) r.merchant = a.app;
+  return r;
+}
+
+function solveLines(boxes) {
   boxes = cleanBoxes(boxes);
   const rupee = /₹|\bRs\.?\s|\bINR\b/.test(boxes.map(b => b.text).join(' '));
   boxes = Object.assign(boxes.map(b => (/\d+[.,]\d{5,}/.test(b.text) ? { ...b, text: splitGluedPrices(b.text, rupee ? '₹' : '') } : b)), { skewDeg: boxes.skewDeg, info: boxes.info });
@@ -893,6 +942,7 @@ export function solveReceipt(boxes) {
       savings,
     },
     _debug: { combos, paid, itemSum },
+    _rows: lines,
     _lines: lines.map(l => `${String(l.idx).padStart(2)} ${l.tag.padEnd(8)} ${l.amount ? String(l.amount.value).padStart(10) : ''.padStart(10)}  ${l.text}`).join('\n'),
   };
 }

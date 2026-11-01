@@ -136,7 +136,7 @@
       await new Promise((r) => setTimeout(r, 30)); // let the UI paint
       const flat = R.applyAdjustments(R.warp(source, $state.snapshot(quad)), $state.snapshot(adj));
       image = R.canvasToDataUrl(flat);
-      result = await R.scanReceipt(flat);
+      result = await R.scanReceipt(flat, R.fileHints(file));
       model = 'ready';
       keepAfterScan();
       step = 'review';
@@ -276,7 +276,10 @@
             <div class="text-sm text-slate-500 dark:text-slate-400 truncate">{draft?.title || 'Unknown merchant'}</div>
             <div class="text-3xl font-black tabular-nums">{r.total == null ? 'No total found' : money(r.total, cur)}</div>
             {#if draft?.when}
-              <div class="text-xs text-slate-500 mt-0.5">{new Date(draft.when).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {new Date(draft.when).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                {#if r.details?.date_from === 'file'}<span class="text-slate-400"> · when the photo was taken (no date printed)</span>{/if}
+              </div>
             {/if}
           </div>
           <span
