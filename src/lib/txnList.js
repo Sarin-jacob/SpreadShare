@@ -127,7 +127,7 @@ const strip = (text, ...ranges) => {
 };
 
 /**
- * @param lines [{ text, right?: 0..1 }] or plain strings, in reading order
+ * @param lines [{ text, right?: 0..1, ink?: 'green'|'red' }] or plain strings, in reading order
  * @returns [{ title, amount, currency, direction: 'debit'|'credit'|null, date: Date|null, failed, line }]
  */
 export function parseTransactionList(lines, { now = new Date() } = {}) {
@@ -181,7 +181,15 @@ export function parseTransactionList(lines, { now = new Date() } = {}) {
         title: nameOf(rest) || nameOf(pending.at(-1)) || '',
         amount: a.value,
         currency: a.currency || null,
-        direction: a.sign === '+' || (!a.sign && CREDIT.test(cueText) && !DEBIT.test(r.text)) ? 'credit' : a.sign === '-' || DEBIT.test(cueText) ? 'debit' : null,
+        // A sign beats everything; then the amount's colour (apps print money received in green,
+        // when OCR drops its "+"; spends are often plain black, so red is only a weak cue); then words.
+        direction:
+          a.sign === '+' ? 'credit'
+          : a.sign === '-' ? 'debit'
+          : r.ink === 'green' ? 'credit'
+          : CREDIT.test(cueText) && !DEBIT.test(r.text) ? 'credit'
+          : DEBIT.test(cueText) || r.ink === 'red' ? 'debit'
+          : null,
         date: d?.date || (headerDates ? section : null),
         failed: FAILED.test(r.text),
         line: i,

@@ -213,3 +213,58 @@ describe('paper receipts stay paper receipts', () => {
     expect(r.total).toBe(120);
   });
 });
+
+describe('Blinkit scrolling screenshot (19 items, sent downscaled)', () => {
+  // OCR of a 270 × 1461 scrolling screenshot read in slices: struck-out MRPs glued to prices,
+  // the ₹ read as 7 / 2 / 4 / € / # / ￥, and "Item total ₹1,535" as "71,535".
+  const rows = [
+    [['01:36', 0]], '←', 'Order summary', 'Arrived at 8:13 pm', 'Download Invoice', '19 items in this order',
+    'Amul Fresh Cream', '250 ml x 1 €75',
+    'Tata Sampann Paneer Masala', 'Powder with Natural Oils', '100 g x 1 7104101',
+    'Amul Fresh Malai Paneer', '200 g × 3 285',
+    'Desi Tomato', '500 g × 1 3226',
+    'Coriander Bunch', '100 g × 1 75845',
+    'Catch Ginger Garlic Paste', '200 g × 1 250€36',
+    'Green Chilli', '100 g x 1 20117',
+    'Peeled Garlic', '100 g x 1 ￥6548',
+    'Whole Farm Premium Kasuri', 'Methi', '50 g x 1 760224',
+    'Onion', '1 kg x 1 795€76',
+    'Ginger', '200 g × 1 252744',
+    'Freedom Refined Sunflower Oil', '1 Itr x 1 2257183',
+    'India Gate Everyday Basmati', 'Rice (Medium Grain)', '1 kg × 1 104100',
+    'Pragati Pouch Curd', '500 g x ↑ 745',
+    'McCain Veggie Fingers', '400 g x 1 180126',
+    'Tata Sampann Unpolished Kali', 'Urad (Sabut)', '500 g x † #113105',
+    'Mirinda Soft Drink', '750 ml × 1 240',
+    'Pepsi Soft Drink', '750 ml x 1 240',
+    "Haldiram's Prabhuji Bhujia", '400 g x 1 41232119',
+    'How were your ordered items? Rate now',
+    'Bill details',
+    'MRP €1,756', 'Product discount -7221', 'Item total 71,535', 'Handling charge +29', 'Delivery charges FREE', 'Bill total 1,544',
+    'Order details', 'Repeat Order', 'VIEW CART ON NEXT STEP',
+  ];
+  const r = read(rows, { fileName: 'blinkit-scroll.jpg' });
+
+  it('every item, at the price paid', () => {
+    expect(amounts(r)).toEqual([75, 101, 285, 26, 45, 36, 17, 48, 24, 76, 44, 183, 100, 45, 126, 105, 40, 40, 119]);
+    expect(r.items[2]).toMatchObject({ name: 'Amul Fresh Malai Paneer', qty: 3 });
+    expect(r.items[13].qty).toBe(1); // "x ↑": a misread 1
+    expect(r.items.map((i) => i.name)).toContain('Tata Sampann Paneer Masala Powder with Natural Oils');
+  });
+
+  it('a bill that adds up: item total, fee and total with the misread ₹ dropped', () => {
+    expect(r.subtotal).toBe(1535);
+    expect(r.charges.find((c) => /handling/i.test(c.label)).amount).toBe(9);
+    expect(r.total).toBe(1544);
+    expect(r.merchant).toBe('Blinkit');
+  });
+});
+
+describe('app bill reconciliation', () => {
+  it('drops a misread ₹ only where that makes the bill add up', async () => {
+    const { reconcileBill } = await import('../src/lib/receipt/apps.js');
+    expect(reconcileBill({ subtotal: 71535, charges: [{ label: 'Handling', amount: 29 }], discounts: [], total: 1544 })).toMatchObject({ subtotal: 1535, charges: [{ amount: 9 }], total: 1544 });
+    expect(reconcileBill({ subtotal: 1535, charges: [{ label: 'Handling', amount: 9 }], total: 1544 })).toBe(null); // already adds up
+    expect(reconcileBill({ subtotal: 500, charges: [], total: 900 })).toBe(null); // nothing does
+  });
+});

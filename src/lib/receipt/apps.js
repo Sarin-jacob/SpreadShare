@@ -1,4 +1,4 @@
-// Vendored from receipt_test@46e67d0 , bench/lib/apps.js. Keep in sync with that repo; avoid local edits.
+// Vendored from receipt_test@00cd50e , bench/lib/apps.js. Keep in sync with that repo; avoid local edits.
 // App screenshots: food / grocery delivery and shopping apps (Blinkit, Swiggy, Zomato, Zepto…).
 // Which app and page it is, and the details those pages print their own way:
 //   "Order delivered on January 21, 10:31 PM", "Arrived at 10:47 pm", "placed yesterday, 9:50 PM"
@@ -167,7 +167,8 @@ export function appDetails(lines, hints = {}) {
  */
 export function decodeOrderRows(lines, itemTotal) {
   if (!(itemTotal > 0)) return null;
-  const ROW = /^(.*?\S)\s+[x×]\s*(\d{1,2})\s+(.*\d.*?)\s*$/i;
+  // (A tiny "1" after the × can come out as ↑ † | I l.)
+  const ROW = /^(.*?\S)\s+[x×]\s*(\d{1,2}|[↑†|Il!])\s+(.*\d.*?)\s*$/i;
   const rows = [];
   let nameFrom = 0;
   for (let i = 0; i < lines.length; i++) {
@@ -188,7 +189,7 @@ export function decodeOrderRows(lines, itemTotal) {
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
-    rows.push({ name, qty: +m[2], options: priceOptions(m[3]), line: i });
+    rows.push({ name, qty: /\d/.test(m[2]) ? +m[2] : 1, options: priceOptions(m[3]), line: i });
     nameFrom = i + 1;
   }
   if (rows.length < 2 || rows.some((r) => !r.name || !r.options.length)) return null;
@@ -213,6 +214,48 @@ export function decodeOrderRows(lines, itemTotal) {
   const found = best(0, target);
   if (!found) return null;
   return rows.map((r, k) => ({ name: r.name, qty: r.qty, unit_price: null, total: found.pick[k] }));
+}
+
+/**
+ * An app bill whose figures OCR read with the ₹ as a leading digit ("Item total 71,535" = ₹1,535,
+ * "Handling charge +29" = ₹9): the readings of subtotal, fees, discounts and total that add up
+ * (subtotal + fees + discounts = total), changing as few as possible. null when it already adds up
+ * or nothing does.
+ */
+export function reconcileBill({ subtotal, charges = [], discounts = [], total }) {
+  if (!(subtotal > 0) || !(total > 0)) return null;
+  const parts = [subtotal, ...charges.map((c) => c.amount ?? 0), ...discounts.map((d) => d.amount ?? 0), -total];
+  const cents = (x) => Math.round(x * 100);
+  if (parts.reduce((s, x) => s + cents(x), 0) === 0) return null;
+  const options = parts.map(glyphReadings);
+  let best = null;
+  const walk = (i, acc, changed, pick) => {
+    if (best && changed >= best.changed) return;
+    if (i === parts.length) {
+      if (acc === 0) best = { changed, pick };
+      return;
+    }
+    options[i].forEach((v, k) => walk(i + 1, acc + cents(v), changed + (k > 0 ? 1 : 0), [...pick, v]));
+  };
+  if (options.reduce((n, o) => n * o.length, 1) > 4096) return null;
+  walk(0, 0, 0, []);
+  if (!best) return null;
+  const p = best.pick;
+  const nC = charges.length;
+  return {
+    subtotal: p[0],
+    charges: charges.map((c, k) => ({ ...c, amount: p[1 + k] })),
+    discounts: discounts.map((d, k) => ({ ...d, amount: p[1 + nC + k] })),
+    total: -p.at(-1),
+  };
+}
+
+/** A figure as read, and without a leading digit that may be a misread ₹ (7104 → 104). */
+function glyphReadings(v) {
+  const out = [v];
+  const [int, dec] = String(Math.abs(v)).split('.');
+  if (int.length >= 2 && GLYPHS.includes(int[0]) && int[1] !== '0') out.push(Math.sign(v) * +(int.slice(1) + (dec ? `.${dec}` : '')));
+  return out;
 }
 
 // Digits a small "₹" is misread as.
