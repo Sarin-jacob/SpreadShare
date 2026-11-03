@@ -5,7 +5,7 @@
 //   ~67 MB download survives app updates and scanning works offline. Every URL is version-pinned.
 // - Other cross-origin requests (Google APIs, exchange rates) are never intercepted.
 // Replaced with a unique ID on every build (build/build-info.js), so each deploy is a new worker.
-const BUILD = '0.1.0-b6a6092-mvyfd6qk';
+const BUILD = '0.1.0-cf91228-mw09g1h9';
 const CACHE = `spreadshare-app-${BUILD}`;
 // Holds the last thing shared into the app (see receiveShare) until the #/share screen picks it up.
 const SHARE_CACHE = 'spreadshare-share';
@@ -16,7 +16,7 @@ const OCR_CACHE = 'spreadshare-ocr-paddle-0.4.2';
 const SHELL = ['./', './index.html'];
 // Every built JS/CSS file, filled in by build/build-info.js. Precached so the whole app, including
 // the receipt scanner's lazy chunks, works offline right after an update.
-const PRECACHE = ["./manifest.webmanifest","./icons/badge-96.png","./assets/index-DtXrvJYi.css","./assets/index-dY9UyNSx.js","./assets/pdf-CE_W-V7x.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-DCwgGyDL.js"];
+const PRECACHE = ["./manifest.webmanifest","./icons/badge-96.png","./assets/index-DpYXl4AP.js","./assets/index-DtXrvJYi.css","./assets/pdf-DnQAYBhf.js","./assets/pdf.worker.min-Dswkl-cV.mjs","./assets/qrcode-DQBCZAED.js","./assets/receipt-B_22VOHq.js"];
 const IMMUTABLE = /\/(assets|icons)\//;
 
 /** Version-pinned packages on jsDelivr ("/npm/name@1.2.3/…") and the PaddleOCR model bucket. */
@@ -57,7 +57,9 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, OCR_CACHE, SHARE_CACHE, NOTIFY_CACHE].includes(k)).map((k) => caches.delete(k))))
+      // Only this app's old versions: other apps on the same github.io origin (the receipt scanner,
+      // chess) keep their caches here too.
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('spreadshare-') && ![CACHE, OCR_CACHE, SHARE_CACHE, NOTIFY_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

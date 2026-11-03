@@ -1,5 +1,5 @@
 {
-  "id": "./",
+  "id": "/SpreadShare/",
   "name": "SpreadShare",
   "short_name": "SpreadShare",
   "description": "Serverless group expense splitting backed by your own Google Sheets.",
