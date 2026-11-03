@@ -79,3 +79,33 @@ describe('receipt scanner passes the picked file to the reader', () => {
     expect(src('lib/receipt/index.js')).toMatch(/solveReceipt\(boxes,\s*hints\)/);
   });
 });
+
+describe('sharing the sarin-jacob.github.io origin with other apps', () => {
+  const file = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+
+  it('the installed app has its own id (its path), not the origin root', () => {
+    const s = file('build/brand-icons.js');
+    expect(s).toMatch(/export const APP_ID = '\/SpreadShare\/';/);
+    expect(s).toMatch(/id: APP_ID,/);
+    expect(s).not.toMatch(/id: '\.\/'/);
+  });
+
+  it('the service worker only deletes its own old caches', () => {
+    const s = file('public/sw.js');
+    const activate = s.slice(s.indexOf("addEventListener('activate'"), s.indexOf("addEventListener('activate'") + 600);
+    expect(activate).toMatch(/k\.startsWith\('spreadshare-'\)/);
+  });
+
+  it('reinstalling only touches this app’s service worker and caches', () => {
+    const s = src('lib/updates.svelte.js');
+    expect(s).not.toMatch(/getRegistrations\(\)\)\.forEach|of await navigator\.serviceWorker\.getRegistrations\(\)/);
+    expect(s).toMatch(/r\.scope\.startsWith\(ownScope\(\)\)/);
+    expect(s).toMatch(/ownCache\(name\) && !KEEP_CACHES\(name\)/);
+  });
+
+  it('never clears storage the other apps use too', () => {
+    for (const f of ['lib/app.svelte.js', 'lib/updates.svelte.js', 'lib/db.js', 'lib/settings.svelte.js', 'lib/prefs.svelte.js']) {
+      expect(src(f), f).not.toMatch(/localStorage\.clear\(|sessionStorage\.clear\(|deleteDatabase\(/);
+    }
+  });
+});

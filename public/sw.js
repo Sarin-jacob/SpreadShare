@@ -57,7 +57,9 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![CACHE, OCR_CACHE, SHARE_CACHE, NOTIFY_CACHE].includes(k)).map((k) => caches.delete(k))))
+      // Only this app's old versions: other apps on the same github.io origin (the receipt scanner,
+      // chess) keep their caches here too.
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('spreadshare-') && ![CACHE, OCR_CACHE, SHARE_CACHE, NOTIFY_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

@@ -57,10 +57,16 @@ export function readPalettes(cssPath) {
 const png = (svg, size) =>
   new Resvg(svg, { fitTo: { mode: 'width', value: size }, background: 'rgba(0,0,0,0)' }).render().asPng();
 
+// The installed app's identity: its path on https://sarin-jacob.github.io. Browsers resolve a
+// manifest id against the origin, not the manifest, so "./" meant the github.io root, which every
+// app on that domain claimed: installing one replaced another. Keep this fixed: changing it again
+// makes browsers treat the app as a different one.
+export const APP_ID = '/SpreadShare/';
+
 function manifest(accent) {
   return JSON.stringify(
     {
-      id: './',
+      id: APP_ID,
       name: 'SpreadShare',
       short_name: 'SpreadShare',
       description: 'Serverless group expense splitting backed by your own Google Sheets.',

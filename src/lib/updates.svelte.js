@@ -11,6 +11,11 @@ export const BUILD_TIME = __BUILD_TIME__;
 const CHECK_EVERY_MS = 30 * 60 * 1000;
 // Kept by "Reinstall": the 67 MB receipt reader and anything shared into the app.
 const KEEP_CACHES = (name) => name.startsWith('spreadshare-ocr') || name === 'spreadshare-share';
+// Other apps share the github.io origin (the receipt scanner, chess): only ever touch our own
+// service worker (scoped to this folder) and our own caches.
+const ownScope = () => new URL('./', location.href).href;
+const ownRegistrations = async () => (await navigator.serviceWorker.getRegistrations()).filter((r) => r.scope.startsWith(ownScope()));
+const ownCache = (name) => name.startsWith('spreadshare-');
 
 export const updates = $state({
   supported: 'serviceWorker' in navigator && import.meta.env.PROD,
@@ -34,7 +39,7 @@ export async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   if (!import.meta.env.PROD) {
     // A worker left over from a production build or the old app would serve stale dev modules.
-    (await navigator.serviceWorker.getRegistrations()).forEach((r) => r.unregister());
+    (await ownRegistrations()).forEach((r) => r.unregister());
     return;
   }
   try {
@@ -107,8 +112,8 @@ export async function reinstallApp() {
   if (!navigator.onLine) throw new Error('You need to be online to reinstall.');
   updates.applying = true;
   try {
-    for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
-    for (const name of await caches.keys()) if (!KEEP_CACHES(name)) await caches.delete(name);
+    for (const r of await ownRegistrations()) await r.unregister();
+    for (const name of await caches.keys()) if (ownCache(name) && !KEEP_CACHES(name)) await caches.delete(name);
   } finally {
     location.reload();
   }
